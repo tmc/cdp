@@ -1518,6 +1518,13 @@ func main() {
 					}
 				}
 
+				// Handle URL monitoring if requested
+				if waitForURLChange || monitorURLPattern != "" {
+					if err := monitorURLChanges(browserCtx, monitorURLPattern, verbose); err != nil {
+						log.Printf("URL monitoring failed: %v", err)
+					}
+				}
+
 				// Save HAR file if recording and exit
 				if recorder != nil && harFile != "" {
 					if err := recorder.SaveHAR(harFile); err != nil {
