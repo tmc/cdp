@@ -15,4 +15,4 @@ go.work.sum
 # Test data
 testdata/har-files/**/*.har
 testdata/har-files/**/*.proxymanlogv2
-cdp
+/cdp
