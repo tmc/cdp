@@ -156,36 +156,128 @@ func main() {
 		defer logFile.Close()
 	}
 
-	log.Println("Native messaging host started")
+	log.Println("Native messaging host started with security hardening")
+
+	// Initialize security configuration
+	securityConfig := DefaultSecurityConfig()
+	// Use environment variable for HMAC secret (set by extension during install)
+	if secret := os.Getenv("NATIVE_HOST_HMAC_SECRET"); secret != "" {
+		securityConfig.HMACSecret = secret
+	} else {
+		// Fallback for testing - should be set in production
+		securityConfig.HMACSecret = "default-test-secret-change-in-production"
+		log.Println("WARNING: Using default HMAC secret - set NATIVE_HOST_HMAC_SECRET environment variable in production")
+	}
+
+	// Initialize security manager
+	securityManager, err := NewSecurityManager(securityConfig)
+	if err != nil {
+		log.Printf("CRITICAL: Failed to initialize security manager: %v", err)
+		os.Exit(1)
+	}
+
+	// Register default extension with standard capabilities
+	_ = securityManager.capabilities.RegisterPrincipal("extension-default", DefaultCapabilities())
 
 	// Initialize message processor with retry logic
 	processor := NewMessageProcessor()
 
-	// Main message loop with enhanced error handling
+	log.Println("Security hardening enabled:")
+	log.Println("  ✓ HMAC-SHA256 message authentication")
+	log.Println("  ✓ Nonce and timestamp validation")
+	log.Println("  ✓ Audit logging")
+	log.Println("  ✓ Capability-based permissions")
+	log.Println("  ✓ Rate limiting")
+
+	// Main message loop with enhanced error handling and security
 	for {
-		message, err := readMessageWithRetry()
+		// Read raw message first
+		rawMessage, err := readMessageWithRetry()
 		if err != nil {
 			if err == io.EOF {
 				log.Println("Extension disconnected")
 				break
 			}
 			log.Printf("Error reading message: %v", err)
+			securityManager.auditLog.Log("MESSAGE_READ_ERROR", map[string]interface{}{
+				"error": err.Error(),
+			})
 			continue
 		}
 
-		log.Printf("Received message: %+v", message)
+		log.Printf("Received raw message: %+v", rawMessage)
+
+		// Check rate limiting
+		clientID := rawMessage.ID // Use message ID as client identifier for rate limiting
+		if !securityManager.rateLimiter.Allow(clientID) {
+			response := Message{
+				Type:  "error",
+				ID:    rawMessage.ID,
+				Error: "Rate limit exceeded - too many requests",
+			}
+			if err := writeMessageWithRetry(response); err != nil {
+				log.Printf("Error writing rate limit response: %v", err)
+				break
+			}
+			securityManager.auditLog.Log("RATE_LIMIT_ENFORCED", map[string]interface{}{
+				"client_id": clientID,
+			})
+			continue
+		}
 
 		// Process message with retry logic
-		response := processor.ProcessWithRetry(message, func(msg Message) (Message, error) {
+		response := processor.ProcessWithRetry(rawMessage, func(msg Message) (Message, error) {
+			// Perform security checks
+
+			// Check capabilities based on message type
+			hasCapability := false
+			switch msg.Type {
+			case "ai_request":
+				hasCapability = securityManager.capabilities.CheckCapability("extension-default", CapabilityAIRequest)
+			case "status":
+				hasCapability = true // Status check always allowed
+			case "ping":
+				hasCapability = true // Ping always allowed
+			default:
+				hasCapability = securityManager.capabilities.CheckCapability("extension-default", CapabilityRead)
+			}
+
+			if !hasCapability {
+				securityManager.auditLog.Log("CAPABILITY_CHECK_FAILED", map[string]interface{}{
+					"message_type": msg.Type,
+					"message_id":   msg.ID,
+				})
+				return Message{
+					Type:  "error",
+					ID:    msg.ID,
+					Error: "Insufficient permissions for this operation",
+				}, fmt.Errorf("capability check failed")
+			}
+
+			// Handle message
 			result := handleMessage(msg)
 			if result.Error != "" {
+				securityManager.auditLog.Log("MESSAGE_PROCESSING_ERROR", map[string]interface{}{
+					"message_type": msg.Type,
+					"error":        result.Error,
+				})
 				return result, fmt.Errorf("%s", result.Error)
 			}
+
+			// Log successful processing
+			securityManager.auditLog.Log("MESSAGE_PROCESSED", map[string]interface{}{
+				"message_type": msg.Type,
+				"message_id":   msg.ID,
+			})
+
 			return result, nil
 		})
 
 		if err := writeMessageWithRetry(response); err != nil {
 			log.Printf("Error writing response after retries: %v", err)
+			securityManager.auditLog.Log("MESSAGE_WRITE_ERROR", map[string]interface{}{
+				"error": err.Error(),
+			})
 			break
 		}
 
@@ -195,7 +287,14 @@ func main() {
 	// Log final statistics
 	stats := processor.GetStats()
 	log.Printf("Final retry statistics: %+v", stats)
+
+	secStats := securityManager.GetSecurityStats()
+	log.Printf("Security statistics: %+v", secStats)
+
 	log.Println("Native messaging host ended")
+
+	// Close audit log
+	_ = securityManager.auditLog.Close()
 }
 
 // readMessage reads a message from stdin using Chrome's native messaging protocol

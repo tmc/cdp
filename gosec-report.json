@@ -1,0 +1,3227 @@
+{
+	"Golang errors": {
+		"": [
+			{
+				"line": 0,
+				"column": 0,
+				"error": "# command-line-arguments\ninternal/debugger/breakpoints.go:139:42: cannot use bp.LineNumber (variable of type int) as int64 value in argument to debugger.SetBreakpointByURL\ninternal/debugger/breakpoints.go:147:38: cannot use bp.ColumnNumber (variable of type int) as int64 value in argument to params.WithColumnNumber\ninternal/debugger/breakpoints.go:150:19: assignment mismatch: 2 variables but params.Do returns 3 values"
+			},
+			{
+				"line": 0,
+				"column": 0,
+				"error": "# command-line-arguments\ninternal/cdp/session.go:228:16: assignment mismatch: 1 variable but debugger.Enable(debugger.EnableParams{}).Do returns 2 values\ninternal/cdp/session.go:228:32: too many arguments in call to debugger.Enable\n\thave (debugger.EnableParams)\n\twant ()"
+			},
+			{
+				"line": 0,
+				"column": 0,
+				"error": "# command-line-arguments\ninternal/browser/session_detector.go:11:2: \"os\" imported and not used\ninternal/browser/session_detector.go:161:15: declared and not used: err"
+			}
+		],
+		"-": [
+			{
+				"line": 0,
+				"column": 0,
+				"error": "This application uses version go1.24 of the source-processing packages but runs version go1.25 of 'go list'. It may fail to process source files that rely on newer language features. If so, rebuild the application using a newer version of Go."
+			},
+			{
+				"line": 0,
+				"column": 0,
+				"error": "This application uses version go1.24 of the source-processing packages but runs version go1.25 of 'go list'. It may fail to process source files that rely on newer language features. If so, rebuild the application using a newer version of Go."
+			},
+			{
+				"line": 0,
+				"column": 0,
+				"error": "This application uses version go1.24 of the source-processing packages but runs version go1.25 of 'go list'. It may fail to process source files that rely on newer language features. If so, rebuild the application using a newer version of Go."
+			}
+		],
+		"/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/internal/browser/session_detector.go": [
+			{
+				"line": 11,
+				"column": 2,
+				"error": "\"os\" imported and not used"
+			},
+			{
+				"line": 161,
+				"column": 15,
+				"error": "declared and not used: err"
+			}
+		],
+		"/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/internal/cdp/session.go": [
+			{
+				"line": 228,
+				"column": 16,
+				"error": "assignment mismatch: 1 variable but debugger.Enable(debugger.EnableParams{}).Do returns 2 values"
+			},
+			{
+				"line": 228,
+				"column": 32,
+				"error": "too many arguments in call to debugger.Enable\n\thave (debugger.EnableParams)\n\twant ()"
+			}
+		],
+		"/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/internal/debugger/breakpoints.go": [
+			{
+				"line": 139,
+				"column": 42,
+				"error": "cannot use bp.LineNumber (variable of type int) as int64 value in argument to debugger.SetBreakpointByURL"
+			},
+			{
+				"line": 147,
+				"column": 38,
+				"error": "cannot use bp.ColumnNumber (variable of type int) as int64 value in argument to params.WithColumnNumber"
+			},
+			{
+				"line": 150,
+				"column": 19,
+				"error": "assignment mismatch: 2 variables but params.Do returns 3 values"
+			}
+		]
+	},
+	"Issues": [
+		{
+			"severity": "HIGH",
+			"confidence": "MEDIUM",
+			"cwe": {
+				"id": "190",
+				"url": "https://cwe.mitre.org/data/definitions/190.html"
+			},
+			"rule_id": "G115",
+			"details": "integer overflow conversion uint32 -\u003e uint8",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/internal/visual/comparison.go",
+			"code": "91: \t\t\t\tr, g, b, _ := actualColor.RGBA()\n92: \t\t\t\tdiffImage.Set(x, y, color.RGBA{uint8(r \u003e\u003e 8), uint8(g \u003e\u003e 8), uint8(b \u003e\u003e 8), 128})\n93: \t\t\t}\n",
+			"line": "92",
+			"column": "71",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "HIGH",
+			"confidence": "MEDIUM",
+			"cwe": {
+				"id": "190",
+				"url": "https://cwe.mitre.org/data/definitions/190.html"
+			},
+			"rule_id": "G115",
+			"details": "integer overflow conversion uint32 -\u003e uint8",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/internal/visual/comparison.go",
+			"code": "91: \t\t\t\tr, g, b, _ := actualColor.RGBA()\n92: \t\t\t\tdiffImage.Set(x, y, color.RGBA{uint8(r \u003e\u003e 8), uint8(g \u003e\u003e 8), uint8(b \u003e\u003e 8), 128})\n93: \t\t\t}\n",
+			"line": "92",
+			"column": "56",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "HIGH",
+			"confidence": "MEDIUM",
+			"cwe": {
+				"id": "190",
+				"url": "https://cwe.mitre.org/data/definitions/190.html"
+			},
+			"rule_id": "G115",
+			"details": "integer overflow conversion uint32 -\u003e uint8",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/internal/visual/comparison.go",
+			"code": "91: \t\t\t\tr, g, b, _ := actualColor.RGBA()\n92: \t\t\t\tdiffImage.Set(x, y, color.RGBA{uint8(r \u003e\u003e 8), uint8(g \u003e\u003e 8), uint8(b \u003e\u003e 8), 128})\n93: \t\t\t}\n",
+			"line": "92",
+			"column": "41",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "HIGH",
+			"confidence": "MEDIUM",
+			"cwe": {
+				"id": "190",
+				"url": "https://cwe.mitre.org/data/definitions/190.html"
+			},
+			"rule_id": "G115",
+			"details": "integer overflow conversion int -\u003e uint32",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/cmd/native-host/main.go",
+			"code": "266: \t// Write length header\n267: \tlength := uint32(len(messageBytes))\n268: \tif err := binary.Write(os.Stdout, binary.LittleEndian, length); err != nil {\n",
+			"line": "267",
+			"column": "18",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "HIGH",
+			"confidence": "MEDIUM",
+			"cwe": {
+				"id": "190",
+				"url": "https://cwe.mitre.org/data/definitions/190.html"
+			},
+			"rule_id": "G115",
+			"details": "integer overflow conversion int -\u003e uint",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/internal/errors/retry.go",
+			"code": "162: \tcase ExponentialBackoff:\n163: \t\tdelay = config.BaseDelay * time.Duration(1\u003c\u003cuint(attempt-1))\n164: \tcase ConstantBackoff:\n",
+			"line": "163",
+			"column": "51",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "HIGH",
+			"confidence": "MEDIUM",
+			"cwe": {
+				"id": "190",
+				"url": "https://cwe.mitre.org/data/definitions/190.html"
+			},
+			"rule_id": "G115",
+			"details": "integer overflow conversion int -\u003e int32",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/internal/limits/limits.go",
+			"code": "445: \n446: \tif failures \u003e= int32(cb.maxFailures) {\n447: \t\tatomic.StoreInt32(\u0026cb.state, StateOpen)\n",
+			"line": "446",
+			"column": "22",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "HIGH",
+			"confidence": "MEDIUM",
+			"cwe": {
+				"id": "190",
+				"url": "https://cwe.mitre.org/data/definitions/190.html"
+			},
+			"rule_id": "G115",
+			"details": "integer overflow conversion int -\u003e int32",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/internal/browser/stability.go",
+			"code": "333: \n334: \t\t\tif modifications \u003c= int32(sd.config.DOMStableThreshold) || timeSinceLastMod \u003e= sd.config.DOMStableTimeout {\n335: \t\t\t\tif stableStart.IsZero() {\n",
+			"line": "334",
+			"column": "29",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "HIGH",
+			"confidence": "MEDIUM",
+			"cwe": {
+				"id": "338",
+				"url": "https://cwe.mitre.org/data/definitions/338.html"
+			},
+			"rule_id": "G404",
+			"details": "Use of weak random number generator (math/rand or math/rand/v2 instead of crypto/rand)",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/cmd/native-host/main.go",
+			"code": "89: \tif mp.retryConfig.JitterEnabled {\n90: \t\tjitter := delay * 0.1 * (0.5 - rand.Float64()) // ±10% jitter\n91: \t\tdelay += jitter\n",
+			"line": "90",
+			"column": "34",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "328",
+				"url": "https://cwe.mitre.org/data/definitions/328.html"
+			},
+			"rule_id": "G401",
+			"details": "Use of weak cryptographic primitive",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/internal/visual/baseline.go",
+			"code": "344: \t\t\t// Validate checksums\n345: \t\t\tactualMD5 := fmt.Sprintf(\"%x\", md5.Sum(screenshot))\n346: \t\t\tactualSHA256 := fmt.Sprintf(\"%x\", sha256.Sum256(screenshot))\n",
+			"line": "345",
+			"column": "35",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "328",
+				"url": "https://cwe.mitre.org/data/definitions/328.html"
+			},
+			"rule_id": "G401",
+			"details": "Use of weak cryptographic primitive",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/internal/visual/baseline.go",
+			"code": "40: \tif metadata != nil {\n41: \t\tmetadata.ChecksumMD5 = fmt.Sprintf(\"%x\", md5.Sum(screenshot))\n42: \t\tmetadata.ChecksumSHA256 = fmt.Sprintf(\"%x\", sha256.Sum256(screenshot))\n",
+			"line": "41",
+			"column": "44",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "328",
+				"url": "https://cwe.mitre.org/data/definitions/328.html"
+			},
+			"rule_id": "G401",
+			"details": "Use of weak cryptographic primitive",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/internal/differential/capture.go",
+			"code": "321: \t// Calculate checksum\n322: \thash := md5.New()\n323: \tif _, err := io.Copy(hash, file); err != nil {\n",
+			"line": "322",
+			"column": "10",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "328",
+				"url": "https://cwe.mitre.org/data/definitions/328.html"
+			},
+			"rule_id": "G401",
+			"details": "Use of weak cryptographic primitive",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/internal/differential/capture.go",
+			"code": "242: \ttimestamp := time.Now().Format(\"20060102-150405\")\n243: \thash := md5.Sum([]byte(name + timestamp))\n244: \treturn fmt.Sprintf(\"%s-%x\", timestamp, hash[:4])\n",
+			"line": "243",
+			"column": "10",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "78",
+				"url": "https://cwe.mitre.org/data/definitions/78.html"
+			},
+			"rule_id": "G204",
+			"details": "Subprocess launched with variable",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/internal/testutil/chrome.go",
+			"code": "391: \tfor _, browser := range browsers {\n392: \t\tcmd := exec.Command(\"pkill\", \"-f\", browser)\n393: \t\tcmd.Run() // Ignore errors - process might not exist\n",
+			"line": "392",
+			"column": "10",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "78",
+				"url": "https://cwe.mitre.org/data/definitions/78.html"
+			},
+			"rule_id": "G204",
+			"details": "Subprocess launched with variable",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/internal/testutil/chrome.go",
+			"code": "365: \n366: \tcmd := exec.Command(chromePath, \"--version\")\n367: \toutput, err := cmd.Output()\n",
+			"line": "366",
+			"column": "9",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "78",
+				"url": "https://cwe.mitre.org/data/definitions/78.html"
+			},
+			"rule_id": "G204",
+			"details": "Subprocess launched with variable",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/cmd/ndp/node_debugger.go",
+			"code": "519: \n520: \tcmd := exec.Command(\"node\", args...)\n521: \tcmd.Stdout = os.Stdout\n",
+			"line": "520",
+			"column": "9",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "78",
+				"url": "https://cwe.mitre.org/data/definitions/78.html"
+			},
+			"rule_id": "G204",
+			"details": "Subprocess launched with variable",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/cmd/chdb/chrome.go",
+			"code": "410: \tdefault:\n411: \t\tcmd = exec.Command(\"xdg-open\", localURL)\n412: \t}\n",
+			"line": "411",
+			"column": "9",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "78",
+				"url": "https://cwe.mitre.org/data/definitions/78.html"
+			},
+			"rule_id": "G204",
+			"details": "Subprocess launched with variable",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/cmd/chdb/chrome.go",
+			"code": "408: \tcase \"darwin\":\n409: \t\tcmd = exec.Command(\"open\", localURL)\n410: \tdefault:\n",
+			"line": "409",
+			"column": "9",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "78",
+				"url": "https://cwe.mitre.org/data/definitions/78.html"
+			},
+			"rule_id": "G204",
+			"details": "Subprocess launched with variable",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/cmd/chdb/chrome.go",
+			"code": "406: \tcase \"windows\":\n407: \t\tcmd = exec.Command(\"cmd\", \"/c\", \"start\", localURL)\n408: \tcase \"darwin\":\n",
+			"line": "407",
+			"column": "9",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "78",
+				"url": "https://cwe.mitre.org/data/definitions/78.html"
+			},
+			"rule_id": "G204",
+			"details": "Subprocess launched with variable",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/cmd/chdb/chrome.go",
+			"code": "395: \t\tdefault:\n396: \t\t\tcmd = exec.Command(\"xdg-open\", devtoolsURL)\n397: \t\t}\n",
+			"line": "396",
+			"column": "10",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "78",
+				"url": "https://cwe.mitre.org/data/definitions/78.html"
+			},
+			"rule_id": "G204",
+			"details": "Subprocess launched with variable",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/cmd/chdb/chrome.go",
+			"code": "393: \t\tcase \"darwin\":\n394: \t\t\tcmd = exec.Command(\"open\", devtoolsURL)\n395: \t\tdefault:\n",
+			"line": "394",
+			"column": "10",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "78",
+				"url": "https://cwe.mitre.org/data/definitions/78.html"
+			},
+			"rule_id": "G204",
+			"details": "Subprocess launched with variable",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/cmd/chdb/chrome.go",
+			"code": "391: \t\tcase \"windows\":\n392: \t\t\tcmd = exec.Command(\"cmd\", \"/c\", \"start\", devtoolsURL)\n393: \t\tcase \"darwin\":\n",
+			"line": "392",
+			"column": "10",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "78",
+				"url": "https://cwe.mitre.org/data/definitions/78.html"
+			},
+			"rule_id": "G204",
+			"details": "Subprocess launched with variable",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/cmd/cdp/main.go",
+			"code": "1293: \t\t\t\t\t\t// Execute say command in background\n1294: \t\t\t\t\t\tcmd := exec.Command(\"say\", resultStr)\n1295: \t\t\t\t\t\tif err := cmd.Start(); err != nil {\n",
+			"line": "1294",
+			"column": "14",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "78",
+				"url": "https://cwe.mitre.org/data/definitions/78.html"
+			},
+			"rule_id": "G204",
+			"details": "Subprocess launched with a potential tainted input or cmd arguments",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/debug.go",
+			"code": "98: \t// Try launching Chrome with remote debugging\n99: \tdebugCmd := exec.CommandContext(\n100: \t\tdebugCtx,\n101: \t\tchromePath,\n102: \t\t\"--headless\",\n103: \t\t\"--disable-gpu\",\n104: \t\t\"--no-sandbox\",\n105: \t\t\"--remote-debugging-port=9222\",\n106: \t\t\"--user-data-dir=\"+tempDir,\n107: \t\t\"about:blank\",\n108: \t)\n109: \n",
+			"line": "99-108",
+			"column": "14",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "89",
+				"url": "https://cwe.mitre.org/data/definitions/89.html"
+			},
+			"rule_id": "G202",
+			"details": "SQL string concatenation",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/internal/chromeprofiles/profile.go",
+			"code": "255: \n256: \t_, err = tx.Exec(\"DELETE FROM cookies WHERE \" + whereClause.String())\n257: \tif err != nil {\n",
+			"line": "256",
+			"column": "19",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "22",
+				"url": "https://cwe.mitre.org/data/definitions/22.html"
+			},
+			"rule_id": "G304",
+			"details": "Potential file inclusion via variable",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/internal/visual/cli.go",
+			"code": "659: \n660: \tdata, err := os.ReadFile(configPath)\n661: \tif err != nil {\n",
+			"line": "660",
+			"column": "15",
+			"nosec": false,
+			"suppressions": null,
+			"autofix": "Consider using os.Root to scope file access under a fixed root (Go \u003e=1.24). Prefer root.Open/root.Stat over os.Open/os.Stat to prevent directory traversal."
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "22",
+				"url": "https://cwe.mitre.org/data/definitions/22.html"
+			},
+			"rule_id": "G304",
+			"details": "Potential file inclusion via variable",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/internal/visual/cli.go",
+			"code": "200: \n201: \tactualData, err := os.ReadFile(actual)\n202: \tif err != nil {\n",
+			"line": "201",
+			"column": "21",
+			"nosec": false,
+			"suppressions": null,
+			"autofix": "Consider using os.Root to scope file access under a fixed root (Go \u003e=1.24). Prefer root.Open/root.Stat over os.Open/os.Stat to prevent directory traversal."
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "22",
+				"url": "https://cwe.mitre.org/data/definitions/22.html"
+			},
+			"rule_id": "G304",
+			"details": "Potential file inclusion via variable",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/internal/visual/cli.go",
+			"code": "195: \t// Read images\n196: \tbaselineData, err := os.ReadFile(baseline)\n197: \tif err != nil {\n",
+			"line": "196",
+			"column": "23",
+			"nosec": false,
+			"suppressions": null,
+			"autofix": "Consider using os.Root to scope file access under a fixed root (Go \u003e=1.24). Prefer root.Open/root.Stat over os.Open/os.Stat to prevent directory traversal."
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "22",
+				"url": "https://cwe.mitre.org/data/definitions/22.html"
+			},
+			"rule_id": "G304",
+			"details": "Potential file inclusion via variable",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/internal/visual/baseline.go",
+			"code": "390: func (bm *BaselineManager) loadFile(path string) ([]byte, error) {\n391: \treturn os.ReadFile(path)\n392: }\n",
+			"line": "391",
+			"column": "9",
+			"nosec": false,
+			"suppressions": null,
+			"autofix": "Consider using os.Root to scope file access under a fixed root (Go \u003e=1.24). Prefer root.Open/root.Stat over os.Open/os.Stat to prevent directory traversal."
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "22",
+				"url": "https://cwe.mitre.org/data/definitions/22.html"
+			},
+			"rule_id": "G304",
+			"details": "Potential file inclusion via variable",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/internal/secureio/secureio.go",
+			"code": "268: func NewLockFile(path string) (*LockFile, error) {\n269: \tfile, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, SecureFilePerms)\n270: \tif err != nil {\n",
+			"line": "269",
+			"column": "15",
+			"nosec": false,
+			"suppressions": null,
+			"autofix": "Consider using os.Root to scope file access under a fixed root (Go \u003e=1.24). Prefer root.Open/root.Stat over os.Open/os.Stat to prevent directory traversal."
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "22",
+				"url": "https://cwe.mitre.org/data/definitions/22.html"
+			},
+			"rule_id": "G304",
+			"details": "Potential file inclusion via variable",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/internal/secureio/secureio.go",
+			"code": "88: \t// Create destination file with secure permissions\n89: \tdstFile, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_EXCL, SecureFilePerms)\n90: \tif err != nil {\n",
+			"line": "89",
+			"column": "18",
+			"nosec": false,
+			"suppressions": null,
+			"autofix": "Consider using os.Root to scope file access under a fixed root (Go \u003e=1.24). Prefer root.Open/root.Stat over os.Open/os.Stat to prevent directory traversal."
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "22",
+				"url": "https://cwe.mitre.org/data/definitions/22.html"
+			},
+			"rule_id": "G304",
+			"details": "Potential file inclusion via variable",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/internal/secureio/secureio.go",
+			"code": "81: \t// Open source file\n82: \tsrcFile, err := os.Open(src)\n83: \tif err != nil {\n",
+			"line": "82",
+			"column": "18",
+			"nosec": false,
+			"suppressions": null,
+			"autofix": "Consider using os.Root to scope file access under a fixed root (Go \u003e=1.24). Prefer root.Open/root.Stat over os.Open/os.Stat to prevent directory traversal."
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "22",
+				"url": "https://cwe.mitre.org/data/definitions/22.html"
+			},
+			"rule_id": "G304",
+			"details": "Potential file inclusion via variable",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/internal/mirror/mirror.go",
+			"code": "190: \t// Read the downloaded content\n191: \tcontent, err := os.ReadFile(localPath)\n192: \tif err != nil {\n",
+			"line": "191",
+			"column": "18",
+			"nosec": false,
+			"suppressions": null,
+			"autofix": "Consider using os.Root to scope file access under a fixed root (Go \u003e=1.24). Prefer root.Open/root.Stat over os.Open/os.Stat to prevent directory traversal."
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "22",
+				"url": "https://cwe.mitre.org/data/definitions/22.html"
+			},
+			"rule_id": "G304",
+			"details": "Potential file inclusion via variable",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/internal/differential/capture.go",
+			"code": "292: func (cm *CaptureManager) loadHARFile(filename string) (*har.HAR, error) {\n293: \tdata, err := os.ReadFile(filename)\n294: \tif err != nil {\n",
+			"line": "293",
+			"column": "15",
+			"nosec": false,
+			"suppressions": null,
+			"autofix": "Consider using os.Root to scope file access under a fixed root (Go \u003e=1.24). Prefer root.Open/root.Stat over os.Open/os.Stat to prevent directory traversal."
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "22",
+				"url": "https://cwe.mitre.org/data/definitions/22.html"
+			},
+			"rule_id": "G304",
+			"details": "Potential file inclusion via variable",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/internal/chromeprofiles/profile.go",
+			"code": "379: \n380: \tdestination, err := os.Create(dst)\n381: \tif err != nil {\n",
+			"line": "380",
+			"column": "22",
+			"nosec": false,
+			"suppressions": null,
+			"autofix": "Consider using os.Root to scope file access under a fixed root (Go \u003e=1.24). Prefer root.Open/root.Stat over os.Open/os.Stat to prevent directory traversal."
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "22",
+				"url": "https://cwe.mitre.org/data/definitions/22.html"
+			},
+			"rule_id": "G304",
+			"details": "Potential file inclusion via variable",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/internal/chromeprofiles/profile.go",
+			"code": "373: func copyFile(src, dst string) error {\n374: \tsource, err := os.Open(src)\n375: \tif err != nil {\n",
+			"line": "374",
+			"column": "17",
+			"nosec": false,
+			"suppressions": null,
+			"autofix": "Consider using os.Root to scope file access under a fixed root (Go \u003e=1.24). Prefer root.Open/root.Stat over os.Open/os.Stat to prevent directory traversal."
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "22",
+				"url": "https://cwe.mitre.org/data/definitions/22.html"
+			},
+			"rule_id": "G304",
+			"details": "Potential file inclusion via variable",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/internal/chromeprofiles/profile.go",
+			"code": "363: \t\tindicatorPath := filepath.Join(dir, indicator)\n364: \t\tif file, err := os.Open(indicatorPath); err == nil {\n365: \t\t\tfile.Close()\n",
+			"line": "364",
+			"column": "19",
+			"nosec": false,
+			"suppressions": null,
+			"autofix": "Consider using os.Root to scope file access under a fixed root (Go \u003e=1.24). Prefer root.Open/root.Stat over os.Open/os.Stat to prevent directory traversal."
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "22",
+				"url": "https://cwe.mitre.org/data/definitions/22.html"
+			},
+			"rule_id": "G304",
+			"details": "Potential file inclusion via variable",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/internal/cdpscript/parser/script.go",
+			"code": "101: func ParseScriptFile(filename string) (*types.Script, error) {\n102: \tdata, err := os.ReadFile(filename)\n103: \tif err != nil {\n",
+			"line": "102",
+			"column": "15",
+			"nosec": false,
+			"suppressions": null,
+			"autofix": "Consider using os.Root to scope file access under a fixed root (Go \u003e=1.24). Prefer root.Open/root.Stat over os.Open/os.Stat to prevent directory traversal."
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "22",
+				"url": "https://cwe.mitre.org/data/definitions/22.html"
+			},
+			"rule_id": "G304",
+			"details": "Potential file inclusion via variable",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/internal/blocking/blocking.go",
+			"code": "151: func (e *BlockingEngine) loadRulesFromFile(filename string) error {\n152: \tfile, err := os.Open(filename)\n153: \tif err != nil {\n",
+			"line": "152",
+			"column": "15",
+			"nosec": false,
+			"suppressions": null,
+			"autofix": "Consider using os.Root to scope file access under a fixed root (Go \u003e=1.24). Prefer root.Open/root.Stat over os.Open/os.Stat to prevent directory traversal."
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "22",
+				"url": "https://cwe.mitre.org/data/definitions/22.html"
+			},
+			"rule_id": "G304",
+			"details": "Potential file inclusion via variable",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/cmd/ndp/session_manager.go",
+			"code": "400: \n401: \tdata, err := ioutil.ReadFile(filename)\n402: \tif err != nil {\n",
+			"line": "401",
+			"column": "15",
+			"nosec": false,
+			"suppressions": null,
+			"autofix": "Consider using os.Root to scope file access under a fixed root (Go \u003e=1.24). Prefer root.Open/root.Stat over os.Open/os.Stat to prevent directory traversal."
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "22",
+				"url": "https://cwe.mitre.org/data/definitions/22.html"
+			},
+			"rule_id": "G304",
+			"details": "Potential file inclusion via variable",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/cmd/ndp/session_files.go",
+			"code": "50: \tfilename := filepath.Join(GetSessionDir(), fmt.Sprintf(\"%s.session\", port))\n51: \tdata, err := ioutil.ReadFile(filename)\n52: \tif err != nil {\n",
+			"line": "51",
+			"column": "15",
+			"nosec": false,
+			"suppressions": null,
+			"autofix": "Consider using os.Root to scope file access under a fixed root (Go \u003e=1.24). Prefer root.Open/root.Stat over os.Open/os.Stat to prevent directory traversal."
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "22",
+				"url": "https://cwe.mitre.org/data/definitions/22.html"
+			},
+			"rule_id": "G304",
+			"details": "Potential file inclusion via variable",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/cmd/churl/main.go",
+			"code": "893: \n894: \t\tcontent, err := os.ReadFile(scriptFile)\n895: \t\tif err != nil {\n",
+			"line": "894",
+			"column": "19",
+			"nosec": false,
+			"suppressions": null,
+			"autofix": "Consider using os.Root to scope file access under a fixed root (Go \u003e=1.24). Prefer root.Open/root.Stat over os.Open/os.Stat to prevent directory traversal."
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "22",
+				"url": "https://cwe.mitre.org/data/definitions/22.html"
+			},
+			"rule_id": "G304",
+			"details": "Potential file inclusion via variable",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/cmd/cdp/interactive.go",
+			"code": "294: func (im *InteractiveMode) SaveSession(filename string) error {\n295: \tfile, err := os.Create(filename)\n296: \tif err != nil {\n",
+			"line": "295",
+			"column": "15",
+			"nosec": false,
+			"suppressions": null,
+			"autofix": "Consider using os.Root to scope file access under a fixed root (Go \u003e=1.24). Prefer root.Open/root.Stat over os.Open/os.Stat to prevent directory traversal."
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "22",
+				"url": "https://cwe.mitre.org/data/definitions/22.html"
+			},
+			"rule_id": "G304",
+			"details": "Potential file inclusion via variable",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/cmd/cdp/interactive.go",
+			"code": "238: func (im *InteractiveMode) ExecuteScript(filename string) error {\n239: \tfile, err := os.Open(filename)\n240: \tif err != nil {\n",
+			"line": "239",
+			"column": "15",
+			"nosec": false,
+			"suppressions": null,
+			"autofix": "Consider using os.Root to scope file access under a fixed root (Go \u003e=1.24). Prefer root.Open/root.Stat over os.Open/os.Stat to prevent directory traversal."
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "LOW",
+			"cwe": {
+				"id": "400",
+				"url": "https://cwe.mitre.org/data/definitions/400.html"
+			},
+			"rule_id": "G112",
+			"details": "Potential Slowloris Attack because ReadHeaderTimeout is not configured in the http.Server",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/internal/testutil/chrome.go",
+			"code": "195: \n196: \tserver.server = \u0026http.Server{Handler: handler}\n197: \tserver.url = fmt.Sprintf(\"http://%s\", listener.Addr().String())\n",
+			"line": "196",
+			"column": "19",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "LOW",
+			"cwe": {
+				"id": "400",
+				"url": "https://cwe.mitre.org/data/definitions/400.html"
+			},
+			"rule_id": "G112",
+			"details": "Potential Slowloris Attack because ReadHeaderTimeout is not configured in the http.Server",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/internal/health/dashboard.go",
+			"code": "78: \taddr := fmt.Sprintf(\"%s:%d\", d.config.Host, d.config.Port)\n79: \td.server = \u0026http.Server{\n80: \t\tAddr:    addr,\n81: \t\tHandler: mux,\n82: \t}\n83: \n",
+			"line": "79-82",
+			"column": "14",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "MEDIUM",
+			"cwe": {
+				"id": "88",
+				"url": "https://cwe.mitre.org/data/definitions/88.html"
+			},
+			"rule_id": "G107",
+			"details": "Potential HTTP request made with variable url",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/cmd/ndp/v8_inspector_client.go",
+			"code": "135: \n136: \tresp, err := http.Get(url)\n137: \tif err != nil {\n",
+			"line": "136",
+			"column": "15",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "MEDIUM",
+			"cwe": {
+				"id": "88",
+				"url": "https://cwe.mitre.org/data/definitions/88.html"
+			},
+			"rule_id": "G107",
+			"details": "Potential HTTP request made with variable url",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/cmd/ndp/simple_break.go",
+			"code": "104: \turl := fmt.Sprintf(\"http://localhost:%s/json/list\", sbs.port)\n105: \tresp, err := http.Get(url)\n106: \tif err != nil {\n",
+			"line": "105",
+			"column": "15",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "MEDIUM",
+			"cwe": {
+				"id": "88",
+				"url": "https://cwe.mitre.org/data/definitions/88.html"
+			},
+			"rule_id": "G107",
+			"details": "Potential HTTP request made with variable url",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/cmd/ndp/node_debugger.go",
+			"code": "70: \tlistURL := fmt.Sprintf(\"http://localhost:%s/json/list\", port)\n71: \tresp, err = http.Get(listURL)\n72: \tif err != nil {\n",
+			"line": "71",
+			"column": "14",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "MEDIUM",
+			"cwe": {
+				"id": "88",
+				"url": "https://cwe.mitre.org/data/definitions/88.html"
+			},
+			"rule_id": "G107",
+			"details": "Potential HTTP request made with variable url",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/cmd/ndp/node_debugger.go",
+			"code": "53: \turl := fmt.Sprintf(\"http://localhost:%s/json/version\", port)\n54: \tresp, err := http.Get(url)\n55: \tif err != nil {\n",
+			"line": "54",
+			"column": "15",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "MEDIUM",
+			"cwe": {
+				"id": "88",
+				"url": "https://cwe.mitre.org/data/definitions/88.html"
+			},
+			"rule_id": "G107",
+			"details": "Potential HTTP request made with variable url",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/cmd/ndp/chrome_debugger.go",
+			"code": "100: \t\tnewTabURL := fmt.Sprintf(\"http://localhost:%s/json/new\", port)\n101: \t\tresp, err := http.Get(newTabURL)\n102: \t\tif err != nil {\n",
+			"line": "101",
+			"column": "16",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "MEDIUM",
+			"cwe": {
+				"id": "88",
+				"url": "https://cwe.mitre.org/data/definitions/88.html"
+			},
+			"rule_id": "G107",
+			"details": "Potential HTTP request made with variable url",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/cmd/ndp/chrome_debugger.go",
+			"code": "76: \turl := fmt.Sprintf(\"http://localhost:%s/json/version\", port)\n77: \tresp, err := http.Get(url)\n78: \tif err != nil {\n",
+			"line": "77",
+			"column": "15",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "276",
+				"url": "https://cwe.mitre.org/data/definitions/276.html"
+			},
+			"rule_id": "G302",
+			"details": "Expect file permissions to be 0600 or less",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/cmd/native-host/main.go",
+			"code": "152: \t// Set up logging to a file (since stdout is used for messaging)\n153: \tlogFile, err := os.OpenFile(\"/tmp/chrome-ai-native-host.log\", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)\n154: \tif err == nil {\n",
+			"line": "153",
+			"column": "18",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "276",
+				"url": "https://cwe.mitre.org/data/definitions/276.html"
+			},
+			"rule_id": "G301",
+			"details": "Expect directory permissions to be 0750 or less",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/internal/visual/tester.go",
+			"code": "477: \t// Ensure directory exists\n478: \tif err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {\n479: \t\treturn errors.Wrap(err, \"creating diff directory\")\n",
+			"line": "478",
+			"column": "12",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "276",
+				"url": "https://cwe.mitre.org/data/definitions/276.html"
+			},
+			"rule_id": "G301",
+			"details": "Expect directory permissions to be 0750 or less",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/internal/visual/tester.go",
+			"code": "466: \tfor _, dir := range dirs {\n467: \t\tif err := os.MkdirAll(dir, 0755); err != nil {\n468: \t\t\treturn errors.Wrapf(err, \"creating directory %s\", dir)\n",
+			"line": "467",
+			"column": "13",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "276",
+				"url": "https://cwe.mitre.org/data/definitions/276.html"
+			},
+			"rule_id": "G301",
+			"details": "Expect directory permissions to be 0750 or less",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/internal/visual/cli.go",
+			"code": "680: \t// Ensure directory exists\n681: \tif err := os.MkdirAll(filepath.Dir(configPath), 0755); err != nil {\n682: \t\treturn errors.Wrap(err, \"creating config directory\")\n",
+			"line": "681",
+			"column": "12",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "276",
+				"url": "https://cwe.mitre.org/data/definitions/276.html"
+			},
+			"rule_id": "G301",
+			"details": "Expect directory permissions to be 0750 or less",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/internal/visual/cli.go",
+			"code": "582: \t// Ensure directory exists\n583: \tif err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {\n584: \t\treturn errors.Wrap(err, \"creating report directory\")\n",
+			"line": "583",
+			"column": "12",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "276",
+				"url": "https://cwe.mitre.org/data/definitions/276.html"
+			},
+			"rule_id": "G301",
+			"details": "Expect directory permissions to be 0750 or less",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/internal/visual/baseline.go",
+			"code": "377: func (bm *BaselineManager) ensureDirectoryExists(dir string) error {\n378: \treturn os.MkdirAll(dir, 0755)\n379: }\n",
+			"line": "378",
+			"column": "9",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "276",
+				"url": "https://cwe.mitre.org/data/definitions/276.html"
+			},
+			"rule_id": "G301",
+			"details": "Expect directory permissions to be 0750 or less",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/internal/mirror/filesystem.go",
+			"code": "117: \tfor _, dir := range dirs {\n118: \t\tif err := os.MkdirAll(dir, 0755); err != nil {\n119: \t\t\treturn fmt.Errorf(\"failed to create directory %s: %w\", dir, err)\n",
+			"line": "118",
+			"column": "13",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "276",
+				"url": "https://cwe.mitre.org/data/definitions/276.html"
+			},
+			"rule_id": "G301",
+			"details": "Expect directory permissions to be 0750 or less",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/internal/mirror/filesystem.go",
+			"code": "100: \tdir := filepath.Dir(localPath)\n101: \treturn os.MkdirAll(dir, 0755)\n102: }\n",
+			"line": "101",
+			"column": "9",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "276",
+				"url": "https://cwe.mitre.org/data/definitions/276.html"
+			},
+			"rule_id": "G301",
+			"details": "Expect directory permissions to be 0750 or less",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/internal/health/config.go",
+			"code": "220: \t// Ensure config directory exists\n221: \tif err := os.MkdirAll(filepath.Dir(cm.configPath), 0755); err != nil {\n222: \t\treturn fmt.Errorf(\"failed to create config directory: %w\", err)\n",
+			"line": "221",
+			"column": "12",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "276",
+				"url": "https://cwe.mitre.org/data/definitions/276.html"
+			},
+			"rule_id": "G301",
+			"details": "Expect directory permissions to be 0750 or less",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/internal/differential/controller.go",
+			"code": "50: \t}\n51: \tif err := os.MkdirAll(options.WorkDir, 0755); err != nil {\n52: \t\treturn nil, errors.Wrap(err, \"creating work directory\")\n",
+			"line": "51",
+			"column": "12",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "276",
+				"url": "https://cwe.mitre.org/data/definitions/276.html"
+			},
+			"rule_id": "G301",
+			"details": "Expect directory permissions to be 0750 or less",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/internal/differential/capture.go",
+			"code": "60: func NewCaptureManager(workDir string, verbose bool) (*CaptureManager, error) {\n61: \tif err := os.MkdirAll(workDir, 0755); err != nil {\n62: \t\treturn nil, errors.Wrap(err, \"creating work directory\")\n",
+			"line": "61",
+			"column": "12",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "276",
+				"url": "https://cwe.mitre.org/data/definitions/276.html"
+			},
+			"rule_id": "G301",
+			"details": "Expect directory permissions to be 0750 or less",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/internal/cdpscript/executor/commands.go",
+			"code": "383: \t// Ensure directory exists\n384: \tif err := os.MkdirAll(filepath.Dir(outputPath), 0755); err != nil {\n385: \t\treturn fmt.Errorf(\"failed to create directory: %w\", err)\n",
+			"line": "384",
+			"column": "12",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "276",
+				"url": "https://cwe.mitre.org/data/definitions/276.html"
+			},
+			"rule_id": "G301",
+			"details": "Expect directory permissions to be 0750 or less",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/internal/cdpscript/executor/commands.go",
+			"code": "27: \t// Ensure directory exists\n28: \tif err := os.MkdirAll(filepath.Dir(outputPath), 0755); err != nil {\n29: \t\treturn fmt.Errorf(\"failed to create directory: %w\", err)\n",
+			"line": "28",
+			"column": "12",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "276",
+				"url": "https://cwe.mitre.org/data/definitions/276.html"
+			},
+			"rule_id": "G301",
+			"details": "Expect directory permissions to be 0750 or less",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/cmd/ndp/session_manager.go",
+			"code": "81: \tconfigDir := filepath.Join(homeDir, \".ndp\", \"sessions\")\n82: \tos.MkdirAll(configDir, 0755)\n83: \n",
+			"line": "82",
+			"column": "2",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "276",
+				"url": "https://cwe.mitre.org/data/definitions/276.html"
+			},
+			"rule_id": "G306",
+			"details": "Expect WriteFile permissions to be 0600 or less",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/internal/visual/cli.go",
+			"code": "684: \n685: \treturn os.WriteFile(configPath, data, 0644)\n686: }\n",
+			"line": "685",
+			"column": "9",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "276",
+				"url": "https://cwe.mitre.org/data/definitions/276.html"
+			},
+			"rule_id": "G306",
+			"details": "Expect WriteFile permissions to be 0600 or less",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/internal/visual/cli.go",
+			"code": "600: \n601: \treturn os.WriteFile(path, data, 0644)\n602: }\n",
+			"line": "601",
+			"column": "9",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "276",
+				"url": "https://cwe.mitre.org/data/definitions/276.html"
+			},
+			"rule_id": "G306",
+			"details": "Expect WriteFile permissions to be 0600 or less",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/internal/visual/baseline.go",
+			"code": "386: func (bm *BaselineManager) saveFile(path string, data []byte) error {\n387: \treturn os.WriteFile(path, data, 0644)\n388: }\n",
+			"line": "387",
+			"column": "9",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "276",
+				"url": "https://cwe.mitre.org/data/definitions/276.html"
+			},
+			"rule_id": "G306",
+			"details": "Expect WriteFile permissions to be 0600 or less",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/internal/recorder/recorder.go",
+			"code": "269: \n270: \tif err := os.WriteFile(filename, jsonBytes, 0644); err != nil {\n271: \t\treturn chromeErrors.WithContext(\n",
+			"line": "270",
+			"column": "12",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "276",
+				"url": "https://cwe.mitre.org/data/definitions/276.html"
+			},
+			"rule_id": "G306",
+			"details": "Expect WriteFile permissions to be 0600 or less",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/internal/mirror/mirror.go",
+			"code": "257: \tcontent := []byte(fmt.Sprintf(\"\u003c!-- Placeholder for %s --\u003e\\n\", urlStr))\n258: \treturn os.WriteFile(localPath, content, 0644)\n259: }\n",
+			"line": "258",
+			"column": "9",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "276",
+				"url": "https://cwe.mitre.org/data/definitions/276.html"
+			},
+			"rule_id": "G306",
+			"details": "Expect WriteFile permissions to be 0600 or less",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/internal/mirror/filesystem.go",
+			"code": "251: \t\tcontent := []byte(\"\u003c!DOCTYPE html\u003e\\n\u003chtml\u003e\\n\u003chead\u003e\u003ctitle\u003eIndex\u003c/title\u003e\u003c/head\u003e\\n\u003cbody\u003e\u003ch1\u003eIndex\u003c/h1\u003e\u003c/body\u003e\\n\u003c/html\u003e\")\n252: \t\tif err := os.WriteFile(indexPath, content, 0644); err != nil {\n253: \t\t\treturn fmt.Errorf(\"failed to create index.html: %w\", err)\n",
+			"line": "252",
+			"column": "13",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "276",
+				"url": "https://cwe.mitre.org/data/definitions/276.html"
+			},
+			"rule_id": "G306",
+			"details": "Expect WriteFile permissions to be 0600 or less",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/internal/health/config.go",
+			"code": "236: \t// Write to file\n237: \tif err := os.WriteFile(cm.configPath, data, 0644); err != nil {\n238: \t\treturn fmt.Errorf(\"failed to write config file: %w\", err)\n",
+			"line": "237",
+			"column": "12",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "276",
+				"url": "https://cwe.mitre.org/data/definitions/276.html"
+			},
+			"rule_id": "G306",
+			"details": "Expect WriteFile permissions to be 0600 or less",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/internal/differential/state.go",
+			"code": "612: \n613: \tif err := os.WriteFile(filename, data, 0644); err != nil {\n614: \t\treturn errors.Wrap(err, \"writing states file\")\n",
+			"line": "613",
+			"column": "12",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "276",
+				"url": "https://cwe.mitre.org/data/definitions/276.html"
+			},
+			"rule_id": "G306",
+			"details": "Expect WriteFile permissions to be 0600 or less",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/internal/differential/report.go",
+			"code": "320: \n321: \tif err := os.WriteFile(options.OutputPath, buf.Bytes(), 0644); err != nil {\n322: \t\treturn errors.Wrap(err, \"writing CSV report\")\n",
+			"line": "321",
+			"column": "12",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "276",
+				"url": "https://cwe.mitre.org/data/definitions/276.html"
+			},
+			"rule_id": "G306",
+			"details": "Expect WriteFile permissions to be 0600 or less",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/internal/differential/report.go",
+			"code": "282: \n283: \tif err := os.WriteFile(options.OutputPath, buf.Bytes(), 0644); err != nil {\n284: \t\treturn errors.Wrap(err, \"writing text report\")\n",
+			"line": "283",
+			"column": "12",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "276",
+				"url": "https://cwe.mitre.org/data/definitions/276.html"
+			},
+			"rule_id": "G306",
+			"details": "Expect WriteFile permissions to be 0600 or less",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/internal/differential/report.go",
+			"code": "133: \n134: \tif err := os.WriteFile(options.OutputPath, buf.Bytes(), 0644); err != nil {\n135: \t\treturn errors.Wrap(err, \"writing HTML report\")\n",
+			"line": "134",
+			"column": "12",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "276",
+				"url": "https://cwe.mitre.org/data/definitions/276.html"
+			},
+			"rule_id": "G306",
+			"details": "Expect WriteFile permissions to be 0600 or less",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/internal/differential/report.go",
+			"code": "95: \n96: \tif err := os.WriteFile(options.OutputPath, jsonBytes, 0644); err != nil {\n97: \t\treturn errors.Wrap(err, \"writing JSON report\")\n",
+			"line": "96",
+			"column": "12",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "276",
+				"url": "https://cwe.mitre.org/data/definitions/276.html"
+			},
+			"rule_id": "G306",
+			"details": "Expect WriteFile permissions to be 0600 or less",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/internal/differential/capture.go",
+			"code": "283: \n284: \tif err := os.WriteFile(filename, data, 0644); err != nil {\n285: \t\treturn errors.Wrap(err, \"writing HAR file\")\n",
+			"line": "284",
+			"column": "12",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "276",
+				"url": "https://cwe.mitre.org/data/definitions/276.html"
+			},
+			"rule_id": "G306",
+			"details": "Expect WriteFile permissions to be 0600 or less",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/internal/differential/capture.go",
+			"code": "269: \n270: \tif err := os.WriteFile(cm.metadataFile, data, 0644); err != nil {\n271: \t\treturn errors.Wrap(err, \"writing metadata file\")\n",
+			"line": "270",
+			"column": "12",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "276",
+				"url": "https://cwe.mitre.org/data/definitions/276.html"
+			},
+			"rule_id": "G306",
+			"details": "Expect WriteFile permissions to be 0600 or less",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/internal/chromeprofiles/profile.go",
+			"code": "200: \tlocalState := `{\"os_crypt\":{\"encrypted_key\":\"\"}}`\n201: \tif err := os.WriteFile(filepath.Join(pm.workDir, \"Local State\"), []byte(localState), 0644); err != nil {\n202: \t\treturn chromeErrors.WithContext(\n",
+			"line": "201",
+			"column": "12",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "276",
+				"url": "https://cwe.mitre.org/data/definitions/276.html"
+			},
+			"rule_id": "G306",
+			"details": "Expect WriteFile permissions to be 0600 or less",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/internal/cdpscript/executor/commands.go",
+			"code": "388: \t// Write to file\n389: \tif err := os.WriteFile(outputPath, data, 0644); err != nil {\n390: \t\treturn fmt.Errorf(\"failed to write file: %w\", err)\n",
+			"line": "389",
+			"column": "12",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "276",
+				"url": "https://cwe.mitre.org/data/definitions/276.html"
+			},
+			"rule_id": "G306",
+			"details": "Expect WriteFile permissions to be 0600 or less",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/internal/cdpscript/executor/commands.go",
+			"code": "49: \t// Write to file\n50: \tif err := os.WriteFile(outputPath, data, 0644); err != nil {\n51: \t\treturn fmt.Errorf(\"failed to write file: %w\", err)\n",
+			"line": "50",
+			"column": "12",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "276",
+				"url": "https://cwe.mitre.org/data/definitions/276.html"
+			},
+			"rule_id": "G306",
+			"details": "Expect WriteFile permissions to be 0600 or less",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/cmd/ndp/v8_commands.go",
+			"code": "411: \t\t\tif profileJSON, err := json.MarshalIndent(profile, \"\", \"  \"); err == nil {\n412: \t\t\t\tif err := os.WriteFile(filename, profileJSON, 0644); err == nil {\n413: \t\t\t\t\tfmt.Printf(\"\\nProfile saved to: %s\\n\", filename)\n",
+			"line": "412",
+			"column": "15",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "276",
+				"url": "https://cwe.mitre.org/data/definitions/276.html"
+			},
+			"rule_id": "G306",
+			"details": "Expect WriteFile permissions to be 0600 or less",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/cmd/ndp/session_manager.go",
+			"code": "385: \n386: \tif err := ioutil.WriteFile(filename, data, 0644); err != nil {\n387: \t\treturn errors.Wrap(err, \"failed to save session\")\n",
+			"line": "386",
+			"column": "12",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "276",
+				"url": "https://cwe.mitre.org/data/definitions/276.html"
+			},
+			"rule_id": "G306",
+			"details": "Expect WriteFile permissions to be 0600 or less",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/cmd/ndp/profiler.go",
+			"code": "449: \n450: \treturn ioutil.WriteFile(filename, data, 0644)\n451: }\n",
+			"line": "450",
+			"column": "9",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "276",
+				"url": "https://cwe.mitre.org/data/definitions/276.html"
+			},
+			"rule_id": "G306",
+			"details": "Expect WriteFile permissions to be 0600 or less",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/cmd/ndp/profiler.go",
+			"code": "257: \n258: \treturn ioutil.WriteFile(filename, data, 0644)\n259: }\n",
+			"line": "258",
+			"column": "9",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "276",
+				"url": "https://cwe.mitre.org/data/definitions/276.html"
+			},
+			"rule_id": "G306",
+			"details": "Expect WriteFile permissions to be 0600 or less",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/cmd/ndp/chrome_debugger.go",
+			"code": "495: \t// Save to file\n496: \tif err := os.WriteFile(filename, buf, 0644); err != nil {\n497: \t\treturn errors.Wrap(err, \"failed to save screenshot\")\n",
+			"line": "496",
+			"column": "12",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "276",
+				"url": "https://cwe.mitre.org/data/definitions/276.html"
+			},
+			"rule_id": "G306",
+			"details": "Expect WriteFile permissions to be 0600 or less",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/cmd/churl/main.go",
+			"code": "1110: \t// Write to file\n1111: \tif err := os.WriteFile(opts.webSocketOutputFile, output, 0644); err != nil {\n1112: \t\treturn errors.Wrap(err, \"failed to write WebSocket output file\")\n",
+			"line": "1111",
+			"column": "12",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "276",
+				"url": "https://cwe.mitre.org/data/definitions/276.html"
+			},
+			"rule_id": "G306",
+			"details": "Expect WriteFile permissions to be 0600 or less",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/cmd/chdb/cmd_network.go",
+			"code": "224: \t// Write to file\n225: \tif err := os.WriteFile(outputPath, []byte(harData), 0644); err != nil {\n226: \t\treturn err\n",
+			"line": "225",
+			"column": "12",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "276",
+				"url": "https://cwe.mitre.org/data/definitions/276.html"
+			},
+			"rule_id": "G306",
+			"details": "Expect WriteFile permissions to be 0600 or less",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/cmd/chdb/chrome.go",
+			"code": "230: \n231: \treturn os.WriteFile(filename, buf, 0644)\n232: }\n",
+			"line": "231",
+			"column": "9",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "276",
+				"url": "https://cwe.mitre.org/data/definitions/276.html"
+			},
+			"rule_id": "G306",
+			"details": "Expect WriteFile permissions to be 0600 or less",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/cmd/cdp/main.go",
+			"code": "1856: \t\tfilename := fmt.Sprintf(\"screenshot-%d.png\", time.Now().Unix())\n1857: \t\tif err := os.WriteFile(filename, buf, 0644); err != nil {\n1858: \t\t\treturn errors.Wrap(err, \"saving screenshot\")\n",
+			"line": "1857",
+			"column": "13",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "276",
+				"url": "https://cwe.mitre.org/data/definitions/276.html"
+			},
+			"rule_id": "G306",
+			"details": "Expect WriteFile permissions to be 0600 or less",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/cmd/cdp/main.go",
+			"code": "236: \n237: \treturn os.WriteFile(filename, data, 0644)\n238: }\n",
+			"line": "237",
+			"column": "9",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "276",
+				"url": "https://cwe.mitre.org/data/definitions/276.html"
+			},
+			"rule_id": "G306",
+			"details": "Expect WriteFile permissions to be 0600 or less",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/cmd/cdp/commands.go",
+			"code": "797: \n798: \t\t\tif err := os.WriteFile(filename, buf, 0644); err != nil {\n799: \t\t\t\treturn errors.Wrap(err, \"saving PDF\")\n",
+			"line": "798",
+			"column": "14",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "276",
+				"url": "https://cwe.mitre.org/data/definitions/276.html"
+			},
+			"rule_id": "G306",
+			"details": "Expect WriteFile permissions to be 0600 or less",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/cmd/cdp/commands.go",
+			"code": "767: \n768: \t\t\tif err := os.WriteFile(filename, buf, 0644); err != nil {\n769: \t\t\t\treturn errors.Wrap(err, \"saving screenshot\")\n",
+			"line": "768",
+			"column": "14",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "327",
+				"url": "https://cwe.mitre.org/data/definitions/327.html"
+			},
+			"rule_id": "G501",
+			"details": "Blocklisted import crypto/md5: weak cryptographic primitive",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/internal/visual/baseline.go",
+			"code": "3: import (\n4: \t\"crypto/md5\"\n5: \t\"crypto/sha256\"\n",
+			"line": "4",
+			"column": "2",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "327",
+				"url": "https://cwe.mitre.org/data/definitions/327.html"
+			},
+			"rule_id": "G501",
+			"details": "Blocklisted import crypto/md5: weak cryptographic primitive",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/internal/differential/capture.go",
+			"code": "3: import (\n4: \t\"crypto/md5\"\n5: \t\"encoding/json\"\n",
+			"line": "4",
+			"column": "2",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/internal/visual/baseline.go",
+			"code": "60: \t\t\t// Clean up image file if metadata save fails\n61: \t\t\tos.Remove(imageFile)\n62: \t\t\treturn errors.Wrap(err, \"saving baseline metadata\")\n",
+			"line": "61",
+			"column": "4",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/internal/testutil/chrome.go",
+			"code": "392: \t\tcmd := exec.Command(\"pkill\", \"-f\", browser)\n393: \t\tcmd.Run() // Ignore errors - process might not exist\n394: \t}\n",
+			"line": "393",
+			"column": "3",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/internal/testutil/chrome.go",
+			"code": "324: \tt.Cleanup(func() {\n325: \t\tos.Remove(tmpfile.Name())\n326: \t})\n",
+			"line": "325",
+			"column": "3",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/internal/testutil/chrome.go",
+			"code": "209: \t\tif err == nil {\n210: \t\t\tresp.Body.Close()\n211: \t\t\treturn server\n",
+			"line": "210",
+			"column": "4",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/internal/testutil/chrome.go",
+			"code": "175: \tif h.tempDir != \"\" {\n176: \t\tos.RemoveAll(h.tempDir)\n177: \t\th.tempDir = \"\"\n",
+			"line": "176",
+			"column": "3",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/internal/testutil/chrome.go",
+			"code": "170: \tif h.process != nil {\n171: \t\th.process.Kill()\n172: \t\th.process = nil\n",
+			"line": "171",
+			"column": "3",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/internal/testutil/chrome.go",
+			"code": "153: \t\tif err == nil {\n154: \t\t\tresp.Body.Close()\n155: \t\t\tif resp.StatusCode == http.StatusOK {\n",
+			"line": "154",
+			"column": "4",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/internal/testutil/capture.go",
+			"code": "58: func (oc *OutputCapture) Stop() (stdout, logs string) {\n59: \toc.stdout.Close()\n60: \tos.Stdout = oc.oldStdout\n",
+			"line": "59",
+			"column": "2",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/internal/testutil/capture.go",
+			"code": "50: \tgo func() {\n51: \t\tio.Copy(outBuf, r)\n52: \t}()\n",
+			"line": "51",
+			"column": "3",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/internal/termmd/render.go",
+			"code": "195: \t\t\tif text := child.Text(source); len(text) \u003e 0 {\n196: \t\t\t\tw.Write(text)\n197: \t\t\t}\n",
+			"line": "196",
+			"column": "5",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/internal/termmd/render.go",
+			"code": "191: \t\t\t}\n192: \t\t\trenderer(w, source, child, false)\n193: \t\t} else {\n",
+			"line": "192",
+			"column": "4",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/internal/termmd/render.go",
+			"code": "187: \t\tif renderer, ok := r.getRenderer(child.Kind()); ok {\n188: \t\t\trenderer(w, source, child, true)\n189: \t\t\tif child.HasChildren() {\n",
+			"line": "188",
+			"column": "4",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/internal/secureio/secureio.go",
+			"code": "290: \tif err := syscall.Flock(int(l.file.Fd()), syscall.LOCK_UN); err != nil {\n291: \t\tl.file.Close()\n292: \t\treturn fmt.Errorf(\"releasing lock: %w\", err)\n",
+			"line": "291",
+			"column": "3",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/internal/secureio/secureio.go",
+			"code": "275: \tif err := syscall.Flock(int(file.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {\n276: \t\tfile.Close()\n277: \t\treturn nil, fmt.Errorf(\"acquiring lock: %w\", err)\n",
+			"line": "276",
+			"column": "3",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/internal/secureio/secureio.go",
+			"code": "238: \tif err != nil {\n239: \t\tos.RemoveAll(dst) // Clean up on error\n240: \t\treturn err\n",
+			"line": "239",
+			"column": "3",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/internal/secureio/secureio.go",
+			"code": "159: \tif err := tempFile.Sync(); err != nil {\n160: \t\ttempFile.Close()\n161: \t\treturn fmt.Errorf(\"syncing data: %w\", err)\n",
+			"line": "160",
+			"column": "3",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/internal/secureio/secureio.go",
+			"code": "153: \tif _, err := tempFile.Write(data); err != nil {\n154: \t\ttempFile.Close()\n155: \t\treturn fmt.Errorf(\"writing data: %w\", err)\n",
+			"line": "154",
+			"column": "3",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/internal/secureio/secureio.go",
+			"code": "147: \tif err := tempFile.Chmod(SecureFilePerms); err != nil {\n148: \t\ttempFile.Close()\n149: \t\treturn fmt.Errorf(\"setting temp file permissions: %w\", err)\n",
+			"line": "148",
+			"column": "3",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/internal/secureio/secureio.go",
+			"code": "141: \t\tif err != nil {\n142: \t\t\tos.Remove(tempName)\n143: \t\t}\n",
+			"line": "142",
+			"column": "4",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/internal/secureio/secureio.go",
+			"code": "95: \t\tif retErr != nil {\n96: \t\t\tos.Remove(dst) // Clean up on error\n97: \t\t}\n",
+			"line": "96",
+			"column": "4",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/internal/secureio/secureio.go",
+			"code": "93: \tdefer func() {\n94: \t\tdstFile.Close()\n95: \t\tif retErr != nil {\n",
+			"line": "94",
+			"column": "3",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/internal/secureio/secureio.go",
+			"code": "51: \tif err := os.Chmod(tempDir, SecureDirPerms); err != nil {\n52: \t\tos.RemoveAll(tempDir)\n53: \t\treturn \"\", fmt.Errorf(\"setting secure permissions: %w\", err)\n",
+			"line": "52",
+			"column": "3",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/internal/recorder/websocket_recorder.go",
+			"code": "407: \t// For now, fallback to JSON\n408: \tjson.NewEncoder(os.Stdout).Encode(event)\n409: }\n",
+			"line": "408",
+			"column": "2",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/internal/recorder/websocket_recorder.go",
+			"code": "399: \t} else {\n400: \t\tjson.NewEncoder(os.Stdout).Encode(event)\n401: \t}\n",
+			"line": "400",
+			"column": "3",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/internal/recorder/websocket_recorder.go",
+			"code": "379: \t} else {\n380: \t\tjson.NewEncoder(os.Stdout).Encode(event)\n381: \t}\n",
+			"line": "380",
+			"column": "3",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/internal/recorder/websocket_recorder.go",
+			"code": "351: \t} else {\n352: \t\tjson.NewEncoder(os.Stdout).Encode(event)\n353: \t}\n",
+			"line": "352",
+			"column": "3",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/internal/recorder/websocket_recorder.go",
+			"code": "329: \t} else {\n330: \t\tjson.NewEncoder(os.Stdout).Encode(event)\n331: \t}\n",
+			"line": "330",
+			"column": "3",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/internal/mirror/robots.go",
+			"code": "104: \t\t\t\tvar delay int\n105: \t\t\t\tfmt.Sscanf(value, \"%d\", \u0026delay)\n106: \t\t\t\tcurrentRules.CrawlDelay = delay\n",
+			"line": "105",
+			"column": "5",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/internal/health/dashboard.go",
+			"code": "172: \t\tw.Header().Set(\"Content-Type\", \"application/json\")\n173: \t\tjson.NewEncoder(w).Encode(status)\n174: \n",
+			"line": "173",
+			"column": "3",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/internal/health/dashboard.go",
+			"code": "156: \n157: \tjson.NewEncoder(w).Encode(response)\n158: }\n",
+			"line": "157",
+			"column": "2",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/internal/health/dashboard.go",
+			"code": "137: \n138: \tjson.NewEncoder(w).Encode(alerts)\n139: }\n",
+			"line": "138",
+			"column": "2",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/internal/health/dashboard.go",
+			"code": "125: \tchecks := d.healthManager.GetAllStatuses()\n126: \tjson.NewEncoder(w).Encode(checks)\n127: }\n",
+			"line": "126",
+			"column": "2",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/internal/health/dashboard.go",
+			"code": "118: \tstatus := d.healthManager.GetOverallStatus()\n119: \tjson.NewEncoder(w).Encode(status)\n120: }\n",
+			"line": "119",
+			"column": "2",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/internal/health/dashboard.go",
+			"code": "102: \t\tw.Header().Set(\"Content-Type\", \"application/json\")\n103: \t\tjson.NewEncoder(w).Encode(data)\n104: \t\treturn\n",
+			"line": "103",
+			"column": "3",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/internal/chromeprofiles/profile.go",
+			"code": "364: \t\tif file, err := os.Open(indicatorPath); err == nil {\n365: \t\t\tfile.Close()\n366: \t\t\tfoundCount++\n",
+			"line": "365",
+			"column": "4",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/internal/cdpscript/executor/executor.go",
+			"code": "423: \t\tfmt.Println(\"Breakpoint hit - press Enter to continue...\")\n424: \t\tfmt.Scanln()\n425: \t\treturn nil\n",
+			"line": "424",
+			"column": "3",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/internal/cdpscript/executor/executor.go",
+			"code": "207: \tif e.browser != nil {\n208: \t\te.browser.Close()\n209: \t}\n",
+			"line": "208",
+			"column": "3",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/internal/browser/session_detector.go",
+			"code": "210: \t\tbody, err := io.ReadAll(resp.Body)\n211: \t\tresp.Body.Close()\n212: \n",
+			"line": "211",
+			"column": "3",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/internal/browser/network.go",
+			"code": "222: \t// No handler matched, continue request normally\n223: \treq.Continue()\n224: }\n",
+			"line": "223",
+			"column": "2",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/internal/browser/network.go",
+			"code": "202: \t\t\t// If blocking fails, continue the request\n203: \t\t\treq.Continue()\n204: \t\t}\n",
+			"line": "203",
+			"column": "4",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/debug.go",
+			"code": "81: \t\tpsCmd.Wait()\n82: \t\tgrepCmd.Wait()\n83: \t\tfmt.Println(string(grepBytes))\n",
+			"line": "82",
+			"column": "3",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/debug.go",
+			"code": "80: \n81: \t\tpsCmd.Wait()\n82: \t\tgrepCmd.Wait()\n",
+			"line": "81",
+			"column": "3",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/debug.go",
+			"code": "68: \t\tpsCmd.Start()\n69: \t\tgrepCmd.Start()\n70: \n",
+			"line": "69",
+			"column": "3",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/debug.go",
+			"code": "67: \t\tgrepOut, _ := grepCmd.StdoutPipe()\n68: \t\tpsCmd.Start()\n69: \t\tgrepCmd.Start()\n",
+			"line": "68",
+			"column": "3",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/cmd/ndp/v8_inspector_client.go",
+			"code": "376: \tif data, err := json.Marshal(params); err == nil {\n377: \t\tjson.Unmarshal(data, script)\n378: \t\tc.scripts[script.ScriptID] = script\n",
+			"line": "377",
+			"column": "3",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/cmd/ndp/v8_debugger.go",
+			"code": "30: \td.client.SendCommand(\"Debugger.setBreakpointsActive\", map[string]interface{}{\"active\": true})\n31: \td.client.SendCommand(\"Debugger.setPauseOnExceptions\", map[string]interface{}{\"state\": \"none\"})\n32: \n",
+			"line": "31",
+			"column": "2",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/cmd/ndp/v8_debugger.go",
+			"code": "29: \td.client.SendCommand(\"Debugger.setSkipAllPauses\", map[string]interface{}{\"skip\": false})\n30: \td.client.SendCommand(\"Debugger.setBreakpointsActive\", map[string]interface{}{\"active\": true})\n31: \td.client.SendCommand(\"Debugger.setPauseOnExceptions\", map[string]interface{}{\"state\": \"none\"})\n",
+			"line": "30",
+			"column": "2",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/cmd/ndp/v8_debugger.go",
+			"code": "28: \t// Set up common debugger configuration\n29: \td.client.SendCommand(\"Debugger.setSkipAllPauses\", map[string]interface{}{\"skip\": false})\n30: \td.client.SendCommand(\"Debugger.setBreakpointsActive\", map[string]interface{}{\"active\": true})\n",
+			"line": "29",
+			"column": "2",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/cmd/ndp/v8_console.go",
+			"code": "275: \t\t\t// Try alternative methods\n276: \t\t\tc.runtime.Evaluate(\"if (typeof gc === 'function') gc()\", \u0026EvaluateOptions{\n277: \t\t\t\tSilent: true,\n278: \t\t\t})\n279: \t\t}\n",
+			"line": "276-278",
+			"column": "4",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/cmd/ndp/v8_commands.go",
+			"code": "551: \t\tv8Runtime.EnableRuntime()\n552: \t\tv8Debugger.EnableDebugger()\n553: \t}\n",
+			"line": "552",
+			"column": "3",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/cmd/ndp/v8_commands.go",
+			"code": "550: \t\t// Enable domains\n551: \t\tv8Runtime.EnableRuntime()\n552: \t\tv8Debugger.EnableDebugger()\n",
+			"line": "551",
+			"column": "3",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/cmd/ndp/session_manager.go",
+			"code": "81: \tconfigDir := filepath.Join(homeDir, \".ndp\", \"sessions\")\n82: \tos.MkdirAll(configDir, 0755)\n83: \n",
+			"line": "82",
+			"column": "2",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/cmd/ndp/session_files.go",
+			"code": "99: \t// Remove old symlink if exists\n100: \tos.Remove(defaultLink)\n101: \n",
+			"line": "100",
+			"column": "2",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/cmd/ndp/repl.go",
+			"code": "297: \tif r.session != nil {\n298: \t\tr.manager.CloseSession(r.session.ID)\n299: \t}\n",
+			"line": "298",
+			"column": "3",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/cmd/ndp/node_debugger.go",
+			"code": "598: \t\t// Terminate the Node.js process we started\n599: \t\tnd.nodeProcess.Kill()\n600: \t}\n",
+			"line": "599",
+			"column": "3",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/cmd/ndp/node_debugger.go",
+			"code": "593: \tif nd.session != nil {\n594: \t\tnd.manager.CloseSession(nd.session.ID)\n595: \t}\n",
+			"line": "594",
+			"column": "3",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/cmd/ndp/node_debugger.go",
+			"code": "541: \t\tif resp, err := client.Get(url); err == nil {\n542: \t\t\tresp.Body.Close()\n543: \t\t\t// Debug endpoint is ready, attach to it\n",
+			"line": "542",
+			"column": "4",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/cmd/ndp/node_debugger.go",
+			"code": "492: \t\t\tif resp, err := client.Get(url); err == nil {\n493: \t\t\t\tresp.Body.Close()\n494: \t\t\t\tprocesses = append(processes, process)\n",
+			"line": "493",
+			"column": "5",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/cmd/ndp/node_debugger.go",
+			"code": "137: \t\t// Set as default session\n138: \t\tSetDefaultSession(port)\n139: \t\tif nd.verbose {\n",
+			"line": "138",
+			"column": "3",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/cmd/ndp/main.go",
+			"code": "197: \t\t\t}\n198: \t\t\tresp.Body.Close()\n199: \n",
+			"line": "198",
+			"column": "4",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/cmd/ndp/main.go",
+			"code": "194: \t\t\tif err := json.NewDecoder(resp.Body).Decode(\u0026targets); err != nil {\n195: \t\t\t\tresp.Body.Close()\n196: \t\t\t\tcontinue\n",
+			"line": "195",
+			"column": "5",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/cmd/ndp/chrome_debugger.go",
+			"code": "288: \t// Auto-accept dialogs in non-interactive mode\n289: \tchromedp.Run(cd.session.ChromeCtx,\n290: \t\tchromedp.ActionFunc(func(ctx context.Context) error {\n291: \t\t\treturn page.HandleJavaScriptDialog(true).Do(ctx)\n292: \t\t}),\n293: \t)\n294: }\n",
+			"line": "289-293",
+			"column": "2",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/cmd/ndp/chrome_debugger.go",
+			"code": "104: \t\t}\n105: \t\tresp.Body.Close()\n106: \n",
+			"line": "105",
+			"column": "3",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/cmd/churl/testserver.go",
+			"code": "72: \t\tw.Header().Set(\"Content-Type\", \"text/plain\")\n73: \t\tw.Write(body)\n74: \t})\n",
+			"line": "73",
+			"column": "3",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/cmd/churl/testserver.go",
+			"code": "70: \t\tbody := make([]byte, r.ContentLength)\n71: \t\tr.Body.Read(body)\n72: \t\tw.Header().Set(\"Content-Type\", \"text/plain\")\n",
+			"line": "71",
+			"column": "3",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/cmd/churl/testserver.go",
+			"code": "49: \t\t}\n50: \t\tjson.NewEncoder(w).Encode(headers)\n51: \t})\n",
+			"line": "50",
+			"column": "3",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/cmd/churl/testserver.go",
+			"code": "39: \t\t}\n40: \t\tjson.NewEncoder(w).Encode(data)\n41: \t})\n",
+			"line": "40",
+			"column": "3",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/cmd/chdb/storage.go",
+			"code": "151: \t\t\tif res.Value != nil {\n152: \t\t\t\tjson.Unmarshal(res.Value, \u0026result)\n153: \t\t\t}\n",
+			"line": "152",
+			"column": "5",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/cmd/chdb/storage.go",
+			"code": "54: \t\t\tif res.Value != nil {\n55: \t\t\t\tjson.Unmarshal(res.Value, \u0026result)\n56: \t\t\t}\n",
+			"line": "55",
+			"column": "5",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/cmd/chdb/serviceworker.go",
+			"code": "407: \t\t\tif res.Value != nil {\n408: \t\t\t\tjson.Unmarshal(res.Value, \u0026result)\n409: \t\t\t}\n",
+			"line": "408",
+			"column": "5",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/cmd/chdb/serviceworker.go",
+			"code": "271: \t\t\tif res.Value != nil {\n272: \t\t\t\tjson.Unmarshal(res.Value, \u0026result)\n273: \t\t\t}\n",
+			"line": "272",
+			"column": "5",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/cmd/chdb/serviceworker.go",
+			"code": "221: \t\t\tif res.Value != nil {\n222: \t\t\t\tjson.Unmarshal(res.Value, \u0026result)\n223: \t\t\t}\n",
+			"line": "222",
+			"column": "5",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/cmd/chdb/network.go",
+			"code": "456: \t\t// Continue the request\n457: \t\tchromedp.Run(nc.debugger.chromeCtx,\n458: \t\t\tchromedp.ActionFunc(func(ctx context.Context) error {\n459: \t\t\t\treturn fetch.ContinueRequest(ev.RequestID).Do(ctx)\n460: \t\t\t}),\n461: \t\t)\n462: \t}\n",
+			"line": "457-461",
+			"column": "3",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/cmd/chdb/network.go",
+			"code": "446: \t\t// Block the request\n447: \t\tchromedp.Run(nc.debugger.chromeCtx,\n448: \t\t\tchromedp.ActionFunc(func(ctx context.Context) error {\n449: \t\t\t\treturn fetch.FailRequest(ev.RequestID, network.ErrorReasonBlockedByClient).Do(ctx)\n450: \t\t\t}),\n451: \t\t)\n452: \t\tif nc.verbose {\n",
+			"line": "447-451",
+			"column": "3",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/cmd/chdb/debugger.go",
+			"code": "81: \t\tif len(parts) \u003e 2 {\n82: \t\t\tfmt.Sscanf(parts[2], \"%d\", \u0026columnNumber)\n83: \t\t}\n",
+			"line": "82",
+			"column": "4",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/cmd/chdb/debugger.go",
+			"code": "79: \t\turl = parts[0]\n80: \t\tfmt.Sscanf(parts[1], \"%d\", \u0026lineNumber)\n81: \t\tif len(parts) \u003e 2 {\n",
+			"line": "80",
+			"column": "3",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/cmd/chdb/debugger.go",
+			"code": "74: \t\tif len(parts) \u003e 3 {\n75: \t\t\tfmt.Sscanf(parts[3], \"%d\", \u0026columnNumber)\n76: \t\t}\n",
+			"line": "75",
+			"column": "4",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/cmd/chdb/debugger.go",
+			"code": "71: \t\tif len(parts) \u003e 2 {\n72: \t\t\tfmt.Sscanf(parts[2], \"%d\", \u0026lineNumber)\n73: \t\t}\n",
+			"line": "72",
+			"column": "4",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/cmd/chdb/css.go",
+			"code": "420: \t\t\tif res.Value != nil {\n421: \t\t\t\tjson.Unmarshal(res.Value, \u0026result)\n422: \t\t\t}\n",
+			"line": "421",
+			"column": "5",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/cmd/chdb/css.go",
+			"code": "353: \t\t\tif res.Value != nil {\n354: \t\t\t\tjson.Unmarshal(res.Value, \u0026result)\n355: \t\t\t}\n",
+			"line": "354",
+			"column": "5",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/cmd/chdb/css.go",
+			"code": "279: \t\t\tif result.Value != nil {\n280: \t\t\t\tjson.Unmarshal(result.Value, \u0026success)\n281: \t\t\t}\n",
+			"line": "280",
+			"column": "5",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/cmd/chdb/css.go",
+			"code": "218: \t\t\tif res.Value != nil {\n219: \t\t\t\tjson.Unmarshal(res.Value, \u0026result)\n220: \t\t\t}\n",
+			"line": "219",
+			"column": "5",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/cmd/chdb/css.go",
+			"code": "171: \t\t\tif result.Value != nil {\n172: \t\t\t\tjson.Unmarshal(result.Value, \u0026success)\n173: \t\t\t}\n",
+			"line": "172",
+			"column": "5",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/cmd/chdb/css.go",
+			"code": "122: \t\t\tif res.Value != nil {\n123: \t\t\t\tjson.Unmarshal(res.Value, \u0026result)\n124: \t\t\t}\n",
+			"line": "123",
+			"column": "5",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/cmd/chdb/css.go",
+			"code": "64: \t\t\tif res.Value != nil {\n65: \t\t\t\tjson.Unmarshal(res.Value, \u0026result)\n66: \t\t\t}\n",
+			"line": "65",
+			"column": "5",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/cmd/chdb/cmd_screenshot.go",
+			"code": "61: \t// Now close the debugger\n62: \tdebugger.Close()\n63: \n",
+			"line": "62",
+			"column": "2",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/cmd/chdb/cmd_screenshot.go",
+			"code": "50: \tif err := debugger.TakeScreenshot(ctx, filename); err != nil {\n51: \t\tdebugger.Close()\n52: \t\treturn err\n",
+			"line": "51",
+			"column": "3",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/cmd/chdb/cmd_screenshot.go",
+			"code": "44: \tif err := debugger.EnableDomains(ctx, \"Page\"); err != nil {\n45: \t\tdebugger.Close()\n46: \t\treturn err\n",
+			"line": "45",
+			"column": "3",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/cmd/chdb/cmd_navigate.go",
+			"code": "50: \t// Now close the debugger\n51: \tdebugger.Close()\n52: \n",
+			"line": "51",
+			"column": "2",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/cmd/chdb/cmd_navigate.go",
+			"code": "39: \tif err := debugger.Navigate(ctx, url); err != nil {\n40: \t\tdebugger.Close()\n41: \t\treturn err\n",
+			"line": "40",
+			"column": "3",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/cmd/chdb/cmd_exec.go",
+			"code": "57: \t// Now close the debugger\n58: \tdebugger.Close()\n59: \n",
+			"line": "58",
+			"column": "2",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/cmd/chdb/cmd_exec.go",
+			"code": "45: \tif err != nil {\n46: \t\tdebugger.Close()\n47: \t\treturn err\n",
+			"line": "46",
+			"column": "3",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/cmd/chdb/cmd_exec.go",
+			"code": "39: \tif err := debugger.EnableDomains(ctx, \"Runtime\"); err != nil {\n40: \t\tdebugger.Close()\n41: \t\treturn err\n",
+			"line": "40",
+			"column": "3",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/cmd/chdb/chrome.go",
+			"code": "119: \tif err := chromedp.Run(chromeCtx, chromedp.Evaluate(\"1+1\", nil)); err != nil {\n120: \t\tcd.Close()\n121: \t\treturn errors.Wrap(err, \"failed to connect to target\")\n",
+			"line": "120",
+			"column": "3",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/cmd/chdb/animation.go",
+			"code": "296: \t\t\tif res.Value != nil {\n297: \t\t\t\tjson.Unmarshal(res.Value, \u0026result)\n298: \t\t\t}\n",
+			"line": "297",
+			"column": "5",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/cmd/chdb/animation.go",
+			"code": "242: \t\t\tif res.Value != nil {\n243: \t\t\t\tjson.Unmarshal(res.Value, \u0026result)\n244: \t\t\t}\n",
+			"line": "243",
+			"column": "5",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/cmd/chdb/animation.go",
+			"code": "184: \t\t\tif res.Value != nil {\n185: \t\t\t\tjson.Unmarshal(res.Value, \u0026result)\n186: \t\t\t}\n",
+			"line": "185",
+			"column": "5",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/cmd/cdp/main.go",
+			"code": "718: \t\tvar ms int\n719: \t\tfmt.Sscanf(args[0], \"%d\", \u0026ms)\n720: \t\ttime.Sleep(time.Duration(ms) * time.Millisecond)\n",
+			"line": "719",
+			"column": "3",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/cmd/cdp/main.go",
+			"code": "354: \t\t\t\tif portStr != \"\" {\n355: \t\t\t\t\tfmt.Sscanf(portStr, \"%d\", \u0026debugPort)\n356: \t\t\t\t}\n",
+			"line": "355",
+			"column": "6",
+			"nosec": false,
+			"suppressions": null
+		}
+	],
+	"Stats": {
+		"files": 138,
+		"lines": 53820,
+		"nosec": 0,
+		"found": 195
+	},
+	"GosecVersion": "dev"
+}

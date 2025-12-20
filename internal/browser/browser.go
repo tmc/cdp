@@ -130,8 +130,29 @@ func (b *Browser) Launch(ctx context.Context) error {
 			return errors.Wrap(err, "setting up working directory")
 		}
 
-		if err := b.profileMgr.CopyProfile(b.opts.ProfileName, b.opts.CookieDomains); err != nil {
-			return errors.Wrap(err, "copying profile")
+		// Check for Brave session isolation needs
+		sessionDetector := NewSessionDetector(b.opts.Verbose)
+		needsIsolation := sessionDetector.NeedsBraveSessionIsolation(b.ctx, b.opts.ChromePath, true)
+
+		if needsIsolation {
+			// Display warning about Brave session reuse
+			if b.opts.Verbose {
+				log.Println(sessionDetector.ImportantWarning())
+			}
+
+			// Use Brave session isolation instead of standard profile copy
+			if err := b.profileMgr.BraveSessionIsolation(b.opts.ProfileName, b.opts.CookieDomains); err != nil {
+				return errors.Wrap(err, "creating Brave isolated profile")
+			}
+
+			if b.opts.Verbose {
+				log.Printf("Brave session isolation created for profile '%s'", b.opts.ProfileName)
+			}
+		} else {
+			// Standard profile copy
+			if err := b.profileMgr.CopyProfile(b.opts.ProfileName, b.opts.CookieDomains); err != nil {
+				return errors.Wrap(err, "copying profile")
+			}
 		}
 	}
 
@@ -145,12 +166,19 @@ func (b *Browser) Launch(ctx context.Context) error {
 
 	// If a profile is being used
 	if b.opts.UseProfile && b.profileMgr != nil {
-		chromeLaunchOpts = append(chromeLaunchOpts, chromedp.UserDataDir(b.profileMgr.WorkDir()))
+		userDataDir := b.profileMgr.WorkDir()
+		chromeLaunchOpts = append(chromeLaunchOpts, chromedp.UserDataDir(userDataDir))
+		if b.opts.Verbose {
+			log.Printf("Using UserDataDir: %s", userDataDir)
+		}
 	}
 
 	// Add Chrome path if specified
 	if b.opts.ChromePath != "" {
 		chromeLaunchOpts = append(chromeLaunchOpts, chromedp.ExecPath(b.opts.ChromePath))
+		if b.opts.Verbose {
+			log.Printf("Using Chrome executable: %s", b.opts.ChromePath)
+		}
 	}
 
 	// Add remote debugging port if specified
@@ -510,7 +538,7 @@ func (b *Browser) getSecureChromeOptions() []chromedp.ExecAllocatorOption {
 
 // getStrictSecurityOptions returns the most secure Chrome options
 func (b *Browser) getStrictSecurityOptions() []chromedp.ExecAllocatorOption {
-	return []chromedp.ExecAllocatorOption{
+	opts := []chromedp.ExecAllocatorOption{
 		// Enable sandboxing (CRITICAL SECURITY FIX)
 		chromedp.Flag("no-sandbox", false),             // Ensure sandbox is NOT disabled
 		chromedp.Flag("disable-setuid-sandbox", false), // Keep setuid sandbox enabled
@@ -555,14 +583,23 @@ func (b *Browser) getStrictSecurityOptions() []chromedp.ExecAllocatorOption {
 
 		// Secure defaults
 		chromedp.Flag("force-color-profile", "srgb"),
-		chromedp.Flag("password-store", "basic"),
-		chromedp.Flag("use-mock-keychain", true),
 	}
+
+	// Only use mock keychain when NOT using a profile
+	// When using a profile, we need access to the real keychain to decrypt cookies
+	if !b.opts.UseProfile {
+		opts = append(opts,
+			chromedp.Flag("password-store", "basic"),
+			chromedp.Flag("use-mock-keychain", true),
+		)
+	}
+
+	return opts
 }
 
 // getBalancedSecurityOptions returns moderate security options with good compatibility
 func (b *Browser) getBalancedSecurityOptions() []chromedp.ExecAllocatorOption {
-	return []chromedp.ExecAllocatorOption{
+	opts := []chromedp.ExecAllocatorOption{
 		// Enable core sandboxing
 		chromedp.Flag("no-sandbox", false),
 		chromedp.Flag("disable-setuid-sandbox", false),
@@ -601,14 +638,23 @@ func (b *Browser) getBalancedSecurityOptions() []chromedp.ExecAllocatorOption {
 
 		// Defaults
 		chromedp.Flag("force-color-profile", "srgb"),
-		chromedp.Flag("password-store", "basic"),
-		chromedp.Flag("use-mock-keychain", true),
 	}
+
+	// Only use mock keychain when NOT using a profile
+	// When using a profile, we need access to the real keychain to decrypt cookies
+	if !b.opts.UseProfile {
+		opts = append(opts,
+			chromedp.Flag("password-store", "basic"),
+			chromedp.Flag("use-mock-keychain", true),
+		)
+	}
+
+	return opts
 }
 
 // getPermissiveSecurityOptions returns less secure options for compatibility (TESTING ONLY)
 func (b *Browser) getPermissiveSecurityOptions() []chromedp.ExecAllocatorOption {
-	return []chromedp.ExecAllocatorOption{
+	opts := []chromedp.ExecAllocatorOption{
 		// WARNING: These options reduce security and should only be used for testing
 		chromedp.Flag("disable-web-security", true),
 		chromedp.Flag("disable-features", "VizDisplayCompositor"),
@@ -639,9 +685,18 @@ func (b *Browser) getPermissiveSecurityOptions() []chromedp.ExecAllocatorOption 
 
 		// Defaults
 		chromedp.Flag("force-color-profile", "srgb"),
-		chromedp.Flag("password-store", "basic"),
-		chromedp.Flag("use-mock-keychain", true),
 	}
+
+	// Only use mock keychain when NOT using a profile
+	// When using a profile, we need access to the real keychain to decrypt cookies
+	if !b.opts.UseProfile {
+		opts = append(opts,
+			chromedp.Flag("password-store", "basic"),
+			chromedp.Flag("use-mock-keychain", true),
+		)
+	}
+
+	return opts
 }
 
 // WaitForSelector waits for a CSS selector to be visible

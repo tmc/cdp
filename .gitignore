@@ -1,0 +1,18 @@
+cmd/cdp/cdp
+cmd/churl/churl
+cmd/ndp/ndp
+cmd/native-host/native-host
+*.out
+go.work
+go.work.sum
+# Editor files
+*.swp
+*.swo
+*~
+.DS_Store
+*.tmp
+*.log
+# Test data
+testdata/har-files/**/*.har
+testdata/har-files/**/*.proxymanlogv2
+/cdp

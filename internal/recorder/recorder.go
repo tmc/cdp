@@ -2,30 +2,46 @@ package recorder
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"log"
+	"net/url"
 	"os"
 	"strings"
 	"sync"
 	"text/template"
 	"time"
 
+	"github.com/chromedp/cdproto/dom"
 	"github.com/chromedp/cdproto/har"
 	"github.com/chromedp/cdproto/network"
+	"github.com/chromedp/chromedp"
 	chromeErrors "github.com/tmc/misc/chrome-to-har/internal/errors"
 )
 
+type Annotation struct {
+	Type        string    `json:"type"`        // "note", "screenshot", "dom"
+	Timestamp   time.Time `json:"timestamp"`   // When annotation was created
+	Description string    `json:"description"` // User-provided description
+	Data        string    `json:"data"`        // Base64-encoded screenshot or DOM HTML
+	MimeType    string    `json:"mimeType"`    // For screenshots: "image/png"
+	URL         string    `json:"url"`         // Current page URL at time of annotation
+}
+
 type Recorder struct {
 	sync.Mutex
-	requests  map[network.RequestID]*network.Request
-	responses map[network.RequestID]*network.Response
-	bodies    map[network.RequestID][]byte
-	timings   map[network.RequestID]*network.EventLoadingFinished
-	verbose   bool
-	streaming bool
-	filter    *FilterOption
-	template  string
+	requests    map[network.RequestID]*network.Request
+	responses   map[network.RequestID]*network.Response
+	bodies      map[network.RequestID][]byte
+	postData    map[network.RequestID]string
+	timings     map[network.RequestID]*network.EventLoadingFinished
+	annotations []*Annotation // Manual annotations from shell commands
+	verbose     bool
+	streaming   bool
+	filter      *FilterOption
+	template    string
+	ctx         context.Context // Store context for async body fetching
 }
 
 type FilterOption struct {
@@ -67,10 +83,12 @@ func WithTemplate(template string) Option {
 
 func New(opts ...Option) (*Recorder, error) {
 	r := &Recorder{
-		requests:  make(map[network.RequestID]*network.Request),
-		responses: make(map[network.RequestID]*network.Response),
-		bodies:    make(map[network.RequestID][]byte),
-		timings:   make(map[network.RequestID]*network.EventLoadingFinished),
+		requests:    make(map[network.RequestID]*network.Request),
+		responses:   make(map[network.RequestID]*network.Response),
+		bodies:      make(map[network.RequestID][]byte),
+		postData:    make(map[network.RequestID]string),
+		timings:     make(map[network.RequestID]*network.EventLoadingFinished),
+		annotations: make([]*Annotation, 0),
 	}
 
 	for _, opt := range opts {
@@ -83,6 +101,11 @@ func New(opts ...Option) (*Recorder, error) {
 }
 
 func (r *Recorder) HandleNetworkEvent(ctx context.Context) func(interface{}) {
+	// Store context for later use in fetching response bodies
+	r.Lock()
+	r.ctx = ctx
+	r.Unlock()
+
 	return func(ev interface{}) {
 		r.Lock()
 		defer r.Unlock()
@@ -93,6 +116,23 @@ func (r *Recorder) HandleNetworkEvent(ctx context.Context) func(interface{}) {
 				log.Printf("Request: %s %s", e.Request.Method, e.Request.URL)
 			}
 			r.requests[e.RequestID] = e.Request
+
+			// Capture POST data if present
+			if e.Request.HasPostData && len(e.Request.PostDataEntries) > 0 {
+				// Concatenate all post data entries
+				var postDataBuilder strings.Builder
+				for _, entry := range e.Request.PostDataEntries {
+					if entry.Bytes != "" {
+						postDataBuilder.WriteString(entry.Bytes)
+					}
+				}
+				if postDataBuilder.Len() > 0 {
+					r.postData[e.RequestID] = postDataBuilder.String()
+					if r.verbose {
+						log.Printf("Captured POST data for %s (%d bytes)", e.Request.URL, postDataBuilder.Len())
+					}
+				}
+			}
 
 			if r.streaming {
 				entry := &har.Entry{
@@ -137,20 +177,39 @@ func (r *Recorder) HandleNetworkEvent(ctx context.Context) func(interface{}) {
 		case *network.EventLoadingFinished:
 			r.timings[e.RequestID] = e
 
-			if r.streaming {
-				go func(reqID network.RequestID) {
-					body, err := network.GetResponseBody(reqID).Do(ctx)
-					if err != nil {
-						if r.verbose {
-							log.Printf("Error getting response body: %v", err)
-						}
-						return
+			// Always fetch response bodies (both streaming and non-streaming modes)
+			go func(reqID network.RequestID) {
+				// Use stored context for fetching body
+				r.Lock()
+				fetchCtx := r.ctx
+				r.Unlock()
+
+				if fetchCtx == nil {
+					if r.verbose {
+						log.Printf("No context available for fetching response body")
 					}
-					r.Lock()
-					r.bodies[reqID] = body
-					r.Unlock()
-				}(e.RequestID)
-			}
+					return
+				}
+
+				body, err := network.GetResponseBody(reqID).Do(fetchCtx)
+				if err != nil {
+					if r.verbose {
+						log.Printf("Error getting response body for request %s: %v", reqID, err)
+					}
+					return
+				}
+
+				r.Lock()
+				r.bodies[reqID] = body
+				if r.verbose {
+					log.Printf("Captured response body for request %s (%d bytes)", reqID, len(body))
+				}
+				r.Unlock()
+
+				if r.streaming {
+					// TODO: Update streaming entry with body
+				}
+			}(e.RequestID)
 		}
 	}
 }
@@ -219,30 +278,58 @@ func (r *Recorder) HAR() (*har.HAR, error) {
 			continue
 		}
 
-		entry := &har.Entry{
-			StartedDateTime: time.Now().Format(time.RFC3339),
-			Request: &har.Request{
-				Method:      req.Method,
-				URL:         req.URL,
-				HTTPVersion: "HTTP/1.1", // Default to HTTP/1.1
-				Headers:     convertHeaders(req.Headers),
-				Cookies:     r.convertCookies(req.Headers),
-			},
-			Response: &har.Response{
-				Status:      int64(resp.Status),
-				StatusText:  resp.StatusText,
-				HTTPVersion: resp.Protocol,
-				Headers:     convertHeaders(resp.Headers),
-				Content: &har.Content{
-					Size:     int64(resp.EncodedDataLength),
-					MimeType: resp.MimeType,
-				},
-			},
-			Time: float64(timing.Timestamp.Time().UnixNano()) / float64(time.Millisecond),
+		// Build request with all fields
+		harRequest := &har.Request{
+			Method:      req.Method,
+			URL:         req.URL,
+			HTTPVersion: "HTTP/1.1", // Default to HTTP/1.1
+			Headers:     convertHeaders(req.Headers),
+			Cookies:     r.convertCookies(req.Headers),
+			QueryString: parseQueryString(req.URL),
+			HeadersSize: calculateHeadersSize(req.Headers),
+			BodySize:    int64(len(r.postData[reqID])),
 		}
 
+		// Add POST data if present
+		if postData, ok := r.postData[reqID]; ok && postData != "" {
+			harRequest.PostData = &har.PostData{
+				MimeType: getContentType(req.Headers),
+				Text:     postData,
+			}
+		}
+
+		// Build response with all fields
+		harResponse := &har.Response{
+			Status:      int64(resp.Status),
+			StatusText:  resp.StatusText,
+			HTTPVersion: resp.Protocol,
+			Headers:     convertHeaders(resp.Headers),
+			Cookies:     r.convertResponseCookies(resp.Headers),
+			Content: &har.Content{
+				Size:     int64(resp.EncodedDataLength),
+				MimeType: resp.MimeType,
+			},
+			HeadersSize: calculateHeadersSize(resp.Headers),
+			BodySize:    int64(resp.EncodedDataLength),
+		}
+
+		// Add response body if captured
 		if body, ok := r.bodies[reqID]; ok {
-			entry.Response.Content.Text = string(body)
+			// Check if body is base64 encoded (binary content)
+			if isBinaryContent(resp.MimeType) {
+				harResponse.Content.Text = base64.StdEncoding.EncodeToString(body)
+				harResponse.Content.Encoding = "base64"
+			} else {
+				harResponse.Content.Text = string(body)
+			}
+			harResponse.Content.Size = int64(len(body))
+		}
+
+		entry := &har.Entry{
+			StartedDateTime: time.Now().Format(time.RFC3339),
+			Request:         harRequest,
+			Response:        harResponse,
+			Time:            float64(timing.Timestamp.Time().UnixNano()) / float64(time.Millisecond),
 		}
 
 		h.Log.Entries = append(h.Log.Entries, entry)
@@ -251,7 +338,7 @@ func (r *Recorder) HAR() (*har.HAR, error) {
 	return h, nil
 }
 
-// WriteHAR writes the HAR file to disk
+// WriteHAR writes the HAR file to disk with annotations
 func (r *Recorder) WriteHAR(filename string) error {
 	if r.verbose {
 		log.Printf("Writing HAR file to %s", filename)
@@ -262,7 +349,24 @@ func (r *Recorder) WriteHAR(filename string) error {
 		return err
 	}
 
-	jsonBytes, err := json.MarshalIndent(h, "", "  ")
+	// Create a wrapper that includes annotations
+	// HAR spec doesn't officially support custom fields in Log, but we can add them
+	harWithAnnotations := struct {
+		Log *struct {
+			*har.Log
+			Annotations []*Annotation `json:"_annotations,omitempty"`
+		} `json:"log"`
+	}{
+		Log: &struct {
+			*har.Log
+			Annotations []*Annotation `json:"_annotations,omitempty"`
+		}{
+			Log:         h.Log,
+			Annotations: r.annotations,
+		},
+	}
+
+	jsonBytes, err := json.MarshalIndent(harWithAnnotations, "", "  ")
 	if err != nil {
 		return chromeErrors.Wrap(err, chromeErrors.NetworkRecordError, "failed to marshal HAR data")
 	}
@@ -272,6 +376,10 @@ func (r *Recorder) WriteHAR(filename string) error {
 			chromeErrors.FileError("write", filename, err),
 			"format", "har",
 		)
+	}
+
+	if r.verbose && len(r.annotations) > 0 {
+		log.Printf("Included %d annotations in HAR file", len(r.annotations))
 	}
 
 	return nil
@@ -306,6 +414,73 @@ func (r *Recorder) convertCookies(headers map[string]interface{}) []*har.Cookie 
 	return nil
 }
 
+func (r *Recorder) convertResponseCookies(headers map[string]interface{}) []*har.Cookie {
+	if setCookieHeader, ok := headers["Set-Cookie"]; ok {
+		cookies := make([]*har.Cookie, 0)
+		// Set-Cookie can be a single string or array
+		setCookieStr := fmt.Sprint(setCookieHeader)
+		for _, cookie := range strings.Split(setCookieStr, ";") {
+			parts := strings.SplitN(strings.TrimSpace(cookie), "=", 2)
+			if len(parts) != 2 {
+				continue
+			}
+			cookies = append(cookies, &har.Cookie{
+				Name:  parts[0],
+				Value: parts[1],
+			})
+		}
+		return cookies
+	}
+	return nil
+}
+
+func parseQueryString(urlStr string) []*har.NameValuePair {
+	parsedURL, err := url.Parse(urlStr)
+	if err != nil {
+		return nil
+	}
+
+	queryParams := make([]*har.NameValuePair, 0)
+	for name, values := range parsedURL.Query() {
+		for _, value := range values {
+			queryParams = append(queryParams, &har.NameValuePair{
+				Name:  name,
+				Value: value,
+			})
+		}
+	}
+	return queryParams
+}
+
+func getContentType(headers map[string]interface{}) string {
+	if ct, ok := headers["Content-Type"]; ok {
+		return fmt.Sprint(ct)
+	}
+	return "application/octet-stream"
+}
+
+func calculateHeadersSize(headers map[string]interface{}) int64 {
+	size := int64(0)
+	for name, value := range headers {
+		// Header format: "Name: Value\r\n"
+		size += int64(len(name) + len(fmt.Sprint(value)) + 4)
+	}
+	return size
+}
+
+func isBinaryContent(mimeType string) bool {
+	binaryTypes := []string{
+		"image/", "audio/", "video/", "application/octet-stream",
+		"application/pdf", "application/zip", "application/gzip",
+	}
+	for _, prefix := range binaryTypes {
+		if strings.HasPrefix(mimeType, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
 func (r *Recorder) applyTemplate(entry *har.Entry) (*har.Entry, error) {
 	t, err := template.New("har").Parse(r.template)
 	if err != nil {
@@ -331,4 +506,131 @@ func (r *Recorder) applyTemplate(entry *har.Entry) (*har.Entry, error) {
 			},
 		},
 	}, nil
+}
+
+// AddNote adds a text annotation to the recording
+func (r *Recorder) AddNote(ctx context.Context, description string) error {
+	r.Lock()
+	defer r.Unlock()
+
+	// Get current URL with a short timeout
+	var currentURL string
+	urlCtx, urlCancel := context.WithTimeout(ctx, 2*time.Second)
+	defer urlCancel()
+	if err := chromedp.Run(urlCtx, chromedp.Location(&currentURL)); err != nil {
+		if r.verbose {
+			log.Printf("Warning: Could not get current URL: %v", err)
+		}
+	}
+
+	annotation := &Annotation{
+		Type:        "note",
+		Timestamp:   time.Now(),
+		Description: description,
+		URL:         currentURL,
+	}
+
+	r.annotations = append(r.annotations, annotation)
+
+	if r.verbose {
+		log.Printf("Added note: %s (URL: %s)", description, currentURL)
+	}
+
+	return nil
+}
+
+// AddScreenshot captures a screenshot with description
+func (r *Recorder) AddScreenshot(ctx context.Context, description string) error {
+	r.Lock()
+	defer r.Unlock()
+
+	// Get current URL with a short timeout
+	var currentURL string
+	urlCtx, urlCancel := context.WithTimeout(ctx, 2*time.Second)
+	defer urlCancel()
+	if err := chromedp.Run(urlCtx, chromedp.Location(&currentURL)); err != nil {
+		if r.verbose {
+			log.Printf("Warning: Could not get current URL: %v", err)
+		}
+	}
+
+	// Capture screenshot with timeout
+	var buf []byte
+	screenshotCtx, screenshotCancel := context.WithTimeout(ctx, 10*time.Second)
+	defer screenshotCancel()
+	if err := chromedp.Run(screenshotCtx, chromedp.FullScreenshot(&buf, 90)); err != nil {
+		return fmt.Errorf("capturing screenshot: %w", err)
+	}
+
+	annotation := &Annotation{
+		Type:        "screenshot",
+		Timestamp:   time.Now(),
+		Description: description,
+		Data:        base64.StdEncoding.EncodeToString(buf),
+		MimeType:    "image/png",
+		URL:         currentURL,
+	}
+
+	r.annotations = append(r.annotations, annotation)
+
+	if r.verbose {
+		log.Printf("Added screenshot: %s (%d bytes, URL: %s)", description, len(buf), currentURL)
+	}
+
+	return nil
+}
+
+// AddDOMSnapshot captures the current DOM state
+func (r *Recorder) AddDOMSnapshot(ctx context.Context, description string) error {
+	r.Lock()
+	defer r.Unlock()
+
+	// Get current URL with a short timeout
+	var currentURL string
+	urlCtx, urlCancel := context.WithTimeout(ctx, 2*time.Second)
+	defer urlCancel()
+	if err := chromedp.Run(urlCtx, chromedp.Location(&currentURL)); err != nil {
+		if r.verbose {
+			log.Printf("Warning: Could not get current URL: %v", err)
+		}
+	}
+
+	// Get the outer HTML of the document with timeout
+	var domHTML string
+	domCtx, domCancel := context.WithTimeout(ctx, 10*time.Second)
+	defer domCancel()
+	if err := chromedp.Run(domCtx, chromedp.ActionFunc(func(ctx context.Context) error {
+		node, err := dom.GetDocument().Do(ctx)
+		if err != nil {
+			return err
+		}
+		domHTML, err = dom.GetOuterHTML().WithNodeID(node.NodeID).Do(ctx)
+		return err
+	})); err != nil {
+		return fmt.Errorf("capturing DOM: %w", err)
+	}
+
+	annotation := &Annotation{
+		Type:        "dom",
+		Timestamp:   time.Now(),
+		Description: description,
+		Data:        domHTML,
+		MimeType:    "text/html",
+		URL:         currentURL,
+	}
+
+	r.annotations = append(r.annotations, annotation)
+
+	if r.verbose {
+		log.Printf("Added DOM snapshot: %s (%d bytes, URL: %s)", description, len(domHTML), currentURL)
+	}
+
+	return nil
+}
+
+// GetAnnotations returns all annotations
+func (r *Recorder) GetAnnotations() []*Annotation {
+	r.Lock()
+	defer r.Unlock()
+	return r.annotations
 }

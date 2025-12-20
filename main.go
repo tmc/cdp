@@ -367,7 +367,10 @@ func (r *Runner) Run(ctx context.Context, opts options) error {
 	copts := []chromedp.ExecAllocatorOption{
 		chromedp.NoFirstRun,
 		chromedp.NoDefaultBrowserCheck,
-		// chromedp.UserDataDir(r.pm.WorkDir()), // Temporarily comment out for testing
+		// CRITICAL: Set UserDataDir to ensure profile is properly initialized and initial tab is created
+		// This fixes the issue where Brave doesn't expose tabs via DevTools Protocol when using existing profiles
+		// See bead chrome-to-har-95: Root Cause: Browser Tab Creation Delayed or Blocked with Existing Profile
+		chromedp.UserDataDir(r.pm.WorkDir()),
 		// Increase timeouts to handle complex sites
 		chromedp.WSURLReadTimeout(180 * time.Second), // Increase from 90 to 180 seconds
 		// Disable GPU for better stability
@@ -492,11 +495,21 @@ func (r *Runner) Run(ctx context.Context, opts options) error {
 		return chromeErrors.Wrap(err, chromeErrors.NetworkRecordError, "failed to create network recorder")
 	}
 
-	// Enable network events
+	// Enable network events BEFORE any navigation
+	// This is critical: network.Enable() and listener attachment must happen before
+	// any navigation to ensure we capture the initial page request and all network events
+	if opts.verbose {
+		log.Printf("Enabling network recording and attaching event listeners...")
+	}
+
 	if err := chromedp.Run(taskCtx,
 		network.Enable(),
 		chromedp.ActionFunc(func(ctx context.Context) error {
+			// Attach listeners synchronously within the same action
 			chromedp.ListenTarget(ctx, rec.HandleNetworkEvent(ctx))
+			if opts.verbose {
+				log.Printf("Network event listeners attached successfully")
+			}
 			return nil
 		}),
 	); err != nil {
@@ -563,6 +576,12 @@ func (r *Runner) Run(ctx context.Context, opts options) error {
 		// Add a timeout specifically for navigation
 		navCtx, navCancel := context.WithTimeout(taskCtx, 45*time.Second)
 		defer navCancel()
+
+		// CRITICAL: Ensure network monitoring is active and listeners are attached before navigation
+		// This prevents missing the initial page request and other early network events
+		if opts.verbose {
+			log.Printf("Network monitoring is active, proceeding with navigation...")
+		}
 
 		if err := chromedp.Run(navCtx, chromedp.Navigate(opts.startURL)); err != nil {
 			return chromeErrors.WithContext(

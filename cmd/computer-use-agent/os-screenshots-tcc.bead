@@ -1,0 +1,106 @@
+# OS Screenshots TCC Permission Issue
+
+## Problem
+computer-use-agent (macgo-bundled app) needs to call screen-capture (also macgo-bundled) as a subprocess, but screen-capture doesn't get proper TCC Screen Recording permissions when launched this way.
+
+## Current Status
+- ✅ Window detection via list-app-windows works
+- ✅ screen-capture subprocess launches and reports "Capturing..."
+- ✅ screen-capture works PERFECTLY when run standalone from shell
+- ✅ Standalone capture includes DevTools panel (exactly what we want!)
+- ❌ screen-capture subprocess reports "Screen capture permission not available" when launched from computer-use-agent.app
+- ❌ TCC prompts appear for iTerm.app instead of computer-use-agent.app when env vars cleared
+
+## Root Cause
+When exec.Command() launches screen-capture from within computer-use-agent.app bundle:
+1. screen-capture runs macgo.Start() in its init()
+2. screen-capture requests com.apple.security.device.screen-capture entitlement
+3. macOS doesn't grant permission to subprocess - sees it as part of parent app
+4. screen-capture's permission check fails even though parent may have permission
+
+## Attempted Solutions
+
+### 1. Clear MACGO env vars (Failed)
+```go
+cmd.Env = append(os.Environ(),
+    "MACGO_IN_BUNDLE=",
+    "MACGO_NOBUNDLE=",
+    "MACGO_FORCE_DIRECT=",
+)
+```
+**Result**: TCC prompt appeared for iTerm.app instead of computer-use-agent.app
+
+### 2. Use native screencapture (Failed)
+```go
+cmd := exec.Command("/usr/sbin/screencapture", "-l"+c.windowID, tmpFile)
+```
+**Result**: "could not create image from window" - still no permission
+
+### 3. Add file sync delay (Partial)
+```go
+time.Sleep(100 * time.Millisecond)
+```
+**Result**: File is created but sometimes not readable - timing issue
+
+## Questions for macgo (session 3E88)
+1. How should one macgo app launch another macgo app as subprocess with independent TCC?
+2. Should child process inherit parent's entitlements?
+3. Is there a macgo helper/pattern for external macgo binary execution?
+4. Should we document as limitation and use CDP fallback?
+
+## Working Fallback
+CDP (Chrome DevTools Protocol) screenshots work perfectly:
+- Captures page content
+- No TCC issues
+- Reliable and fast
+- Only limitation: doesn't capture DevTools panel itself
+
+## Critical Finding
+**Pattern**: First screenshot SUCCEEDS, second screenshot FAILS with permission error
+- First call (browser init): ✅ "Capturing Brave Browser window 2520" → Success
+- Second call (agent start): ❌ "Screen capture permission not available" → Failure
+
+This suggests:
+- screen-capture DOES get TCC permission initially
+- Something invalidates or changes the permission context between calls
+- Possibly macgo bundle recreation or TCC database refresh issue
+- Need to investigate why permission is lost between subprocess invocations
+
+## Resolution ✅
+
+**Session 3E88 identified and fixed the root cause!**
+
+### The Problem
+Pipe directories were being reused across sequential subprocess calls. When screen-capture was called multiple times from computer-use-agent, it would find and reuse stale pipe configs from previous invocations, causing TCC permission context to be lost.
+
+### The Fix
+Session 3E88 modified `/Volumes/tmc/go/src/github.com/tmc/macgo/internal/launch/services_v2.go`:
+- Changed pipe directory naming from `macgo-{PID}` to `macgo-{PID}-{UnixNano}`
+- This ensures each macgo.Start() invocation gets a unique pipe directory
+- Also tightened config lookup age threshold to avoid finding stale configs
+
+### Results
+✅ **All screenshot captures now succeed!**
+- First screenshot: SUCCESS
+- Second screenshot: SUCCESS
+- Third screenshot: SUCCESS
+- Agent completes tasks successfully with OS screenshots enabled
+
+### Files Modified
+- `/Volumes/tmc/go/src/github.com/tmc/macgo/internal/launch/services_v2.go` - Unique pipe directories
+- `/Volumes/tmc/go/src/github.com/tmc/macgo/macgo_darwin.go` - Stricter config age threshold
+- `/Users/tmc/go/src/github.com/tmc/misc/chrome-to-har/cmd/computer-use-agent/computer.go` - Added verbose click logging
+
+### Testing
+```bash
+./bin/computer-use-agent --devtools --use-os-screenshots --verbose \
+  --query "Navigate to example.com and tell me the main heading"
+```
+**Result**: ✅ Task completed successfully with OS screenshots!
+
+### Next Steps
+- [x] macgo fix by session 3E88
+- [x] Reinstall screen-capture with fixed macgo
+- [x] Test and verify OS screenshots work
+- [x] Add verbose logging for click coordinates
+- [x] Document success

@@ -347,6 +347,10 @@ func discoverFromPATH() []BrowserCandidate {
 
 	for cmd, info := range commands {
 		if path, err := exec.LookPath(cmd); err == nil {
+			// Validate that the path is actually executable
+			if !isExecutable(path) {
+				continue
+			}
 			candidate := BrowserCandidate{
 				Path:     path,
 				Name:     info.Name,

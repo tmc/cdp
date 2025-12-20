@@ -1,0 +1,24 @@
+-- metadata.yaml --
+name: Simple CDP Script Example
+description: A simple example that navigates to example.com and extracts the title
+browser: chrome
+headless: true
+timeout: 30s
+env:
+  BASE_URL: "https://example.com"
+
+-- main.cdp --
+# Navigate to the site
+goto ${BASE_URL}
+
+# Wait for page to load
+wait for h1
+
+# Extract the title
+extract h1 as page_title
+
+# Take a screenshot
+screenshot screenshot.png
+
+# Log completion
+log Script completed successfully
