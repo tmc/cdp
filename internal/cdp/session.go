@@ -10,9 +10,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/chromedp/chromedp"
 	"github.com/chromedp/cdproto/debugger"
 	"github.com/chromedp/cdproto/runtime"
+	"github.com/chromedp/chromedp"
 	"github.com/pkg/errors"
 )
 
@@ -38,15 +38,15 @@ type Target struct {
 
 // Session represents a CDP session
 type Session struct {
-	ID         string                 `json:"id"`
-	Target     Target                 `json:"target"`
-	Context    context.Context        `json:"-"`
-	Cancel     context.CancelFunc     `json:"-"`
-	ChromeCtx  context.Context        `json:"-"`
-	Created    time.Time              `json:"created"`
-	State      map[string]interface{} `json:"state,omitempty"`
-	Verbose    bool                   `json:"-"`
-	mu         sync.RWMutex
+	ID        string                 `json:"id"`
+	Target    Target                 `json:"target"`
+	Context   context.Context        `json:"-"`
+	Cancel    context.CancelFunc     `json:"-"`
+	ChromeCtx context.Context        `json:"-"`
+	Created   time.Time              `json:"created"`
+	State     map[string]interface{} `json:"state,omitempty"`
+	Verbose   bool                   `json:"-"`
+	mu        sync.RWMutex
 }
 
 // Manager manages CDP sessions
@@ -225,7 +225,7 @@ func (s *Session) EnableDomains(ctx context.Context, domains ...string) error {
 						return errors.Wrapf(err, "failed to enable %s domain", domain)
 					}
 				case "Debugger":
-					if err := debugger.Enable(debugger.EnableParams{}).Do(ctx); err != nil {
+					if _, err := debugger.Enable().Do(ctx); err != nil {
 						return errors.Wrapf(err, "failed to enable %s domain", domain)
 					}
 				default:

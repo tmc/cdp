@@ -253,7 +253,7 @@ func (c *VZComputer) sendKey(keyCode uint16, char string) error {
 		return err
 	}
 	if !resp.Success {
-		return fmt.Errorf(resp.Error)
+		return fmt.Errorf("%s", resp.Error)
 	}
 
 	// Key up
@@ -264,7 +264,7 @@ func (c *VZComputer) sendKey(keyCode uint16, char string) error {
 		return err
 	}
 	if !resp.Success {
-		return fmt.Errorf(resp.Error)
+		return fmt.Errorf("%s", resp.Error)
 	}
 
 	return nil
@@ -373,18 +373,18 @@ func (c *VZComputer) KeyCombination(keys []string) (*EnvState, error) {
 		"PageUp":    116,
 		"Space":     49,
 		// Arrow keys
-		"Up":        126,
-		"Down":      125,
-		"Left":      123,
-		"Right":     124,
-		"ArrowUp":   126,
-		"ArrowDown": 125,
-		"ArrowLeft": 123,
+		"Up":         126,
+		"Down":       125,
+		"Left":       123,
+		"Right":      124,
+		"ArrowUp":    126,
+		"ArrowDown":  125,
+		"ArrowLeft":  123,
 		"ArrowRight": 124,
 		// Function keys
-		"Home":      115,
-		"End":       119,
-		"Delete":    117,
+		"Home":   115,
+		"End":    119,
+		"Delete": 117,
 	}
 
 	for _, key := range keys {

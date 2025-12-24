@@ -10,9 +10,9 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/chromedp/chromedp"
 	"github.com/chromedp/cdproto/debugger"
 	"github.com/chromedp/cdproto/runtime"
+	"github.com/chromedp/chromedp"
 	"github.com/pkg/errors"
 )
 
@@ -28,17 +28,17 @@ const (
 
 // Breakpoint represents a breakpoint with its properties
 type Breakpoint struct {
-	ID           string               `json:"id"`
-	Type         BreakpointType       `json:"type"`
-	Location     string               `json:"location"`     // file:line or function name
-	Condition    string               `json:"condition"`    // Conditional expression
-	HitCount     int                  `json:"hit_count"`    // Number of times hit
-	LogMessage   string               `json:"log_message"`  // For log points
-	Enabled      bool                 `json:"enabled"`
-	ScriptID     runtime.ScriptID     `json:"script_id,omitempty"`
-	LineNumber   int                  `json:"line_number"`
-	ColumnNumber int                  `json:"column_number"`
-	Resolved     bool                 `json:"resolved"`
+	ID           string           `json:"id"`
+	Type         BreakpointType   `json:"type"`
+	Location     string           `json:"location"`    // file:line or function name
+	Condition    string           `json:"condition"`   // Conditional expression
+	HitCount     int              `json:"hit_count"`   // Number of times hit
+	LogMessage   string           `json:"log_message"` // For log points
+	Enabled      bool             `json:"enabled"`
+	ScriptID     runtime.ScriptID `json:"script_id,omitempty"`
+	LineNumber   int              `json:"line_number"`
+	ColumnNumber int              `json:"column_number"`
+	Resolved     bool             `json:"resolved"`
 }
 
 // BreakpointManager manages breakpoints across debugging sessions
@@ -136,7 +136,7 @@ func (bm *BreakpointManager) setLineBreakpoint(ctx context.Context, bp *Breakpoi
 			fileName := locationParts[0]
 
 			// Set breakpoint by URL pattern
-			params := debugger.SetBreakpointByURL(bp.LineNumber).
+			params := debugger.SetBreakpointByURL(int64(bp.LineNumber)).
 				WithURLRegex(fmt.Sprintf(".*%s.*", fileName))
 
 			if bp.Condition != "" {
@@ -144,21 +144,21 @@ func (bm *BreakpointManager) setLineBreakpoint(ctx context.Context, bp *Breakpoi
 			}
 
 			if bp.ColumnNumber > 0 {
-				params = params.WithColumnNumber(bp.ColumnNumber)
+				params = params.WithColumnNumber(int64(bp.ColumnNumber))
 			}
 
-			result, err := params.Do(ctx)
+			bpID, locations, err := params.Do(ctx)
 			if err != nil {
 				return err
 			}
 
-			bp.ID = string(result.BreakpointID)
-			bp.Resolved = len(result.Locations) > 0
+			bp.ID = string(bpID)
+			bp.Resolved = len(locations) > 0
 
-			if len(result.Locations) > 0 {
-				loc := result.Locations[0]
-				bp.LineNumber = loc.LineNumber
-				bp.ColumnNumber = loc.ColumnNumber
+			if len(locations) > 0 {
+				loc := locations[0]
+				bp.LineNumber = int(loc.LineNumber)
+				bp.ColumnNumber = int(loc.ColumnNumber)
 				bp.ScriptID = loc.ScriptID
 			}
 

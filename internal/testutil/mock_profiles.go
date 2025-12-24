@@ -68,3 +68,14 @@ func (m *MockProfileManager) CopyProfile(name string, cookieDomains []string) er
 func (m *MockProfileManager) WorkDir() string {
 	return m.WorkDirPath
 }
+
+// BraveSessionIsolation simulates Brave session isolation
+func (m *MockProfileManager) BraveSessionIsolation(profile string, domains []string) error {
+	return nil
+}
+
+// CopyProfileFromDir simulates copying a profile from a directory
+func (m *MockProfileManager) CopyProfileFromDir(name string, cookieDomains []string) error {
+	m.Profiles = append(m.Profiles, name)
+	return nil
+}
