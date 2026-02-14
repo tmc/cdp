@@ -8,10 +8,11 @@ import (
 	"log"
 	"time"
 
-	"github.com/chromedp/chromedp"
 	"github.com/chromedp/cdproto/heapprofiler"
 	"github.com/chromedp/cdproto/profiler"
 	"github.com/chromedp/cdproto/runtime"
+	"github.com/chromedp/chromedp"
+	"github.com/gorilla/websocket"
 	"github.com/pkg/errors"
 )
 
@@ -34,10 +35,10 @@ type CPUProfile struct {
 
 // ProfileNode represents a node in the profile tree
 type ProfileNode struct {
-	ID           int      `json:"id"`
-	CallFrame    CallFrame `json:"callFrame"`
-	HitCount     int      `json:"hitCount,omitempty"`
-	Children     []int    `json:"children,omitempty"`
+	ID            int            `json:"id"`
+	CallFrame     CallFrame      `json:"callFrame"`
+	HitCount      int            `json:"hitCount,omitempty"`
+	Children      []int          `json:"children,omitempty"`
 	PositionTicks []PositionTick `json:"positionTicks,omitempty"`
 }
 
@@ -78,6 +79,60 @@ type Profiler struct {
 	verbose      bool
 	cpuProfile   *CPUProfile
 	heapSnapshot *HeapSnapshot
+	rawConn      *websocket.Conn
+}
+
+// ... NewProfiler remains same ...
+
+// executeRaw runs a raw CDP method via WebSocket
+func (p *Profiler) executeRaw(ctx context.Context, method string, params interface{}) (interface{}, error) {
+	if p.session == nil || p.session.Target.WebSocketDebuggerURL == "" {
+		return nil, errors.New("no active raw websocket session")
+	}
+
+	// Ensure connection exists
+	if p.rawConn == nil {
+		conn, _, err := websocket.DefaultDialer.Dial(p.session.Target.WebSocketDebuggerURL, nil)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to dial raw websocket")
+		}
+		p.rawConn = conn
+	}
+
+	// Send request
+	id := 2000 + (time.Now().UnixNano() % 10000)
+	req := map[string]interface{}{
+		"id":     id,
+		"method": method,
+		"params": params,
+	}
+
+	if err := p.rawConn.WriteJSON(req); err != nil {
+		return nil, errors.Wrap(err, "failed to write generic request")
+	}
+
+	// Read loop to find response
+	// Set deadline based on context
+	deadline, ok := ctx.Deadline()
+	if !ok {
+		deadline = time.Now().Add(10 * time.Second)
+	}
+	p.rawConn.SetReadDeadline(deadline)
+
+	for {
+		var msg map[string]interface{}
+		if err := p.rawConn.ReadJSON(&msg); err != nil {
+			return nil, errors.Wrap(err, "failed to read response")
+		}
+
+		// Check if this is our response
+		if msgID, ok := msg["id"].(float64); ok && int64(msgID) == int64(id) {
+			if errObj, ok := msg["error"]; ok {
+				return nil, fmt.Errorf("CDP error: %v", errObj)
+			}
+			return msg["result"], nil
+		}
+	}
 }
 
 // NewProfiler creates a new profiler
@@ -141,6 +196,26 @@ func (p *Profiler) ProfileCPU(ctx context.Context, duration string, outputFile s
 
 // startCPUProfiling starts CPU profiling
 func (p *Profiler) startCPUProfiling(ctx context.Context) error {
+	// Node.js support via raw WebSocket
+	if p.session.Target.Type == SessionTypeNode {
+		if p.verbose {
+			log.Println("Enabling Profiler domain...")
+		}
+		if _, err := p.executeRaw(ctx, "Profiler.enable", nil); err != nil {
+			return errors.Wrap(err, "failed to enable profiler")
+		}
+		if p.verbose {
+			log.Println("Starting Profiler...")
+		}
+		if _, err := p.executeRaw(ctx, "Profiler.start", nil); err != nil {
+			return errors.Wrap(err, "failed to start profiler")
+		}
+		if p.verbose {
+			log.Println("CPU profiling started (Node.js raw)")
+		}
+		return nil
+	}
+
 	return chromedp.Run(p.session.ChromeCtx,
 		chromedp.ActionFunc(func(ctx context.Context) error {
 			// Enable profiler
@@ -166,28 +241,52 @@ func (p *Profiler) startCPUProfiling(ctx context.Context) error {
 func (p *Profiler) stopCPUProfiling(ctx context.Context) (*CPUProfile, error) {
 	var profile *profiler.Profile
 
-	err := chromedp.Run(p.session.ChromeCtx,
-		chromedp.ActionFunc(func(ctx context.Context) error {
-			// Stop profiling
-			var err error
-			profile, err = profiler.Stop().Do(ctx)
-			if err != nil {
-				return err
-			}
+	// Node.js support via raw WebSocket
+	if p.session.Target.Type == SessionTypeNode {
+		res, err := p.executeRaw(ctx, "Profiler.stop", nil)
+		if err != nil {
+			return nil, err
+		}
 
-			// Disable profiler
-			if err := profiler.Disable().Do(ctx); err != nil {
-				if p.verbose {
-					log.Printf("Warning: failed to disable profiler: %v", err)
+		// Map result to profile
+		if resMap, ok := res.(map[string]interface{}); ok {
+			if profileMap, ok := resMap["profile"]; ok {
+				// Marshal back to JSON to unmarshal into struct
+				// Efficient? No. Reliable? Yes.
+				bytes, _ := json.Marshal(profileMap)
+				profile = &profiler.Profile{}
+				if err := json.Unmarshal(bytes, profile); err != nil {
+					return nil, errors.Wrap(err, "failed to decode profile")
 				}
 			}
+		}
 
-			return nil
-		}),
-	)
+		if _, err := p.executeRaw(ctx, "Profiler.disable", nil); err != nil {
+			log.Printf("Warning: failed to disable profiler: %v", err)
+		}
+	} else {
+		err := chromedp.Run(p.session.ChromeCtx,
+			chromedp.ActionFunc(func(ctx context.Context) error {
+				// Stop profiling
+				var err error
+				profile, err = profiler.Stop().Do(ctx)
+				if err != nil {
+					return err
+				}
 
-	if err != nil {
-		return nil, err
+				// Disable profiler
+				if err := profiler.Disable().Do(ctx); err != nil {
+					if p.verbose {
+						log.Printf("Warning: failed to disable profiler: %v", err)
+					}
+				}
+
+				return nil
+			}),
+		)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	if profile == nil {
@@ -265,7 +364,7 @@ func (p *Profiler) printCPUProfileSummary() {
 	}
 
 	fmt.Println("\nCPU Profile Summary:")
-	fmt.Printf("Duration: %dms\n", (p.cpuProfile.EndTime-p.cpuProfile.StartTime))
+	fmt.Printf("Duration: %dms\n", (p.cpuProfile.EndTime - p.cpuProfile.StartTime))
 	fmt.Printf("Samples: %d\n", len(p.cpuProfile.Samples))
 	fmt.Printf("Functions: %d\n", len(p.cpuProfile.Nodes))
 
@@ -355,8 +454,12 @@ func (p *Profiler) ProfileHeap(ctx context.Context, outputFile string, targetID 
 
 // takeHeapSnapshot takes a heap snapshot
 func (p *Profiler) takeHeapSnapshot(ctx context.Context) (*HeapSnapshot, error) {
+	// Node.js support
+	if p.session.Target.Type == SessionTypeNode {
+		return p.takeHeapSnapshotNode(ctx)
+	}
+
 	var chunks []string
-	totalBytes := int64(0)
 
 	err := chromedp.Run(p.session.ChromeCtx,
 		chromedp.ActionFunc(func(ctx context.Context) error {
@@ -402,30 +505,114 @@ func (p *Profiler) takeHeapSnapshot(ctx context.Context) (*HeapSnapshot, error) 
 		return nil, err
 	}
 
+	return p.processSnapshotChunks(chunks)
+}
+
+func (p *Profiler) takeHeapSnapshotNode(ctx context.Context) (*HeapSnapshot, error) {
+	if _, err := p.executeRaw(ctx, "HeapProfiler.enable", nil); err != nil {
+		return nil, errors.Wrap(err, "failed to enable heap profiler")
+	}
+
+	var chunks []string
+
+	// We need a specialized executeRaw that captures events
+	// Or we create a one-off loop here.
+	if p.rawConn == nil {
+		// Should have been connected by ensureSession -> executeRaw
+		// But ensureSession calls executeRaw, which dials.
+		// If executeRaw closes it? No.
+		// So p.rawConn should be valid or we redial.
+		if _, err := p.executeRaw(ctx, "Runtime.enable", nil); err != nil { // Dummy to ensure conn
+			return nil, err
+		}
+	}
+
+	id := 3000 + (time.Now().UnixNano() % 10000)
+	req := map[string]interface{}{
+		"id":     id,
+		"method": "HeapProfiler.takeHeapSnapshot",
+		"params": map[string]interface{}{
+			"reportProgress": true,
+		},
+	}
+
+	if err := p.rawConn.WriteJSON(req); err != nil {
+		return nil, errors.Wrap(err, "failed to write snapshot request")
+	}
+
+	// Read loop
+	// We expect chunks and progress events, then a result for our ID.
+	done := false
+	for !done {
+		var msg map[string]interface{}
+		if err := p.rawConn.ReadJSON(&msg); err != nil {
+			return nil, errors.Wrap(err, "failed to read response")
+		}
+
+		// Check for method (Event)
+		if method, ok := msg["method"].(string); ok {
+			params, _ := msg["params"].(map[string]interface{})
+			switch method {
+			case "HeapProfiler.addHeapSnapshotChunk":
+				if chunk, ok := params["chunk"].(string); ok {
+					chunks = append(chunks, chunk)
+					if p.verbose {
+						// log.Printf("Chunk: %d bytes", len(chunk))
+					}
+				}
+			case "HeapProfiler.reportHeapSnapshotProgress":
+				doneVal, _ := params["done"].(float64)
+				totalVal, _ := params["total"].(float64)
+				if totalVal > 0 {
+					fmt.Printf("\rProgress: %.0f%%", doneVal/totalVal*100)
+				}
+			}
+		}
+
+		// Check for result (Response)
+		if msgID, ok := msg["id"].(float64); ok && int64(msgID) == int64(id) {
+			if errObj, ok := msg["error"]; ok {
+				return nil, fmt.Errorf("CDP error: %v", errObj)
+			}
+			// Done
+			done = true
+		}
+	}
+	fmt.Println() // Newline after progress
+
+	if _, err := p.executeRaw(ctx, "HeapProfiler.disable", nil); err != nil {
+		// ignore
+	}
+
+	return p.processSnapshotChunks(chunks)
+}
+
+func (p *Profiler) processSnapshotChunks(chunks []string) (*HeapSnapshot, error) {
 	// Combine chunks
 	snapshotData := ""
+	totalBytes := int64(0)
 	for _, chunk := range chunks {
 		snapshotData += chunk
 		totalBytes += int64(len(chunk))
 	}
 
-	// Parse snapshot (simplified - in reality this is a complex V8 heap snapshot format)
+	// Parse snapshot
 	var snapshotObj interface{}
+	// Only unmarshal if reasonable size to avoid OOM in tool?
+	// Heap snapshots can be 50MB+.
+	// We'll try.
 	if err := json.Unmarshal([]byte(snapshotData), &snapshotObj); err != nil {
 		if p.verbose {
 			log.Printf("Warning: failed to parse heap snapshot: %v", err)
 		}
-		// Store raw data anyway
 		snapshotObj = snapshotData
 	}
 
-	snapshot := &HeapSnapshot{
+	return &HeapSnapshot{
 		Snapshot:   snapshotObj,
 		TotalBytes: totalBytes,
 		Timestamp:  time.Now(),
-	}
-
-	return snapshot, nil
+	}, nil
 }
 
 // saveHeapSnapshot saves the heap snapshot to a file
@@ -543,14 +730,23 @@ func (p *Profiler) ensureSession(ctx context.Context, targetID string) error {
 	p.session = session
 
 	// Enable runtime
-	err = chromedp.Run(p.session.ChromeCtx,
-		chromedp.ActionFunc(func(ctx context.Context) error {
-			return runtime.Enable().Do(ctx)
-		}),
-	)
+	if target.Type == SessionTypeNode {
+		if _, err := p.executeRaw(ctx, "Runtime.enable", nil); err != nil {
+			// Log but ignore, might not be critical or already enabled
+			if p.verbose {
+				log.Printf("Warning: failed to enable runtime (Node.js raw): %v", err)
+			}
+		}
+	} else {
+		err = chromedp.Run(p.session.ChromeCtx,
+			chromedp.ActionFunc(func(ctx context.Context) error {
+				return runtime.Enable().Do(ctx)
+			}),
+		)
 
-	if err != nil {
-		return errors.Wrap(err, "failed to enable runtime")
+		if err != nil {
+			return errors.Wrap(err, "failed to enable runtime")
+		}
 	}
 
 	fmt.Printf("Connected to target: %s\n", target.Title)

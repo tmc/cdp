@@ -5,17 +5,17 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
-	"strings"
 	"log"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
-	"github.com/chromedp/chromedp"
 	"github.com/chromedp/cdproto/debugger"
 	cdptarget "github.com/chromedp/cdproto/target"
+	"github.com/chromedp/chromedp"
 	"github.com/pkg/errors"
 )
 
@@ -29,14 +29,15 @@ const (
 
 // DebugTarget represents a debuggable target
 type DebugTarget struct {
-	ID          string      `json:"id"`
-	Type        SessionType `json:"type"`
-	Title       string      `json:"title"`
-	URL         string      `json:"url,omitempty"`
-	Description string      `json:"description,omitempty"`
-	Port        string      `json:"port"`
-	PID         int         `json:"pid,omitempty"`
-	Connected   bool        `json:"connected"`
+	ID                   string      `json:"id"`
+	Type                 SessionType `json:"type"`
+	Title                string      `json:"title"`
+	URL                  string      `json:"url,omitempty"`
+	Description          string      `json:"description,omitempty"`
+	Port                 string      `json:"port"`
+	WebSocketDebuggerURL string      `json:"webSocketDebuggerUrl,omitempty"`
+	PID                  int         `json:"pid,omitempty"`
+	Connected            bool        `json:"connected"`
 }
 
 // Session represents a debug session
@@ -65,10 +66,10 @@ type CDPConnection struct {
 
 // SessionManager manages debug sessions and connections
 type SessionManager struct {
-	sessions   map[string]*Session
-	configDir  string
-	verbose    bool
-	mu         sync.RWMutex
+	sessions  map[string]*Session
+	configDir string
+	verbose   bool
+	mu        sync.RWMutex
 }
 
 // NewSessionManager creates a new session manager
@@ -254,7 +255,7 @@ func (sm *SessionManager) findNodeTargets(ctx context.Context) ([]DebugTarget, e
 	var targets []DebugTarget
 
 	// Check common Node.js debug ports
-	ports := []string{"9229", "9230", "9231", "9232"}
+	ports := []string{"9229", "9230", "9231", "9232", "9233", "9234", "9235", "9236", "9237", "9238", "9239"}
 
 	for _, port := range ports {
 		url := fmt.Sprintf("http://localhost:%s/json/list", port)
@@ -278,12 +279,13 @@ func (sm *SessionManager) findNodeTargets(ctx context.Context) ([]DebugTarget, e
 			}
 
 			target := DebugTarget{
-				ID:          endpoint["id"].(string),
-				Type:        SessionTypeNode,
-				Title:       title,
-				URL:         endpoint["url"].(string),
-				Description: endpoint["description"].(string),
-				Port:        port,
+				ID:                   endpoint["id"].(string),
+				Type:                 SessionTypeNode,
+				Title:                title,
+				URL:                  endpoint["url"].(string),
+				Description:          endpoint["description"].(string),
+				Port:                 port,
+				WebSocketDebuggerURL: endpoint["webSocketDebuggerUrl"].(string),
 			}
 
 			targets = append(targets, target)

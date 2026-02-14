@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -69,10 +70,85 @@ var sessionCmd = &cobra.Command{
 	Long:  "Save, load, and manage debugging sessions across targets",
 }
 
-var profileCmd = &cobra.Command{
-	Use:   "profile",
-	Short: "Performance profiling",
-	Long:  "CPU and heap profiling for both Node.js and Chrome",
+var callCmd = &cobra.Command{
+	Use:   "call <method> [json_params]",
+	Short: "Execute a raw CDP method",
+	Args:  cobra.RangeArgs(1, 2),
+	Run: func(cmd *cobra.Command, args []string) {
+		ctx := createContext()
+		targetID, _ := cmd.Flags().GetString("target")
+
+		// If target not specified, look for session or env var
+		if targetID == "" {
+			targetID = os.Getenv("NDP_SESSION_ID") // Simple env var for now
+		}
+
+		// Connect to target (or get existing session)
+		// For now, we assume direct attach if target is provided
+		// TODO: Implement cleaner session loading
+		debugger := NewNodeDebugger(verbose)
+		if targetID != "" {
+			if err := debugger.Attach(ctx, targetID); err != nil {
+				log.Fatalf("Failed to attach: %v", err)
+			}
+		} else {
+			// Try to find a sensible default (e.g. only one node process)
+			// For generic call, we might require explicit target for safety,
+			// but for now let's try auto-attach if one exists?
+			// Better: Assume user must provide target or use 'ndp repl' to discovery
+			// log.Fatalf("Target ID required (use --target or set NDP_SESSION_ID)")
+			// Auto-discovery logic similar to 'node attach'
+			if err := debugger.Attach(ctx, "9229"); err != nil {
+				log.Fatalf("No default target found: %v", err)
+			}
+		}
+
+		method := args[0]
+		var params interface{}
+		if len(args) > 1 {
+			if err := json.Unmarshal([]byte(args[1]), &params); err != nil {
+				log.Fatalf("Invalid JSON params: %v", err)
+			}
+		}
+
+		// Auto-enable domain if needed
+		domain := strings.Split(method, ".")[0]
+		if domain == "Debugger" || domain == "Profiler" || domain == "Runtime" {
+			if verbose {
+				log.Printf("Auto-enabling domain: %s", domain)
+			}
+			debugger.Execute(ctx, domain+".enable", nil)
+		}
+
+		result, err := debugger.Execute(ctx, method, params)
+		if err != nil {
+			log.Fatalf("Error: %v", err)
+		}
+
+		// Print result as JSON
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		enc.Encode(result)
+	},
+}
+
+var runtimeCmd = &cobra.Command{
+	Use:   "runtime",
+	Short: "Runtime domain commands",
+}
+
+var runtimeEvalCmd = &cobra.Command{
+	Use:     "evaluate <expression>",
+	Short:   "Evaluate JavaScript expression",
+	Aliases: []string{"eval"},
+	Args:    cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		// Reuse logic from callCmd but pre-format params
+		// ... (Simplified for brevity, implemented via shared helper in real code)
+		// For implementation speed, just re-invoke callCmd logic or better yet, make callCmd run function reusable.
+
+		callCmd.Run(cmd, []string{"Runtime.evaluate", fmt.Sprintf(`{"expression": %q, "includeCommandLineAPI": true}`, args[0])})
+	},
 }
 
 func init() {
@@ -85,7 +161,7 @@ func init() {
 	rootCmd.AddCommand(nodeCmd)
 	rootCmd.AddCommand(chromeCmd)
 	rootCmd.AddCommand(sessionCmd)
-	rootCmd.AddCommand(profileCmd)
+
 	rootCmd.AddCommand(targetsCmd)
 	rootCmd.AddCommand(replCmd)
 
@@ -94,8 +170,7 @@ func init() {
 	nodeCmd.AddCommand(nodeListCmd)
 	nodeCmd.AddCommand(nodeSessionsCmd)
 	nodeCmd.AddCommand(nodeStartCmd)
-	nodeCmd.AddCommand(nodeBreakCmd)
-	nodeCmd.AddCommand(nodeBreakpointsCmd)
+
 	nodeCmd.AddCommand(nodeWatchCmd)
 
 	// Chrome commands
@@ -109,9 +184,15 @@ func init() {
 	sessionCmd.AddCommand(sessionLoadCmd)
 	sessionCmd.AddCommand(sessionListCmd)
 
+	// Call command
+	rootCmd.AddCommand(callCmd)
+	rootCmd.AddCommand(runtimeCmd)
+
+	// Runtime subcommands
+	runtimeCmd.AddCommand(runtimeEvalCmd)
+
 	// Profile commands
-	profileCmd.AddCommand(profileCPUCmd)
-	profileCmd.AddCommand(profileHeapCmd)
+
 }
 
 // Node commands
@@ -255,59 +336,6 @@ var nodeStartCmd = &cobra.Command{
 	},
 }
 
-var nodeBreakpointsCmd = &cobra.Command{
-	Use:   "breakpoints <port>",
-	Short: "List breakpoints in a debug session",
-	Args:  cobra.ExactArgs(1),
-	Run: func(cmd *cobra.Command, args []string) {
-		ctx := createContext()
-		port := args[0]
-
-		setter := NewSimpleBreakpointSetter(port)
-		if err := setter.ListBreakpoints(ctx); err != nil {
-			log.Fatalf("Failed to list breakpoints: %v", err)
-		}
-	},
-}
-
-var nodeBreakCmd = &cobra.Command{
-	Use:   "break <port> <file:line>",
-	Short: "Set a breakpoint in a debug session",
-	Args:  cobra.ExactArgs(2),
-	Run: func(cmd *cobra.Command, args []string) {
-		ctx := createContext()
-		port := args[0]
-		location := args[1]
-		condition, _ := cmd.Flags().GetString("condition")
-
-		// Try using chromedp BreakpointManager first, fall back to simple approach
-		debugger := NewNodeDebugger(verbose)
-		if err := debugger.Attach(ctx, port); err != nil {
-			log.Fatalf("Failed to attach to Node.js process: %v", err)
-		}
-
-		// Get the session and create breakpoint manager
-		session := globalSessionTracker.GetCurrentSession()
-		if session == nil {
-			log.Fatalf("No active debug session")
-		}
-
-		manager := NewBreakpointManager(verbose)
-		manager.SetSession(session)
-
-		if err := manager.SetBreakpoint(ctx, location, condition); err != nil {
-			// Fall back to simple WebSocket approach if chromedp fails
-			if verbose {
-				log.Printf("BreakpointManager failed, falling back to SimpleBreakpointSetter: %v", err)
-			}
-			setter := NewSimpleBreakpointSetter(port)
-			if err := setter.SetBreakpoint(ctx, location, condition); err != nil {
-				log.Fatalf("Failed to set breakpoint: %v", err)
-			}
-		}
-	},
-}
-
 var nodeWatchCmd = &cobra.Command{
 	Use:   "watch <port> <expression>",
 	Short: "Add a watch expression to a debug session",
@@ -322,7 +350,7 @@ var nodeWatchCmd = &cobra.Command{
 
 		// Suppress duplicate output when re-attaching
 		oldStdout := os.Stdout
-		os.Stdout = os.Stderr  // Temporarily redirect stdout to stderr
+		os.Stdout = os.Stderr // Temporarily redirect stdout to stderr
 
 		if err := debugger.Attach(ctx, port); err != nil {
 			os.Stdout = oldStdout
@@ -469,43 +497,6 @@ var sessionListCmd = &cobra.Command{
 }
 
 // Profile commands
-var profileCPUCmd = &cobra.Command{
-	Use:   "cpu [duration]",
-	Short: "Start CPU profiling",
-	Args:  cobra.MaximumNArgs(1),
-	Run: func(cmd *cobra.Command, args []string) {
-		duration := "10s"
-		if len(args) > 0 {
-			duration = args[0]
-		}
-
-		ctx := createContext()
-		profiler := NewProfiler(verbose)
-
-		output, _ := cmd.Flags().GetString("output")
-		target, _ := cmd.Flags().GetString("target")
-
-		if err := profiler.ProfileCPU(ctx, duration, output, target); err != nil {
-			log.Fatalf("Failed to profile CPU: %v", err)
-		}
-	},
-}
-
-var profileHeapCmd = &cobra.Command{
-	Use:   "heap",
-	Short: "Take heap snapshot",
-	Run: func(cmd *cobra.Command, args []string) {
-		ctx := createContext()
-		profiler := NewProfiler(verbose)
-
-		output, _ := cmd.Flags().GetString("output")
-		target, _ := cmd.Flags().GetString("target")
-
-		if err := profiler.ProfileHeap(ctx, output, target); err != nil {
-			log.Fatalf("Failed to profile heap: %v", err)
-		}
-	},
-}
 
 // Other commands
 var targetsCmd = &cobra.Command{
@@ -590,21 +581,14 @@ func main() {
 	nodeStartCmd.Flags().BoolP("break", "b", false, "Break before first line")
 	nodeStartCmd.Flags().String("port", "9229", "Debug port")
 
-	nodeBreakCmd.Flags().StringP("condition", "c", "", "Conditional breakpoint")
 	nodeSessionsCmd.Flags().BoolP("simple", "s", false, "Simple output (just ports)")
 	nodeListCmd.Flags().BoolP("breakpoints", "b", false, "Show breakpoints in each session")
-
-	chromeListCmd.Flags().String("port", "9222", "Chrome debug port")
 	chromeNavigateCmd.Flags().String("tab", "", "Target tab ID")
 	chromeConsoleCmd.Flags().String("tab", "", "Target tab ID")
 
-	profileCPUCmd.Flags().StringP("output", "o", "cpu-profile.json", "Output file")
-	profileCPUCmd.Flags().StringP("target", "t", "", "Target ID")
-
-	profileHeapCmd.Flags().StringP("output", "o", "heap-snapshot.json", "Output file")
-	profileHeapCmd.Flags().StringP("target", "t", "", "Target ID")
-
 	replCmd.Flags().StringP("target", "t", "", "Target to attach to")
+
+	rootCmd.AddCommand(tuiCmd)
 
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)

@@ -14,9 +14,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/chromedp/chromedp"
 	"github.com/chromedp/cdproto/debugger"
 	"github.com/chromedp/cdproto/runtime"
+	"github.com/chromedp/chromedp"
+	"github.com/gorilla/websocket"
 	"github.com/pkg/errors"
 )
 
@@ -30,12 +31,13 @@ type NodeProcess struct {
 
 // NodeDebugger handles Node.js debugging operations
 type NodeDebugger struct {
-	manager       *SessionManager
-	session       *Session
-	verbose       bool
-	watches       []string
-	nodeProcess   *os.Process
-	scriptPath    string
+	manager     *SessionManager
+	session     *Session
+	verbose     bool
+	watches     []string
+	nodeProcess *os.Process
+	scriptPath  string
+	rawConn     *websocket.Conn
 }
 
 // NewNodeDebugger creates a new Node.js debugger
@@ -87,13 +89,14 @@ func (nd *NodeDebugger) Attach(ctx context.Context, port string) error {
 	target := targets[0]
 
 	debugTarget := DebugTarget{
-		ID:          target["id"].(string),
-		Type:        SessionTypeNode,
-		Title:       target["title"].(string),
-		URL:         target["url"].(string),
-		Description: target["description"].(string),
-		Port:        port,
-		Connected:   true,
+		ID:                   target["id"].(string),
+		Type:                 SessionTypeNode,
+		Title:                target["title"].(string),
+		URL:                  target["url"].(string),
+		Description:          target["description"].(string),
+		Port:                 port,
+		WebSocketDebuggerURL: target["webSocketDebuggerUrl"].(string),
+		Connected:            true,
 	}
 
 	// Create session
@@ -600,4 +603,263 @@ func (nd *NodeDebugger) Close() error {
 	}
 
 	return nil
+}
+
+// Execute runs a raw CDP method
+func (nd *NodeDebugger) Execute(ctx context.Context, method string, params interface{}) (interface{}, error) {
+	if nd.session == nil {
+		return nil, errors.New("no active session")
+	}
+
+	// Prefer raw WebSocket for Node.js if URL is available
+	if nd.session.Target.WebSocketDebuggerURL != "" {
+		if nd.rawConn == nil {
+			conn, _, err := websocket.DefaultDialer.Dial(nd.session.Target.WebSocketDebuggerURL, nil)
+			if err != nil {
+				return nil, errors.Wrap(err, "failed to dial raw websocket")
+			}
+			nd.rawConn = conn
+		}
+
+		// Send request
+		id := 1000 + (time.Now().UnixNano() % 10000)
+		req := map[string]interface{}{
+			"id":     id,
+			"method": method,
+			"params": params,
+		}
+
+		if err := nd.rawConn.WriteJSON(req); err != nil {
+			return nil, errors.Wrap(err, "failed to write generic request")
+		}
+
+		// Read loop
+		deadline, ok := ctx.Deadline()
+		if !ok {
+			deadline = time.Now().Add(10 * time.Second)
+		}
+		nd.rawConn.SetReadDeadline(deadline)
+
+		for {
+			var msg map[string]interface{}
+			if err := nd.rawConn.ReadJSON(&msg); err != nil {
+				return nil, errors.Wrap(err, "failed to read response")
+			}
+
+			if msgID, ok := msg["id"].(float64); ok && int64(msgID) == id {
+				if errObj, ok := msg["error"]; ok {
+					return nil, fmt.Errorf("CDP error: %v", errObj)
+				}
+				return msg["result"], nil
+			}
+		}
+	}
+
+	return nil, errors.New("generic execution not supported for this session type yet")
+}
+
+// SearchInAllScripts searches for text in all loaded scripts
+func (nd *NodeDebugger) SearchInAllScripts(ctx context.Context, term string) ([]SearchResult, error) {
+	if nd.session == nil || nd.session.Target.WebSocketDebuggerURL == "" {
+		return nil, errors.New("no active raw websocket session")
+	}
+
+	// Ensure connection
+	if nd.rawConn == nil {
+		conn, _, err := websocket.DefaultDialer.Dial(nd.session.Target.WebSocketDebuggerURL, nil)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to dial raw websocket")
+		}
+		nd.rawConn = conn
+	}
+
+	// 1. Enable Debugger domain
+	enableID := 5000
+	if err := nd.rawConn.WriteJSON(map[string]interface{}{
+		"id":     enableID,
+		"method": "Debugger.enable",
+		"params": map[string]interface{}{},
+	}); err != nil {
+		return nil, err
+	}
+
+	// 2. Collect script parsed events for 2 seconds
+	if nd.verbose {
+		log.Println("Collecting scripts...")
+	}
+	scriptIDs := make(map[string]string) // ID -> URL
+
+	// Set read deadline for collection phase
+	nd.rawConn.SetReadDeadline(time.Now().Add(2 * time.Second))
+
+	// Simply read loop until timeout
+	for {
+		var msg map[string]interface{}
+		if err := nd.rawConn.ReadJSON(&msg); err != nil {
+			// Timeout expected
+			break
+		}
+
+		method, _ := msg["method"].(string)
+		if method == "Debugger.scriptParsed" {
+			params, _ := msg["params"].(map[string]interface{})
+			if scriptID, ok := params["scriptId"].(string); ok {
+				url, _ := params["url"].(string)
+				scriptIDs[scriptID] = url
+				if nd.verbose {
+					log.Printf("Found script: %s (%s)", scriptID, url)
+				}
+			}
+		}
+	}
+
+	if nd.verbose {
+		log.Printf("Collected %d scripts. Searching...", len(scriptIDs))
+	}
+
+	// 3. Search in each script
+	var results []SearchResult
+
+	for scriptID, url := range scriptIDs {
+		// Reset deadline for search req
+		nd.rawConn.SetReadDeadline(time.Now().Add(60 * time.Second))
+
+		searchID := 6000 + (time.Now().UnixNano() % 1000)
+		req := map[string]interface{}{
+			"id":     searchID,
+			"method": "Debugger.searchInContent",
+			"params": map[string]interface{}{
+				"scriptId":      scriptID,
+				"query":         term,
+				"caseSensitive": false,
+				"isRegex":       false,
+			},
+		}
+
+		if err := nd.rawConn.WriteJSON(req); err != nil {
+			continue
+		}
+
+		// Read response
+		found := false
+		for {
+			var msg map[string]interface{}
+			if err := nd.rawConn.ReadJSON(&msg); err != nil {
+				break
+			}
+
+			if msgID, ok := msg["id"].(float64); ok && int64(msgID) == searchID {
+				res, _ := msg["result"].(map[string]interface{})
+				if matches, ok := res["result"].([]interface{}); ok && len(matches) > 0 {
+					found = true
+					if nd.verbose {
+						log.Printf("Found %d matches in %s (API)", len(matches), scriptID)
+					}
+					var searchMatches []SearchMatch
+					for _, m := range matches {
+						matchMap, _ := m.(map[string]interface{})
+						line, _ := matchMap["lineNumber"].(float64)
+						content, _ := matchMap["lineContent"].(string)
+						searchMatches = append(searchMatches, SearchMatch{
+							LineNumber:  int(line),
+							LineContent: content,
+						})
+					}
+					results = append(results, SearchResult{
+						ScriptID: scriptID,
+						URL:      url,
+						Matches:  searchMatches,
+					})
+				}
+				break
+			}
+		}
+
+		// Client-side Fallback if API returned no results
+		// Only enable if verbose for now to avoid perf hit, or strictly for cli.js
+		if !found {
+			// Optimization: only do this for the problematic file for now to save bandwidth
+			// Or we can do it always if nd.verbose is on, or always for safety.
+			// Let's do it always for cli.js for now.
+			// Fallback: If API returned no results, verify client-side using a fresh connection.
+			// This handles cases where V8 silently fails (e.g. large files) or returns partial results.
+			// Using a fresh connection avoids timeout/buffer limits on the main shared connection.
+			if nd.verbose {
+				log.Printf("Dialing fresh connection for %s (Fallback)...", scriptID)
+			}
+			fConn, _, err := websocket.DefaultDialer.Dial(nd.session.Target.WebSocketDebuggerURL, nil)
+			if err != nil {
+				if nd.verbose {
+					log.Printf("Fallback Dial Error: %v", err)
+				}
+				continue
+			}
+			defer fConn.Close()
+
+			// Enable Debugger domain for this session
+			enableID := 6999
+			fConn.WriteJSON(map[string]interface{}{
+				"id":     enableID,
+				"method": "Debugger.enable",
+			})
+			var enableResp map[string]interface{}
+			fConn.ReadJSON(&enableResp) // Consume response
+
+			sourceID := 7000 + (time.Now().UnixNano() % 1000)
+			fConn.WriteJSON(map[string]interface{}{
+				"id":     sourceID,
+				"method": "Debugger.getScriptSource",
+				"params": map[string]interface{}{"scriptId": scriptID},
+			})
+
+			for {
+				var sMsg map[string]interface{}
+				if err := fConn.ReadJSON(&sMsg); err != nil {
+					if nd.verbose {
+						log.Printf("Fallback Read Error: %v", err)
+					}
+					break
+				}
+				if sID, ok := sMsg["id"].(float64); ok && int64(sID) == int64(sourceID) {
+					// Log error if V8 explicitly refused
+					if errObj, ok := sMsg["error"]; ok && nd.verbose {
+						log.Printf("Fallback V8 Error for %s: %v", scriptID, errObj)
+					}
+
+					if sID, ok := sMsg["id"].(float64); ok && int64(sID) == int64(sourceID) {
+						if res, ok := sMsg["result"].(map[string]interface{}); ok {
+							if src, ok := res["scriptSource"].(string); ok {
+								if strings.Contains(src, term) {
+									if nd.verbose {
+										log.Printf("Fallback Match: Found term in %s (Client-side)", scriptID)
+									}
+									// Simple line finding
+									lines := strings.Split(src, "\n")
+									var manualMatches []SearchMatch
+									for i, line := range lines {
+										if strings.Contains(line, term) {
+											manualMatches = append(manualMatches, SearchMatch{
+												LineNumber:  i,
+												LineContent: strings.TrimSpace(line),
+											})
+										}
+									}
+									if len(manualMatches) > 0 {
+										results = append(results, SearchResult{
+											ScriptID: scriptID,
+											URL:      url,
+											Matches:  manualMatches,
+										})
+									}
+								}
+							}
+						}
+						break
+					}
+				}
+			}
+		}
+	}
+
+	return results, nil
 }
