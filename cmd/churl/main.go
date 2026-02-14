@@ -483,14 +483,13 @@ func run(ctx context.Context, pm chromeprofiles.ProfileManager, url string, opts
 		}
 	}
 
-	// Set up browser options - minimal setup for debugging
+	// Set up browser options
 	browserOpts := []browser.Option{
 		browser.WithHeadless(opts.headless),
 		browser.WithTimeout(opts.timeout),
 		browser.WithVerbose(opts.verbose),
-		browser.WithWaitNetworkIdle(false), // Force disable network idle
-		// browser.WithStableTimeout(opts.stableTimeout),
-		// browser.WithSecurityProfile("permissive"), // Use permissive security for debugging
+		browser.WithWaitNetworkIdle(opts.waitNetworkIdle),
+		browser.WithStableTimeout(opts.stableTimeout),
 	}
 
 	if opts.chromePath != "" {
