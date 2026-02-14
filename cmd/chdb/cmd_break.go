@@ -70,12 +70,43 @@ var breakClearCmd = &cobra.Command{
 	},
 }
 
+var breakXHRCmd = &cobra.Command{
+	Use:   "xhr <url-pattern>",
+	Short: "Break on XHR/Fetch URL",
+	Args:  cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		ctx := createContext()
+		tabID, _ := cmd.Flags().GetString("tab")
+
+		if err := setXHRBreakpoint(ctx, args[0], tabID); err != nil {
+			log.Fatalf("Failed to set XHR breakpoint: %v", err)
+		}
+	},
+}
+
+var breakEventCmd = &cobra.Command{
+	Use:   "event <event-name>",
+	Short: "Break on event listener (e.g. click, keydown)",
+	Args:  cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		ctx := createContext()
+		tabID, _ := cmd.Flags().GetString("tab")
+
+		if err := setEventBreakpoint(ctx, args[0], tabID); err != nil {
+			log.Fatalf("Failed to set event breakpoint: %v", err)
+		}
+	},
+}
+
 func init() {
 	// Add subcommands to break command
 	breakCmd.AddCommand(breakSetCmd)
 	breakCmd.AddCommand(breakListCmd)
 	breakCmd.AddCommand(breakRemoveCmd)
+	breakCmd.AddCommand(breakRemoveCmd)
 	breakCmd.AddCommand(breakClearCmd)
+	breakCmd.AddCommand(breakXHRCmd)
+	breakCmd.AddCommand(breakEventCmd)
 
 	// Add flags
 	breakSetCmd.Flags().StringP("condition", "c", "", "Conditional breakpoint expression")
@@ -205,8 +236,6 @@ func removeBreakpoint(ctx context.Context, breakpointID string, tabID string) er
 func clearBreakpoints(ctx context.Context, tabID string) error {
 	debugger := NewChromeDebugger(port, verbose)
 	defer debugger.Close()
-
-	// Connect to target
 	if err := debugger.Connect(ctx, tabID); err != nil {
 		return err
 	}
@@ -231,5 +260,37 @@ func clearBreakpoints(ctx context.Context, tabID string) error {
 
 	fmt.Printf("✓ Cleared %d breakpoint(s)\n", len(breakpoints))
 
+	return nil
+}
+
+func setXHRBreakpoint(ctx context.Context, pattern string, tabID string) error {
+	debugger := NewChromeDebugger(port, verbose)
+	defer debugger.Close()
+	if err := debugger.Connect(ctx, tabID); err != nil {
+		return err
+	}
+
+	ctrl := NewDebuggerController(debugger, verbose)
+	if err := ctrl.SetXHRBreakpoint(ctx, pattern); err != nil {
+		return err
+	}
+
+	fmt.Printf("✓ XHR Breakpoint set for: %s\n", pattern)
+	return nil
+}
+
+func setEventBreakpoint(ctx context.Context, name string, tabID string) error {
+	debugger := NewChromeDebugger(port, verbose)
+	defer debugger.Close()
+	if err := debugger.Connect(ctx, tabID); err != nil {
+		return err
+	}
+
+	ctrl := NewDebuggerController(debugger, verbose)
+	if err := ctrl.SetEventListenerBreakpoint(ctx, name); err != nil {
+		return err
+	}
+
+	fmt.Printf("✓ Event Breakpoint set for: %s\n", name)
 	return nil
 }

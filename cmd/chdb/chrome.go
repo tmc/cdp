@@ -12,35 +12,35 @@ import (
 	"strings"
 	"time"
 
-	"github.com/chromedp/chromedp"
 	"github.com/chromedp/cdproto/debugger"
 	"github.com/chromedp/cdproto/dom"
 	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/cdproto/page"
 	cdpruntime "github.com/chromedp/cdproto/runtime"
+	"github.com/chromedp/chromedp"
 	"github.com/pkg/errors"
 )
 
 // ChromeTarget represents a Chrome tab or debug target
 type ChromeTarget struct {
-	ID          string `json:"id"`
-	Type        string `json:"type"`
-	Title       string `json:"title"`
-	URL         string `json:"url"`
-	Description string `json:"description,omitempty"`
-	DevtoolsURL string `json:"devtoolsFrontendUrl,omitempty"`
+	ID           string `json:"id"`
+	Type         string `json:"type"`
+	Title        string `json:"title"`
+	URL          string `json:"url"`
+	Description  string `json:"description,omitempty"`
+	DevtoolsURL  string `json:"devtoolsFrontendUrl,omitempty"`
 	WebSocketURL string `json:"webSocketDebuggerUrl,omitempty"`
 }
 
 // ChromeDebugger provides comprehensive Chrome debugging capabilities
 type ChromeDebugger struct {
-	context     context.Context
-	cancel      context.CancelFunc
-	chromeCtx   context.Context
-	chromeCancel context.CancelFunc
-	port        string
-	verbose     bool
-	connected   bool
+	context       context.Context
+	cancel        context.CancelFunc
+	chromeCtx     context.Context
+	chromeCancel  context.CancelFunc
+	port          string
+	verbose       bool
+	connected     bool
 	currentTarget *ChromeTarget
 }
 
@@ -101,6 +101,10 @@ func (cd *ChromeDebugger) Connect(ctx context.Context, targetID string) error {
 		wsURL = fmt.Sprintf("ws://localhost:%s/devtools/page/%s", cd.port, target.ID)
 	}
 
+	if cd.verbose {
+		log.Printf("Connecting to target ID=%s wsURL=%s", target.ID, wsURL)
+	}
+
 	// Use the parent context directly for the allocator
 	allocCtx, allocCancel := chromedp.NewRemoteAllocator(ctx, wsURL)
 	cd.cancel = allocCancel
@@ -109,6 +113,9 @@ func (cd *ChromeDebugger) Connect(ctx context.Context, targetID string) error {
 	if cd.verbose {
 		opts = append(opts, chromedp.WithLogf(log.Printf))
 	}
+
+	// Explicitly target the tabs ID (Hybrid strategy)
+	// opts = append(opts, chromedp.WithTargetID(cdptarget.ID(target.ID)))
 
 	chromeCtx, chromeCancel := chromedp.NewContext(allocCtx, opts...)
 	cd.chromeCtx = chromeCtx

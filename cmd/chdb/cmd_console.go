@@ -19,6 +19,15 @@ var consoleCmd = &cobra.Command{
 		ctx := createContext()
 		tabID, _ := cmd.Flags().GetString("tab")
 
+		if len(args) > 0 {
+			// Non-interactive mode
+			script := strings.Join(args, " ")
+			if err := runConsoleScript(ctx, tabID, script); err != nil {
+				log.Fatalf("Script execution failed: %v", err)
+			}
+			return
+		}
+
 		if err := startConsole(ctx, tabID); err != nil {
 			log.Fatalf("Console session failed: %v", err)
 		}
@@ -82,5 +91,30 @@ func startConsole(ctx context.Context, tabID string) error {
 		return err
 	}
 
+	return nil
+}
+
+func runConsoleScript(ctx context.Context, tabID, script string) error {
+	debugger := NewChromeDebugger(port, verbose)
+	defer debugger.Close()
+
+	if err := debugger.Connect(ctx, tabID); err != nil {
+		return err
+	}
+
+	if err := debugger.EnableDomains(ctx, "Runtime"); err != nil {
+		return err
+	}
+
+	result, err := debugger.Execute(ctx, script)
+	if err != nil {
+		return err
+	}
+
+	enc := json.NewEncoder(os.Stdout)
+	enc.SetIndent("", "  ")
+	if err := enc.Encode(result); err != nil {
+		fmt.Printf("%v\n", result)
+	}
 	return nil
 }

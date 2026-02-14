@@ -71,7 +71,21 @@ func init() {
 	rootCmd.AddCommand(animationCmd)
 	rootCmd.AddCommand(inspectCmd)
 	rootCmd.AddCommand(consoleCmd)
+	rootCmd.AddCommand(sourcesCmd)
+	rootCmd.AddCommand(overridesCmd)
+	rootCmd.AddCommand(domCmd)
+	rootCmd.AddCommand(cookiesCmd)
+	rootCmd.AddCommand(networkCmd)
+	rootCmd.AddCommand(emulateCmd)
+	rootCmd.AddCommand(storageCmd)
+	rootCmd.AddCommand(traceCmd)
+	rootCmd.AddCommand(swCmd)
+	rootCmd.AddCommand(heapCmd)
+	rootCmd.AddCommand(cssCmd)
+	rootCmd.AddCommand(auditCmd)
 	rootCmd.AddCommand(newTargetCmd)
+	rootCmd.AddCommand(bridgeCmd)
+	rootCmd.AddCommand(unminifyCmd)
 }
 
 func main() {

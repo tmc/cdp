@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/chromedp/cdproto/debugger"
+	"github.com/chromedp/cdproto/domdebugger"
 	"github.com/chromedp/cdproto/runtime"
 	"github.com/chromedp/chromedp"
 	"github.com/pkg/errors"
@@ -140,6 +141,78 @@ func (dc *DebuggerController) SetBreakpoint(ctx context.Context, location string
 	dc.breakpoints[string(breakpointID)] = bp
 
 	return bp, nil
+}
+
+// SetXHRBreakpoint sets a breakpoint on XHR/Fetch URL
+func (dc *DebuggerController) SetXHRBreakpoint(ctx context.Context, urlPattern string) error {
+	if !dc.debugger.connected {
+		return errors.New("not connected to Chrome")
+	}
+
+	err := chromedp.Run(dc.debugger.chromeCtx,
+		domdebugger.SetXHRBreakpoint(urlPattern),
+	)
+
+	if err != nil {
+		return errors.Wrap(err, "failed to set XHR breakpoint")
+	}
+
+	dc.breakpoints["xhr:"+urlPattern] = &Breakpoint{
+		ID:        "xhr:" + urlPattern,
+		Condition: urlPattern,
+		Type:      "xhr",
+		Enabled:   true,
+	}
+
+	return nil
+}
+
+// SetDOMBreakpoint sets a breakpoint on DOM modification
+func (dc *DebuggerController) SetDOMBreakpoint(ctx context.Context, nodeID int64, typeVal string) error {
+	if !dc.debugger.connected {
+		return errors.New("not connected to Chrome")
+	}
+
+	// We need cdproto.NodeID
+	// The caller should have resolved selector to ID already, or we do it here?
+	// Let's assume we pass in the ID for now, or use a helper.
+	// Actually, easier to use domdebugger.SetDOMBreakpoint directly with Action.
+
+	// Wait, domdebugger.SetDOMBreakpoint takes cdp.NodeID.
+	// We'll need cdp import if we use strict types, or use int64 and cast.
+	// Importing cdp package might be cleaner.
+
+	// For now, let's keep it simple and assume standard integration.
+
+	// To avoid import cycles or new imports, let's assume we can cast.
+	// But cdp.NodeID is strict.
+	// Let's rely on the caller or `dom` package.
+
+	return errors.New("DOM breakpoints require resolving NodeID first (not yet implemented fully)")
+}
+
+// SetEventListenerBreakpoint sets a breakpoint on an event name
+func (dc *DebuggerController) SetEventListenerBreakpoint(ctx context.Context, eventName string) error {
+	if !dc.debugger.connected {
+		return errors.New("not connected to Chrome")
+	}
+
+	err := chromedp.Run(dc.debugger.chromeCtx,
+		domdebugger.SetEventListenerBreakpoint(eventName),
+	)
+
+	if err != nil {
+		return errors.Wrap(err, "failed to set event listener breakpoint")
+	}
+
+	dc.breakpoints["event:"+eventName] = &Breakpoint{
+		ID:        "event:" + eventName,
+		Condition: eventName,
+		Type:      "event",
+		Enabled:   true,
+	}
+
+	return nil
 }
 
 // RemoveBreakpoint removes a breakpoint
