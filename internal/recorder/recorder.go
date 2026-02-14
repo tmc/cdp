@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"text/template"
@@ -29,19 +30,33 @@ type Annotation struct {
 	URL         string    `json:"url"`         // Current page URL at time of annotation
 }
 
+// TagRange represents a tagged range of network activity.
+type TagRange struct {
+	Tag       string    `json:"tag"`
+	StartTime time.Time `json:"startTime"`
+	EndTime   time.Time `json:"endTime,omitempty"`
+}
+
 type Recorder struct {
 	sync.Mutex
-	requests    map[network.RequestID]*network.Request
-	responses   map[network.RequestID]*network.Response
-	bodies      map[network.RequestID][]byte
-	postData    map[network.RequestID]string
-	timings     map[network.RequestID]*network.EventLoadingFinished
-	annotations []*Annotation // Manual annotations from shell commands
-	verbose     bool
-	streaming   bool
-	filter      *FilterOption
-	template    string
-	ctx         context.Context // Store context for async body fetching
+	requests      map[network.RequestID]*network.Request
+	responses     map[network.RequestID]*network.Response
+	bodies        map[network.RequestID][]byte
+	postData      map[network.RequestID]string
+	timings       map[network.RequestID]*network.EventLoadingFinished
+	requestTags   map[network.RequestID]string // Tag for each request
+	annotations   []*Annotation                // Manual annotations from shell commands
+	verbose       bool
+	streaming     bool
+	filter        *FilterOption
+	template      string
+	ctx           context.Context // Store context for async body fetching
+	outputDir     string
+	domainWriters map[string]*os.File
+
+	// Tag tracking
+	currentTag string      // Currently active tag
+	tagRanges  []*TagRange // History of tag ranges
 }
 
 type FilterOption struct {
@@ -81,14 +96,24 @@ func WithTemplate(template string) Option {
 	}
 }
 
+func WithOutputDir(dir string) Option {
+	return func(r *Recorder) error {
+		r.outputDir = dir
+		return nil
+	}
+}
+
 func New(opts ...Option) (*Recorder, error) {
 	r := &Recorder{
-		requests:    make(map[network.RequestID]*network.Request),
-		responses:   make(map[network.RequestID]*network.Response),
-		bodies:      make(map[network.RequestID][]byte),
-		postData:    make(map[network.RequestID]string),
-		timings:     make(map[network.RequestID]*network.EventLoadingFinished),
-		annotations: make([]*Annotation, 0),
+		requests:      make(map[network.RequestID]*network.Request),
+		responses:     make(map[network.RequestID]*network.Response),
+		bodies:        make(map[network.RequestID][]byte),
+		postData:      make(map[network.RequestID]string),
+		timings:       make(map[network.RequestID]*network.EventLoadingFinished),
+		requestTags:   make(map[network.RequestID]string),
+		annotations:   make([]*Annotation, 0),
+		domainWriters: make(map[string]*os.File),
+		tagRanges:     make([]*TagRange, 0),
 	}
 
 	for _, opt := range opts {
@@ -116,6 +141,10 @@ func (r *Recorder) HandleNetworkEvent(ctx context.Context) func(interface{}) {
 				log.Printf("Request: %s %s", e.Request.Method, e.Request.URL)
 			}
 			r.requests[e.RequestID] = e.Request
+			// Tag this request with the current tag
+			if r.currentTag != "" {
+				r.requestTags[e.RequestID] = r.currentTag
+			}
 
 			// Capture POST data if present
 			if e.Request.HasPostData && len(e.Request.PostDataEntries) > 0 {
@@ -154,10 +183,17 @@ func (r *Recorder) HandleNetworkEvent(ctx context.Context) func(interface{}) {
 			r.responses[e.RequestID] = e.Response
 
 			if r.streaming {
+				req := r.requests[e.RequestID]
+				method := "GET"
+				if req != nil {
+					method = req.Method
+				} else if r.verbose {
+					log.Printf("Warning: no request found for response %s, defaulting to GET", e.RequestID)
+				}
 				entry := &har.Entry{
 					StartedDateTime: time.Now().Format(time.RFC3339),
 					Request: &har.Request{
-						Method: r.requests[e.RequestID].Method,
+						Method: method,
 						URL:    e.Response.URL,
 					},
 					Response: &har.Response{
@@ -247,7 +283,62 @@ func (r *Recorder) streamEntry(entry *har.Entry) {
 		}
 		return
 	}
+
+	if r.outputDir != "" {
+		if err := r.writeToDomainFile(entry, jsonBytes); err != nil {
+			if r.verbose {
+				log.Printf("Error writing to domain file: %v", err)
+			}
+		}
+		return
+	}
+
 	fmt.Println(string(jsonBytes))
+}
+
+// writeToDomainFile writes entry to a domain-specific file.
+// Note: caller must hold r.Lock() - this function does not acquire the lock
+// to avoid deadlock when called from streamEntry which is called from HandleNetworkEvent.
+func (r *Recorder) writeToDomainFile(entry *har.Entry, data []byte) error {
+	var uStr string
+	if entry.Request != nil && entry.Request.URL != "" {
+		uStr = entry.Request.URL
+	}
+	// Note: har.Response doesn't have a URL field.
+	// If entry.Request.URL is empty, we can't determine the domain.
+
+	if uStr == "" {
+		return fmt.Errorf("no URL in entry")
+	}
+
+	u, err := url.Parse(uStr)
+	if err != nil {
+		return err
+	}
+	hostname := u.Hostname()
+	if hostname == "" {
+		hostname = "unknown_domain"
+	}
+
+	// Note: lock is already held by caller (HandleNetworkEvent -> streamEntry)
+	writer, ok := r.domainWriters[hostname]
+	if !ok {
+		// Ensure output directory exists
+		if err := os.MkdirAll(r.outputDir, 0755); err != nil {
+			return err
+		}
+
+		filename := filepath.Join(r.outputDir, fmt.Sprintf("%s.jsonl", hostname))
+		f, err := os.OpenFile(filename, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+		if err != nil {
+			return err
+		}
+		writer = f
+		r.domainWriters[hostname] = writer
+	}
+
+	_, err = fmt.Fprintln(writer, string(data))
+	return err
 }
 
 // HAR returns the HAR data structure
@@ -332,6 +423,11 @@ func (r *Recorder) HAR() (*har.HAR, error) {
 			Time:            float64(timing.Timestamp.Time().UnixNano()) / float64(time.Millisecond),
 		}
 
+		// Add tag to entry comment if present
+		if tag, ok := r.requestTags[reqID]; ok && tag != "" {
+			entry.Comment = fmt.Sprintf("tag:%s", tag)
+		}
+
 		h.Log.Entries = append(h.Log.Entries, entry)
 	}
 
@@ -349,20 +445,34 @@ func (r *Recorder) WriteHAR(filename string) error {
 		return err
 	}
 
-	// Create a wrapper that includes annotations
+	// Close any open tag range
+	r.Lock()
+	if r.currentTag != "" && len(r.tagRanges) > 0 {
+		lastRange := r.tagRanges[len(r.tagRanges)-1]
+		if lastRange.EndTime.IsZero() {
+			lastRange.EndTime = time.Now()
+		}
+	}
+	tagRanges := r.tagRanges
+	r.Unlock()
+
+	// Create a wrapper that includes annotations and tag ranges
 	// HAR spec doesn't officially support custom fields in Log, but we can add them
 	harWithAnnotations := struct {
 		Log *struct {
 			*har.Log
 			Annotations []*Annotation `json:"_annotations,omitempty"`
+			TagRanges   []*TagRange   `json:"_tagRanges,omitempty"`
 		} `json:"log"`
 	}{
 		Log: &struct {
 			*har.Log
 			Annotations []*Annotation `json:"_annotations,omitempty"`
+			TagRanges   []*TagRange   `json:"_tagRanges,omitempty"`
 		}{
 			Log:         h.Log,
 			Annotations: r.annotations,
+			TagRanges:   tagRanges,
 		},
 	}
 
@@ -378,8 +488,13 @@ func (r *Recorder) WriteHAR(filename string) error {
 		)
 	}
 
-	if r.verbose && len(r.annotations) > 0 {
-		log.Printf("Included %d annotations in HAR file", len(r.annotations))
+	if r.verbose {
+		if len(r.annotations) > 0 {
+			log.Printf("Included %d annotations in HAR file", len(r.annotations))
+		}
+		if len(tagRanges) > 0 {
+			log.Printf("Included %d tag ranges in HAR file", len(tagRanges))
+		}
 	}
 
 	return nil
@@ -633,4 +748,59 @@ func (r *Recorder) GetAnnotations() []*Annotation {
 	r.Lock()
 	defer r.Unlock()
 	return r.annotations
+}
+
+// SetTag sets the current tag for subsequent network requests.
+// An empty tag clears the current tag.
+func (r *Recorder) SetTag(tag string) {
+	r.Lock()
+	defer r.Unlock()
+
+	// Close out previous tag range if any
+	if r.currentTag != "" && len(r.tagRanges) > 0 {
+		lastRange := r.tagRanges[len(r.tagRanges)-1]
+		if lastRange.EndTime.IsZero() {
+			lastRange.EndTime = time.Now()
+		}
+	}
+
+	r.currentTag = tag
+
+	// Start new tag range if tag is not empty
+	if tag != "" {
+		r.tagRanges = append(r.tagRanges, &TagRange{
+			Tag:       tag,
+			StartTime: time.Now(),
+		})
+		if r.verbose {
+			log.Printf("Tag set to: %s", tag)
+		}
+	} else if r.verbose {
+		log.Printf("Tag cleared")
+	}
+}
+
+// GetCurrentTag returns the currently active tag.
+func (r *Recorder) GetCurrentTag() string {
+	r.Lock()
+	defer r.Unlock()
+	return r.currentTag
+}
+
+// GetTagRanges returns all tag ranges recorded.
+func (r *Recorder) GetTagRanges() []*TagRange {
+	r.Lock()
+	defer r.Unlock()
+
+	// Make a copy to avoid external modification
+	ranges := make([]*TagRange, len(r.tagRanges))
+	copy(ranges, r.tagRanges)
+	return ranges
+}
+
+// GetRequestTag returns the tag associated with a specific request.
+func (r *Recorder) GetRequestTag(reqID network.RequestID) string {
+	r.Lock()
+	defer r.Unlock()
+	return r.requestTags[reqID]
 }
