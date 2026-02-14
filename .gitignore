@@ -25,3 +25,4 @@ testdata/har-files/**/*.proxymanlogv2
 /churl
 /chdb
 /aistudio
+/cdp-proxy
