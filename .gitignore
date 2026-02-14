@@ -12,7 +12,16 @@ go.work.sum
 .DS_Store
 *.tmp
 *.log
+# Screenshots
+screenshot-*.png
+# HAR files
+*.har
+*.har.jsonl
 # Test data
 testdata/har-files/**/*.har
 testdata/har-files/**/*.proxymanlogv2
+# Binaries
 /cdp
+/churl
+/chdb
+/aistudio
