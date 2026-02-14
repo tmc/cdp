@@ -7,8 +7,10 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
+	"github.com/chromedp/cdproto/target"
 	"github.com/chromedp/chromedp"
 	"github.com/pkg/errors"
 )
@@ -110,11 +112,143 @@ func (b *Browser) ConnectToTab(ctx context.Context, host string, port int, tabID
 		return fmt.Errorf("tab not found: %s", tabID)
 	}
 
-	// Connect to the tab's WebSocket endpoint
-	return b.ConnectToWebSocket(ctx, targetTab.WebSocketDebuggerURL)
+	// Connect directly to the tab's WebSocket URL
+	if targetTab.WebSocketDebuggerURL == "" {
+		return fmt.Errorf("tab %s has no WebSocket URL (may already be attached)", tabID)
+	}
+
+	return b.ConnectToTabWebSocket(ctx, targetTab.WebSocketDebuggerURL)
 }
 
-// ConnectToWebSocket connects to a Chrome instance via WebSocket URL
+// ConnectToExistingTab connects to an existing tab without creating a new one
+func (b *Browser) ConnectToExistingTab(ctx context.Context, browserWSURL string, tabID string) error {
+	// Create a remote allocator pointing to the browser
+	allocCtx, allocCancel := chromedp.NewRemoteAllocator(ctx, browserWSURL)
+
+	// Create the browser context with the specific target ID
+	var browserCtx context.Context
+	var browserCancel context.CancelFunc
+
+	opts := []chromedp.ContextOption{
+		chromedp.WithTargetID(target.ID(tabID)),
+	}
+
+	opts = append(opts, chromedp.WithErrorf(filteredErrorf))
+	if b.opts.Verbose {
+		opts = append(opts, chromedp.WithLogf(log.Printf))
+	}
+
+	browserCtx, browserCancel = chromedp.NewContext(allocCtx, opts...)
+
+	// Store context and cancel functions
+	b.ctx = browserCtx
+	b.cancelFunc = func() {
+		browserCancel()
+		allocCancel()
+	}
+
+	// Mark that we're attached to an existing tab (don't close on cleanup)
+	b.attachedToTab = true
+
+	return nil
+}
+
+// ConnectToTabWebSocket connects to a specific tab via its WebSocket URL
+// Uses WithTargetID to attach to the existing tab instead of creating a new one
+func (b *Browser) ConnectToTabWebSocket(ctx context.Context, tabWSURL string) error {
+	// Extract the target ID from the WebSocket URL
+	// URL format: ws://localhost:9222/devtools/page/{targetID}
+	parts := strings.Split(tabWSURL, "/")
+	if len(parts) < 1 {
+		return fmt.Errorf("invalid WebSocket URL: %s", tabWSURL)
+	}
+	tabID := parts[len(parts)-1]
+
+	// Get the browser's WebSocket URL from /json/version
+	// Parse host:port from the tab's WebSocket URL
+	host := "localhost"
+	port := 9222
+	if strings.Contains(tabWSURL, "://") {
+		urlParts := strings.Split(tabWSURL, "://")
+		if len(urlParts) > 1 {
+			hostPort := strings.Split(urlParts[1], "/")[0]
+			colonIdx := strings.LastIndex(hostPort, ":")
+			if colonIdx > 0 {
+				host = hostPort[:colonIdx]
+				fmt.Sscanf(hostPort[colonIdx+1:], "%d", &port)
+			} else {
+				host = hostPort
+			}
+		}
+	}
+
+	info, err := GetRemoteDebuggingInfo(host, port)
+	if err != nil {
+		return errors.Wrap(err, "getting remote debugging info")
+	}
+
+	browserWSURL := info.WebSocketDebuggerURL
+	if browserWSURL == "" {
+		return fmt.Errorf("no browser WebSocket URL available")
+	}
+
+	if b.opts.Verbose {
+		log.Printf("Browser WebSocket URL: %s", browserWSURL)
+		log.Printf("Attaching to target ID: %s", tabID)
+	}
+
+	// Create a remote allocator pointing to the browser
+	allocCtx, allocCancel := chromedp.NewRemoteAllocator(ctx, browserWSURL)
+
+	if b.opts.Verbose {
+		log.Printf("Created remote allocator")
+	}
+
+	// Create a context directly with WithTargetID from the allocator
+	// Don't initialize a parent context first - that would create a new tab
+	var tabCtx context.Context
+	var tabCancel context.CancelFunc
+
+	if b.opts.Verbose {
+		tabCtx, tabCancel = chromedp.NewContext(allocCtx,
+			chromedp.WithTargetID(target.ID(tabID)),
+			chromedp.WithLogf(log.Printf),
+			chromedp.WithErrorf(filteredErrorf))
+	} else {
+		tabCtx, tabCancel = chromedp.NewContext(allocCtx,
+			chromedp.WithTargetID(target.ID(tabID)),
+			chromedp.WithErrorf(filteredErrorf))
+	}
+
+	if b.opts.Verbose {
+		log.Printf("Created tab context, running init...")
+	}
+
+	// Initialize the tab context
+	if err := chromedp.Run(tabCtx); err != nil {
+		tabCancel()
+		allocCancel()
+		return errors.Wrap(err, "initializing tab connection")
+	}
+
+	if b.opts.Verbose {
+		log.Printf("Connection to tab initialized successfully")
+	}
+
+	// Store context and cancel functions
+	b.ctx = tabCtx
+	b.cancelFunc = func() {
+		tabCancel()
+		allocCancel()
+	}
+
+	// Mark that we're attached to an existing tab
+	b.attachedToTab = true
+
+	return nil
+}
+
+// ConnectToWebSocket connects to a Chrome instance via WebSocket URL (creates new tab)
 func (b *Browser) ConnectToWebSocket(ctx context.Context, wsURL string) error {
 	// Create a new context with the WebSocket URL
 	allocCtx, allocCancel := chromedp.NewRemoteAllocator(ctx, wsURL)
@@ -127,9 +261,11 @@ func (b *Browser) ConnectToWebSocket(ctx context.Context, wsURL string) error {
 		browserCtx, browserCancel = chromedp.NewContext(
 			allocCtx,
 			chromedp.WithLogf(log.Printf),
+			chromedp.WithErrorf(filteredErrorf),
 		)
 	} else {
-		browserCtx, browserCancel = chromedp.NewContext(allocCtx)
+		browserCtx, browserCancel = chromedp.NewContext(allocCtx,
+			chromedp.WithErrorf(filteredErrorf))
 	}
 
 	// Store context and cancel functions

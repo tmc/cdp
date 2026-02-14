@@ -21,6 +21,17 @@ import (
 	chromeErrors "github.com/tmc/misc/chrome-to-har/internal/errors"
 )
 
+// filteredErrorf filters out noisy chromedp error messages
+func filteredErrorf(format string, args ...interface{}) {
+	msg := fmt.Sprintf(format, args...)
+	// Filter out noisy DOM event messages
+	if strings.Contains(msg, "unhandled node event") ||
+		strings.Contains(msg, "TopLayerElementsUpdated") {
+		return
+	}
+	log.Printf(format, args...)
+}
+
 // HTTPRequestData represents data for HTTP requests
 type HTTPRequestData struct {
 	Method      string
@@ -46,6 +57,7 @@ type Browser struct {
 	profileMgr     chromeprofiles.ProfileManager
 	interceptor    *requestInterceptor
 	blockingEngine *blocking.BlockingEngine
+	attachedToTab  bool // True if connected to existing tab (don't close on cleanup)
 }
 
 // New creates a new Browser with the provided options
@@ -218,9 +230,13 @@ func (b *Browser) Launch(ctx context.Context) error {
 		browserCtx, browserCancel = chromedp.NewContext(
 			allocCtx,
 			chromedp.WithLogf(log.Printf),
+			chromedp.WithErrorf(filteredErrorf),
 		)
 	} else {
-		browserCtx, browserCancel = chromedp.NewContext(allocCtx)
+		browserCtx, browserCancel = chromedp.NewContext(
+			allocCtx,
+			chromedp.WithErrorf(filteredErrorf),
+		)
 	}
 
 	// Store context and cancel functions
@@ -490,6 +506,13 @@ func (b *Browser) Context() context.Context {
 
 // Close shuts down the browser
 func (b *Browser) Close() error {
+	// If we're attached to an existing tab, don't cancel (which would close the tab)
+	// Just disconnect gracefully
+	if b.attachedToTab {
+		// Don't call cancelFunc - let the tab continue running
+		return nil
+	}
+
 	if b.cancelFunc != nil {
 		b.cancelFunc()
 	}
@@ -617,6 +640,11 @@ func (b *Browser) getBalancedSecurityOptions() []chromedp.ExecAllocatorOption {
 		chromedp.Flag("disable-default-apps", true),
 		chromedp.Flag("disable-plugins", true),
 
+		// Automation-friendly flags (prevent popups/prompts)
+		chromedp.Flag("disable-fre", true),                            // Disable First Run Experience
+		chromedp.Flag("auto-accept-browser-signin-for-tests", true),   // Auto-accept sign-in prompts
+		chromedp.Flag("disable-features", "OfferMigrationToDiceUsers,OptGuideOnDeviceModel"), // Disable account migration and ML prompts
+
 		// Stability flags
 		chromedp.Flag("disable-background-networking", true),
 		chromedp.Flag("disable-background-timer-throttling", true),
@@ -657,7 +685,7 @@ func (b *Browser) getPermissiveSecurityOptions() []chromedp.ExecAllocatorOption 
 	opts := []chromedp.ExecAllocatorOption{
 		// WARNING: These options reduce security and should only be used for testing
 		chromedp.Flag("disable-web-security", true),
-		chromedp.Flag("disable-features", "VizDisplayCompositor"),
+		chromedp.Flag("disable-features", "VizDisplayCompositor,OfferMigrationToDiceUsers,OptGuideOnDeviceModel"),
 		chromedp.Flag("disable-client-side-phishing-detection", true),
 		chromedp.Flag("disable-popup-blocking", true),
 		chromedp.Flag("safebrowsing-disable-auto-update", true),
@@ -665,6 +693,10 @@ func (b *Browser) getPermissiveSecurityOptions() []chromedp.ExecAllocatorOption 
 		// Still maintain some basic security
 		chromedp.Flag("disable-extensions", true),
 		chromedp.Flag("disable-default-apps", true),
+
+		// Automation-friendly flags (prevent popups/prompts)
+		chromedp.Flag("disable-fre", true),                          // Disable First Run Experience
+		chromedp.Flag("auto-accept-browser-signin-for-tests", true), // Auto-accept sign-in prompts
 
 		// Stability flags
 		chromedp.Flag("disable-background-networking", true),
@@ -1346,4 +1378,37 @@ func (b *Browser) GetBlockingStats() (processed, blocked int64) {
 // BlockingEngine returns the blocking engine (if any)
 func (b *Browser) BlockingEngine() *blocking.BlockingEngine {
 	return b.blockingEngine
+}
+
+// BlockURLPattern adds a URL pattern to block. Creates a blocking engine if none exists.
+func (b *Browser) BlockURLPattern(pattern string) error {
+	if b.blockingEngine == nil {
+		// Create a new blocking engine with this pattern
+		config := &blocking.Config{
+			Enabled:     true,
+			URLPatterns: []string{pattern},
+			Verbose:     b.opts.Verbose,
+		}
+		var err error
+		b.blockingEngine, err = blocking.NewBlockingEngine(config)
+		if err != nil {
+			return errors.Wrap(err, "creating blocking engine")
+		}
+		// Setup network blocking
+		return b.setupNetworkBlocking()
+	}
+
+	// Add pattern to existing engine's config and rebuild
+	b.blockingEngine = nil
+	config := &blocking.Config{
+		Enabled:     true,
+		URLPatterns: []string{pattern},
+		Verbose:     b.opts.Verbose,
+	}
+	var err error
+	b.blockingEngine, err = blocking.NewBlockingEngine(config)
+	if err != nil {
+		return errors.Wrap(err, "recreating blocking engine")
+	}
+	return nil
 }

@@ -675,3 +675,208 @@ func (p *Page) SetWebSocketConnectionHandler(
 	p.webSocketMonitor.SetOnDisconnect(onDisconnect)
 	p.webSocketMonitor.SetOnError(onError)
 }
+
+// ClickByRole clicks an element by its ARIA role and accessible name.
+// If nth > 0, it clicks the nth matching element (0-indexed).
+func (p *Page) ClickByRole(role, name string, nth int, opts ...ClickOption) error {
+	options := &ClickOptions{
+		Button:  "left",
+		Count:   1,
+		Delay:   0,
+		Timeout: 30 * time.Second,
+	}
+
+	for _, opt := range opts {
+		opt(options)
+	}
+
+	ctx, cancel := context.WithTimeout(p.ctx, options.Timeout)
+	defer cancel()
+
+	// Build JavaScript to find and click element by role
+	js := fmt.Sprintf(`
+(function() {
+	const role = %q;
+	const name = %q;
+	const nth = %d;
+
+	function getImplicitRole(el) {
+		const tag = el.tagName.toLowerCase();
+		const type = el.getAttribute('type');
+		switch (tag) {
+			case 'button': return 'button';
+			case 'a': return el.hasAttribute('href') ? 'link' : null;
+			case 'input':
+				switch (type) {
+					case 'button':
+					case 'submit':
+					case 'reset': return 'button';
+					case 'checkbox': return 'checkbox';
+					case 'radio': return 'radio';
+					case 'range': return 'slider';
+					case 'search': return 'searchbox';
+					default: return 'textbox';
+				}
+			case 'textarea': return 'textbox';
+			case 'select': return el.hasAttribute('multiple') ? 'listbox' : 'combobox';
+			case 'h1': case 'h2': case 'h3': case 'h4': case 'h5': case 'h6': return 'heading';
+			default: return null;
+		}
+	}
+
+	function getAccessibleName(el) {
+		if (el.getAttribute('aria-label')) return el.getAttribute('aria-label');
+		if (el.id) {
+			const label = document.querySelector('label[for="' + el.id + '"]');
+			if (label) return label.textContent.trim();
+		}
+		const tag = el.tagName.toLowerCase();
+		if (tag === 'button' || tag === 'a') return el.textContent.trim();
+		if (tag === 'input' || tag === 'textarea') return el.placeholder || '';
+		if (tag === 'img') return el.alt || '';
+		return el.title || '';
+	}
+
+	const allElements = document.querySelectorAll('*');
+	const matches = [];
+
+	for (const el of allElements) {
+		const elRole = el.getAttribute('role') || getImplicitRole(el);
+		if (elRole !== role) continue;
+
+		const elName = getAccessibleName(el);
+		if (name && elName !== name) continue;
+
+		matches.push(el);
+	}
+
+	if (matches.length === 0) {
+		throw new Error('No element found with role "' + role + '"' + (name ? ' and name "' + name + '"' : ''));
+	}
+
+	const index = Math.min(nth, matches.length - 1);
+	const target = matches[index];
+
+	// Scroll into view and click
+	target.scrollIntoView({ behavior: 'instant', block: 'center' });
+	target.click();
+	return true;
+})()
+`, role, name, nth)
+
+	var result bool
+	if err := chromedp.Run(ctx, chromedp.Evaluate(js, &result)); err != nil {
+		return errors.Wrapf(err, "clicking element with role=%s name=%q nth=%d", role, name, nth)
+	}
+
+	return nil
+}
+
+// TypeByRole types text into an element by its ARIA role and accessible name.
+// If nth > 0, it types into the nth matching element (0-indexed).
+func (p *Page) TypeByRole(role, name, text string, nth int, opts ...TypeOption) error {
+	options := &TypeOptions{
+		Delay:   0,
+		Timeout: 30 * time.Second,
+	}
+
+	for _, opt := range opts {
+		opt(options)
+	}
+
+	ctx, cancel := context.WithTimeout(p.ctx, options.Timeout)
+	defer cancel()
+
+	// Build JavaScript to find element by role and focus it
+	js := fmt.Sprintf(`
+(function() {
+	const role = %q;
+	const name = %q;
+	const nth = %d;
+
+	function getImplicitRole(el) {
+		const tag = el.tagName.toLowerCase();
+		const type = el.getAttribute('type');
+		switch (tag) {
+			case 'button': return 'button';
+			case 'a': return el.hasAttribute('href') ? 'link' : null;
+			case 'input':
+				switch (type) {
+					case 'button':
+					case 'submit':
+					case 'reset': return 'button';
+					case 'checkbox': return 'checkbox';
+					case 'radio': return 'radio';
+					case 'range': return 'slider';
+					case 'search': return 'searchbox';
+					default: return 'textbox';
+				}
+			case 'textarea': return 'textbox';
+			case 'select': return el.hasAttribute('multiple') ? 'listbox' : 'combobox';
+			default: return null;
+		}
+	}
+
+	function getAccessibleName(el) {
+		if (el.getAttribute('aria-label')) return el.getAttribute('aria-label');
+		if (el.id) {
+			const label = document.querySelector('label[for="' + el.id + '"]');
+			if (label) return label.textContent.trim();
+		}
+		const tag = el.tagName.toLowerCase();
+		if (tag === 'input' || tag === 'textarea') return el.placeholder || '';
+		return el.title || '';
+	}
+
+	const allElements = document.querySelectorAll('*');
+	const matches = [];
+
+	for (const el of allElements) {
+		const elRole = el.getAttribute('role') || getImplicitRole(el);
+		if (elRole !== role) continue;
+
+		const elName = getAccessibleName(el);
+		if (name && elName !== name) continue;
+
+		matches.push(el);
+	}
+
+	if (matches.length === 0) {
+		throw new Error('No element found with role "' + role + '"' + (name ? ' and name "' + name + '"' : ''));
+	}
+
+	const index = Math.min(nth, matches.length - 1);
+	const target = matches[index];
+
+	// Return a unique selector for this element
+	target.scrollIntoView({ behavior: 'instant', block: 'center' });
+	target.focus();
+
+	// Generate a unique ID if needed
+	if (!target.id) {
+		target.id = '__cdp_ref_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+	}
+	return '#' + target.id;
+})()
+`, role, name, nth)
+
+	var selector string
+	if err := chromedp.Run(ctx, chromedp.Evaluate(js, &selector)); err != nil {
+		return errors.Wrapf(err, "finding element with role=%s name=%q nth=%d", role, name, nth)
+	}
+
+	// Now clear and type using the selector
+	if err := chromedp.Run(ctx,
+		chromedp.Clear(selector),
+		chromedp.SendKeys(selector, text),
+	); err != nil {
+		return errors.Wrapf(err, "typing into element with role=%s name=%q", role, name)
+	}
+
+	return nil
+}
+
+// FillByRole is an alias for TypeByRole.
+func (p *Page) FillByRole(role, name, text string, nth int, opts ...TypeOption) error {
+	return p.TypeByRole(role, name, text, nth, opts...)
+}
