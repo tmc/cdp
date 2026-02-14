@@ -4,31 +4,29 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"os"
-	"path/filepath"
 
-	"github.com/tmc/misc/chrome-to-har/internal/cdpscript/executor"
-	"github.com/tmc/misc/chrome-to-har/internal/cdpscript/lexer"
-	"github.com/tmc/misc/chrome-to-har/internal/cdpscript/parser"
-	"github.com/tmc/misc/chrome-to-har/internal/cdpscript/types"
-	"golang.org/x/tools/txtar"
-	"gopkg.in/yaml.v3"
+	"github.com/tmc/misc/chrome-to-har/internal/cdpscript/scriptengine"
 )
 
 type scriptCmd struct {
 	fs *flag.FlagSet
 
-	// flags
 	verbose bool
 	output  string
+	tabID   string
+	port    int
 }
 
 func newScriptCmd() *scriptCmd {
 	c := &scriptCmd{
-		fs: flag.NewFlagSet("script", flag.ExitOnError),
+		fs: flag.NewFlagSet("run", flag.ExitOnError),
 	}
 	c.fs.BoolVar(&c.verbose, "verbose", false, "Enable verbose logging")
+	c.fs.BoolVar(&c.verbose, "v", false, "Enable verbose logging (short)")
 	c.fs.StringVar(&c.output, "output", "", "Output directory for artifacts")
+	c.fs.StringVar(&c.output, "o", "", "Output directory (short)")
+	c.fs.StringVar(&c.tabID, "tab", "", "Connect to existing browser tab by ID (from /json/list)")
+	c.fs.IntVar(&c.port, "port", 9222, "Chrome remote debugging port")
 	return c
 }
 
@@ -36,81 +34,25 @@ func (c *scriptCmd) run(args []string) error {
 	c.fs.Parse(args)
 
 	if c.fs.NArg() < 1 {
-		return fmt.Errorf("script file required")
+		return fmt.Errorf("usage: cdp run [options] <script.txtar>")
 	}
 
 	scriptPath := c.fs.Arg(0)
 
-	// Read file
-	data, err := os.ReadFile(scriptPath)
-	if err != nil {
-		return fmt.Errorf("failed to read script file: %w", err)
-	}
-
-	var script types.Script
-	script.Helpers = make(map[string]string)
-
-	// Check if it's a txtar archive
-	if filepath.Ext(scriptPath) == ".txtar" || filepath.Ext(scriptPath) == ".ar" {
-		archive := txtar.Parse(data)
-
-		// Parse files
-		for _, f := range archive.Files {
-			if f.Name == "meta.yaml" {
-				if err := yaml.Unmarshal(f.Data, &script.Metadata); err != nil {
-					return fmt.Errorf("failed to parse meta.yaml: %w", err)
-				}
-			} else if f.Name == "main.cdp" {
-				// Parse main script
-				l := lexer.New(string(f.Data))
-				p := parser.NewParser(l)
-				cmd := p.ParseCommands()
-				if len(p.Errors()) > 0 {
-					return fmt.Errorf("failed to parse main.cdp: %v", p.Errors())
-				}
-				script.Main = &types.CommandList{
-					Commands: cmd,
-				}
-			} else {
-				// Other files are helpers or assets
-				script.Helpers[f.Name] = string(f.Data)
-			}
-		}
-	} else {
-		// Single file mode
-		l := lexer.New(string(data))
-		p := parser.NewParser(l)
-		cmd := p.ParseCommands()
-		if len(p.Errors()) > 0 {
-			return fmt.Errorf("failed to parse script: %v", p.Errors())
-		}
-		script.Main = &types.CommandList{
-			Commands: cmd,
-		}
-	}
-
-	if script.Main == nil {
-		return fmt.Errorf("no main.cdp found (or empty script)")
-	}
-
-	// Create executor
-	ctx := context.Background()
-	opts := []executor.Option{
-		executor.WithVerbose(c.verbose),
+	// Create engine with options
+	opts := []scriptengine.Option{
+		scriptengine.WithVerbose(c.verbose),
 	}
 	if c.output != "" {
-		opts = append(opts, executor.WithOutputDir(c.output))
+		opts = append(opts, scriptengine.WithOutputDir(c.output))
+	}
+	if c.tabID != "" {
+		opts = append(opts, scriptengine.WithRemoteTab(c.tabID, c.port))
 	}
 
-	exec, err := executor.NewExecutor(ctx, &script, opts...)
-	if err != nil {
-		return fmt.Errorf("failed to create executor: %w", err)
-	}
+	engine := scriptengine.New(opts...)
 
 	// Execute
-	if err := exec.Execute(); err != nil {
-		return fmt.Errorf("script execution failed: %w", err)
-	}
-
-	return nil
+	ctx := context.Background()
+	return engine.ExecuteTxtar(ctx, scriptPath)
 }
