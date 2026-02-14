@@ -16,6 +16,7 @@ require (
 	github.com/tmc/macgo v0.0.0-00010101000000-000000000000
 	github.com/yuin/goldmark v1.4.13
 	golang.org/x/net v0.47.0
+	golang.org/x/sys v0.39.0
 	golang.org/x/term v0.37.0
 	golang.org/x/tools v0.39.0
 	google.golang.org/genai v1.37.0
@@ -64,7 +65,6 @@ require (
 	go.opencensus.io v0.24.0 // indirect
 	golang.org/x/crypto v0.44.0 // indirect
 	golang.org/x/exp v0.0.0-20250620022241-b7579e27df2b // indirect
-	golang.org/x/sys v0.39.0 // indirect
 	golang.org/x/text v0.31.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20240903143218-8af14fe29dc1 // indirect
 	google.golang.org/grpc v1.66.2 // indirect

@@ -5,18 +5,19 @@ package limits
 
 import (
 	"fmt"
-	"syscall"
+
+	"golang.org/x/sys/unix"
 )
 
 // setProcLimit sets the process limit on Linux
 func setProcLimit(maxProcesses uint64) error {
 	if maxProcesses > 0 {
-		procLimit := &syscall.Rlimit{
+		procLimit := &unix.Rlimit{
 			Cur: maxProcesses,
 			Max: maxProcesses,
 		}
 
-		if err := syscall.Setrlimit(syscall.RLIMIT_NPROC, procLimit); err != nil {
+		if err := unix.Setrlimit(unix.RLIMIT_NPROC, procLimit); err != nil {
 			return fmt.Errorf("setting process limit: %w", err)
 		}
 	}
