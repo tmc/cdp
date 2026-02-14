@@ -4,11 +4,13 @@ package main
 import (
 	"bufio"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
 	"net/http"
+	neturl "net/url"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -25,7 +27,9 @@ import (
 	"github.com/chromedp/cdproto/target"
 	"github.com/chromedp/chromedp"
 	"github.com/pkg/errors"
+	"github.com/tmc/macgo"
 	"github.com/tmc/misc/chrome-to-har/internal/browser"
+	"github.com/tmc/misc/chrome-to-har/internal/cdpproxy"
 	"github.com/tmc/misc/chrome-to-har/internal/chromeprofiles"
 	harrecorder "github.com/tmc/misc/chrome-to-har/internal/recorder"
 )
@@ -98,6 +102,28 @@ func exitWithError(code int, errorType string, format string, args ...interface{
 // exitWithCode exits with the specified code (for success or silent failures)
 func exitWithCode(code int) {
 	os.Exit(code)
+}
+
+// filteredLogf filters out known unhandled chromedp events that are noisy but harmless
+func filteredLogf(format string, args ...interface{}) {
+	msg := fmt.Sprintf(format, args...)
+	// Filter out known unhandled events from chromedp that haven't been implemented yet
+	if strings.Contains(msg, "TopLayerElementsUpdated") ||
+		strings.Contains(msg, "unhandled node event") {
+		return
+	}
+	log.Print(msg)
+}
+
+// filteredErrorf filters out noisy chromedp error messages
+func filteredErrorf(format string, args ...interface{}) {
+	msg := fmt.Sprintf(format, args...)
+	// Filter out noisy DOM event messages
+	if strings.Contains(msg, "unhandled node event") ||
+		strings.Contains(msg, "TopLayerElementsUpdated") {
+		return
+	}
+	log.Printf(format, args...)
 }
 
 var aliases = map[string]string{
@@ -289,7 +315,8 @@ func (nr *NetworkRecorder) SaveHAR(filename string) error {
 
 // checkRunningChrome checks if Chrome is running on a specific port
 func checkRunningChrome(port int) bool {
-	resp, err := http.Get(fmt.Sprintf("http://localhost:%d/json/version", port))
+	client := &http.Client{Timeout: 2 * time.Second}
+	resp, err := client.Get(fmt.Sprintf("http://localhost:%d/json/version", port))
 	if err != nil {
 		return false
 	}
@@ -299,7 +326,8 @@ func checkRunningChrome(port int) bool {
 
 // getChromeTabs gets list of available tabs from Chrome
 func getChromeTabs(port int) ([]ChromeTab, error) {
-	resp, err := http.Get(fmt.Sprintf("http://localhost:%d/json/list", port))
+	client := &http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Get(fmt.Sprintf("http://localhost:%d/json/list", port))
 	if err != nil {
 		return nil, err
 	}
@@ -910,14 +938,137 @@ var enhancedCommands = map[string]func(*browser.Page, []string) error{
 	},
 }
 
-func main() {
-	// Handle 'cdp script' subcommand before flag parsing
-	if len(os.Args) > 1 && os.Args[1] == "script" {
-		cmd := newScriptCmd()
-		if err := cmd.run(os.Args[2:]); err != nil {
-			exitWithError(ExitGeneralError, ErrorTypeGeneral, "%v", err)
+// AllTabsMonitor handles monitoring network traffic from all browser tabs
+type AllTabsMonitor struct {
+	ctx             context.Context
+	recorder        *harrecorder.Recorder
+	verbose         bool
+	attachedTargets map[target.ID]context.CancelFunc
+	mu              sync.Mutex
+}
+
+// NewAllTabsMonitor creates a new monitor for all tabs
+func NewAllTabsMonitor(ctx context.Context, recorder *harrecorder.Recorder, verbose bool) *AllTabsMonitor {
+	return &AllTabsMonitor{
+		ctx:             ctx,
+		recorder:        recorder,
+		verbose:         verbose,
+		attachedTargets: make(map[target.ID]context.CancelFunc),
+	}
+}
+
+// Start begins monitoring all tabs
+func (m *AllTabsMonitor) Start() error {
+	// Enable target discovery to get notified of all targets
+	if err := chromedp.Run(m.ctx, target.SetDiscoverTargets(true)); err != nil {
+		return fmt.Errorf("failed to enable target discovery: %w", err)
+	}
+
+	// Get all current targets
+	targets, err := chromedp.Targets(m.ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get targets: %w", err)
+	}
+
+	if m.verbose {
+		log.Printf("All-tabs monitoring: found %d existing targets", len(targets))
+	}
+
+	// Attach to each page target
+	for _, t := range targets {
+		if t.Type == "page" {
+			if err := m.attachToTarget(t.TargetID); err != nil {
+				if m.verbose {
+					log.Printf("Warning: failed to attach to target %s: %v", t.TargetID, err)
+				}
+			}
 		}
-		return
+	}
+
+	// Listen for new targets
+	chromedp.ListenBrowser(m.ctx, func(ev interface{}) {
+		switch e := ev.(type) {
+		case *target.EventTargetCreated:
+			if e.TargetInfo.Type == "page" {
+				if m.verbose {
+					log.Printf("New tab created: %s - %s", e.TargetInfo.TargetID, e.TargetInfo.URL)
+				}
+				if err := m.attachToTarget(e.TargetInfo.TargetID); err != nil {
+					if m.verbose {
+						log.Printf("Warning: failed to attach to new target %s: %v", e.TargetInfo.TargetID, err)
+					}
+				}
+			}
+		case *target.EventTargetDestroyed:
+			m.mu.Lock()
+			if cancel, ok := m.attachedTargets[e.TargetID]; ok {
+				cancel()
+				delete(m.attachedTargets, e.TargetID)
+				if m.verbose {
+					log.Printf("Tab closed: %s", e.TargetID)
+				}
+			}
+			m.mu.Unlock()
+		}
+	})
+
+	return nil
+}
+
+// attachToTarget attaches to a target and enables network monitoring
+func (m *AllTabsMonitor) attachToTarget(targetID target.ID) error {
+	m.mu.Lock()
+	if _, exists := m.attachedTargets[targetID]; exists {
+		m.mu.Unlock()
+		return nil // Already attached
+	}
+	m.mu.Unlock()
+
+	// Create a new context for this target
+	targetCtx, cancel := chromedp.NewContext(m.ctx, chromedp.WithTargetID(targetID))
+
+	// Enable network monitoring on this target
+	if err := chromedp.Run(targetCtx, network.Enable()); err != nil {
+		cancel()
+		return fmt.Errorf("failed to enable network on target: %w", err)
+	}
+
+	// Attach network event listener
+	chromedp.ListenTarget(targetCtx, m.recorder.HandleNetworkEvent(targetCtx))
+
+	m.mu.Lock()
+	m.attachedTargets[targetID] = cancel
+	m.mu.Unlock()
+
+	if m.verbose {
+		log.Printf("Attached to target: %s", targetID)
+	}
+
+	return nil
+}
+
+// Stop stops monitoring all tabs
+func (m *AllTabsMonitor) Stop() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for id, cancel := range m.attachedTargets {
+		cancel()
+		delete(m.attachedTargets, id)
+	}
+}
+
+func main() {
+	macgo.Start(nil)
+	// Handle subcommands before flag parsing
+	if len(os.Args) > 1 {
+		switch os.Args[1] {
+		case "run":
+			cmd := newScriptCmd()
+			if err := cmd.run(os.Args[2:]); err != nil {
+				exitWithError(ExitGeneralError, ErrorTypeGeneral, "%v", err)
+			}
+			return
+		}
 	}
 
 	var (
@@ -945,6 +1096,7 @@ func main() {
 		background  bool
 		command     string
 		enhanced    bool
+		outputDir   string // Directory to write domain-organized logs to
 
 		// Profile management features
 		useProfile      string
@@ -970,6 +1122,24 @@ func main() {
 		newWindow      bool
 		proxy          string
 		chromeFlags    string
+
+		// CDP proxy feature
+		cdpProxyEnabled     bool
+		cdpProxyObserveSelf bool
+
+		// All tabs monitoring
+		monitorAllTabs bool
+
+		// Console monitoring
+		monitorConsole bool
+		consoleStacks  bool
+
+		// JS execution options
+		waitReady    bool
+		awaitPromise bool
+
+		// Screenshot options
+		screenshotSelector string
 	)
 
 	flag.StringVar(&url, "url", "about:blank", "URL to navigate to on start")
@@ -998,6 +1168,13 @@ func main() {
 	flag.BoolVar(&background, "background", false, "Launch browser in background without focusing window")
 	flag.StringVar(&command, "command", "", "Execute a single CDP command")
 	flag.BoolVar(&enhanced, "enhanced", false, "Use enhanced command mode with better commands")
+	flag.StringVar(&outputDir, "output-dir", "", "Directory to write domain-organized logs to (overrides --harl-file)")
+	flag.BoolVar(&monitorAllTabs, "monitor-all-tabs", false, "Monitor network traffic from all browser tabs")
+	flag.BoolVar(&monitorConsole, "console", false, "Monitor and display browser console messages (log, error, warn, exceptions)")
+	flag.BoolVar(&consoleStacks, "console-stacks", false, "Show full stack traces for console errors and exceptions (compact single-line by default)")
+	flag.BoolVar(&waitReady, "wait-ready", false, "Wait for page load and network idle before executing -js scripts")
+	flag.BoolVar(&awaitPromise, "await", false, "Await Promise return values from -js scripts")
+	flag.StringVar(&screenshotSelector, "screenshot", "", "Take a screenshot and exit (CSS selector for element, or 'full' for full page)")
 
 	// Window control flags
 	flag.BoolVar(&shell, "shell", false, "Start in interactive shell mode (auto if no --url or --js)")
@@ -1029,7 +1206,23 @@ func main() {
 	flag.Var(&headers, "H", "Custom HTTP header (can be used multiple times, e.g., -H 'Authorization: Bearer token')")
 	flag.Var(&headers, "headers", "Custom HTTP header (long form, can be used multiple times)")
 
+	// CDP proxy flags
+	flag.BoolVar(&cdpProxyEnabled, "cdp-proxy", false, "Enable CDP proxy with observer UI at http://localhost:<debug-port>/_/")
+	flag.BoolVar(&cdpProxyObserveSelf, "cdp-proxy-self", false, "When using cdp-proxy, also observe the browser driven by this command")
+	flag.BoolVar(&cdpProxyObserveSelf, "cdp-proxy-observe-self", false, "Route cdp's own CDP traffic through the proxy (requires --cdp-proxy)")
+
 	flag.Parse()
+
+	// Check if -screenshot flag was explicitly set (even with empty value means "full page")
+	screenshotRequested := false
+	flag.Visit(func(f *flag.Flag) {
+		if f.Name == "screenshot" {
+			screenshotRequested = true
+		}
+	})
+	if screenshotRequested && screenshotSelector == "" {
+		screenshotSelector = "full"
+	}
 
 	// Validate har-mode flag
 	if harMode != "simple" && harMode != "enhanced" {
@@ -1064,6 +1257,32 @@ func main() {
 		// Replace the "-" placeholder with the actual script
 		jsScripts[len(jsScripts)-1] = script
 	}
+
+	// Handle profile configuration and port conflicts
+	if profileDir != "" || useProfile != "" {
+		// If using a profile and port is default (9222), switch to auto (0)
+		// to avoid conflicts with existing running browsers on 9222.
+		if debugPort == 9222 {
+			debugPort = 0
+			if verbose {
+				log.Println("Using auto-assigned debug port for profile to avoid conflicts")
+			}
+		}
+	}
+
+	// Handle CDP proxy mode - deferred until after browser discovery
+	var proxyInstance *cdpproxy.Proxy
+	var proxyCancel context.CancelFunc
+	var proxyListenPort int
+	// Cleanup proxy on exit
+	defer func() {
+		if proxyCancel != nil {
+			proxyCancel()
+		}
+		if proxyInstance != nil {
+			proxyInstance.Close()
+		}
+	}()
 
 	// Handle profile listing
 	if listProfiles {
@@ -1148,7 +1367,8 @@ func main() {
 
 	// Check for existing Chrome instances with debug ports first
 	// Skip this if headless mode is explicitly requested (want a new instance)
-	if remoteHost == "" && !headless && (connectExisting || useProfile == "") {
+	// Also skip if profile-dir is specified, as we want to use that specific profile directory
+	if remoteHost == "" && !headless && (connectExisting || (useProfile == "" && profileDir == "")) {
 		debugPorts := []int{9222, 9223, 9224, 9225}
 		for _, port := range debugPorts {
 			if checkRunningChrome(port) {
@@ -1174,7 +1394,8 @@ func main() {
 			selectedBrowser = selectBestBrowser(candidates, verbose)
 
 			// If we found a running browser with debug port, connect to it instead
-			if selectedBrowser.IsRunning && selectedBrowser.DebugPort > 0 {
+			// But only if we are NOT trying to use a specific profile (either directory or named profile)
+			if selectedBrowser.IsRunning && selectedBrowser.DebugPort > 0 && profileDir == "" && useProfile == "" {
 				remoteHost = "localhost"
 				remotePort = selectedBrowser.DebugPort
 				if verbose {
@@ -1189,6 +1410,81 @@ func main() {
 				}
 			}
 		}
+	}
+
+	// Handle CDP proxy mode - set up after browser discovery
+	// proxyConnectViaRemote indicates that after browser launch, we should connect through the proxy
+	var proxyConnectViaRemote bool
+	var proxyTargetBrowserPort int
+
+	if cdpProxyEnabled {
+		// Default: proxy listens on 9222, browser on internal port
+		// This allows other tools to connect to the proxy at the standard CDP port
+		proxyListenPort = debugPort
+		if proxyListenPort == 0 {
+			proxyListenPort = 9222
+		}
+
+		if remoteHost != "" && remotePort > 0 {
+			// An existing browser was discovered - proxy to it
+			proxyTargetBrowserPort = remotePort
+			// If browser is on same port as proxy listen port, the user needs to
+			// either move the browser to a different port or use a different proxy port
+			if proxyTargetBrowserPort == proxyListenPort {
+				// Can't proxy to the same port - suggest solution
+				log.Printf("Warning: Browser is on port %d, same as proxy listen port", proxyTargetBrowserPort)
+				log.Printf("  Either: restart browser with --remote-debugging-port=%d", proxyListenPort+1)
+				log.Printf("  Or: use --debug-port=%d to listen on a different proxy port", proxyTargetBrowserPort+100)
+				// Use different proxy port as fallback
+				proxyListenPort = proxyTargetBrowserPort + 100
+				if verbose {
+					log.Printf("Using proxy port %d instead", proxyListenPort)
+				}
+			}
+			// Set remoteHost/remotePort to connect through proxy
+			remoteHost = "localhost"
+			remotePort = proxyListenPort
+		} else {
+			// No existing browser - will launch new one on internal port
+			// Proxy listens on requested port (default 9222), browser on internal port
+			proxyTargetBrowserPort = proxyListenPort + 1
+			debugPort = proxyTargetBrowserPort
+			// Only reconnect through proxy if --cdp-proxy-observe-self is set
+			if cdpProxyObserveSelf {
+				proxyConnectViaRemote = true
+				if verbose {
+					log.Printf("Will launch browser on port %d, proxy on %d, then connect through proxy", proxyTargetBrowserPort, proxyListenPort)
+				}
+			} else {
+				if verbose {
+					log.Printf("Launching browser on port %d, proxy on %d (cdp connects directly to browser)", proxyTargetBrowserPort, proxyListenPort)
+				}
+			}
+		}
+
+		// Create and start proxy
+		var err error
+		proxyInstance, err = cdpproxy.New(proxyListenPort, proxyTargetBrowserPort, verbose, "")
+		if err != nil {
+			exitWithError(ExitGeneralError, ErrorTypeGeneral, "Failed to create CDP proxy: %v", err)
+		}
+
+		proxyCtx, pCancel := context.WithCancel(context.Background())
+		proxyCancel = pCancel
+
+		go func() {
+			if err := proxyInstance.Run(proxyCtx); err != nil && err != context.Canceled {
+				log.Printf("CDP proxy error: %v", err)
+			}
+		}()
+
+		// Give proxy time to start
+		time.Sleep(100 * time.Millisecond)
+
+		if verbose {
+			log.Printf("CDP proxy enabled: listening on %d, forwarding to browser on %d", proxyListenPort, proxyTargetBrowserPort)
+		}
+		fmt.Printf("CDP Observer UI: http://localhost:%d/_/\n", proxyListenPort)
 	}
 
 	// Handle --list-tabs separately
@@ -1239,11 +1535,17 @@ func main() {
 	var cancel context.CancelFunc
 
 	// Determine if we are in a mode that requires long-running session
-	isImplicitShell := len(jsScripts) == 0 && harFile == "" && !harlStream && command == "" && !listTabs && !listBrowsers && !listProfiles
+	// Determine if we are in a mode that requires long-running session
+	// Treat HAR logging without specific commands as implicit shell (user browsing)
+	isImplicitShell := len(jsScripts) == 0 && command == "" && !listTabs && !listBrowsers && !listProfiles
 
 	if shell || isImplicitShell || timeout == 0 {
 		// Shell mode, or explicit no timeout - no global timeout
 		ctx, cancel = context.WithCancel(context.Background())
+		if isImplicitShell {
+			// Force shell mode to keep process alive
+			shell = true
+		}
 	} else {
 		// Non-interactive mode - use timeout
 		ctx, cancel = context.WithTimeout(context.Background(), time.Duration(timeout)*time.Second)
@@ -1271,10 +1573,10 @@ func main() {
 		exitWithError(ExitUsageError, ErrorTypeUsage, "Cannot use both --extract and --js flags together")
 	}
 
-	// Use enhanced browser API when connecting to remote Chrome
-	if remoteHost != "" {
+	// Use enhanced browser API when connecting to remote Chrome or launching with profiles
+	if remoteHost != "" || useProfile != "" || profileDir != "" || chromePath != "" {
 		// Handle direct tab connection for specific operations
-		if len(jsScripts) > 0 || tabID != "" || harFile != "" || extractSelector != "" {
+		if len(jsScripts) > 0 || tabID != "" || harFile != "" || harlStream || extractSelector != "" || screenshotRequested {
 			// Get available tabs
 			_, err := getChromeTabs(remotePort)
 			if err != nil {
@@ -1300,8 +1602,9 @@ func main() {
 
 			// Use the existing target instead of creating a new one
 			var opts []chromedp.ContextOption
+			opts = append(opts, chromedp.WithErrorf(filteredErrorf))
 			if verbose {
-				opts = append(opts, chromedp.WithLogf(log.Printf))
+				opts = append(opts, chromedp.WithLogf(filteredLogf))
 			}
 
 			if targetTabID != "" {
@@ -1320,6 +1623,11 @@ func main() {
 
 			browserCtx, browserCancel = chromedp.NewContext(allocCtx, opts...)
 
+			// Set up console monitoring for remote tab operations
+			if monitorConsole {
+				startConsoleMonitor(browserCtx, verbose, consoleStacks)
+			}
+
 			// Set up HAR recording if requested
 			var harlWriter *os.File
 			if harlStream {
@@ -1335,559 +1643,58 @@ func main() {
 				}
 			}
 
-			if harFile != "" || harlStream {
+			if harFile != "" || harlStream || len(jsScripts) > 0 || extractSelector != "" || screenshotRequested {
 				if harMode == "enhanced" {
 					// Use enhanced recorder with full capture
 					var err error
 					enhancedRecorder, err = harrecorder.New(
 						harrecorder.WithVerbose(verbose),
 						harrecorder.WithStreaming(harlStream),
+						harrecorder.WithOutputDir(outputDir),
 					)
 					if err != nil {
 						exitWithError(ExitGeneralError, ErrorTypeGeneral, "Failed to create enhanced recorder: %v", err)
 					}
 				} else {
+					// Use local recorder for simple mode (if not enhanced)
+					// But wait, recorder variable is just a struct without domain writing logic.
+					// We need to implement it for simple mode too.
 					recorder = &NetworkRecorder{}
 				}
 
-				// Enable network monitoring
-				if err := chromedp.Run(browserCtx, network.Enable()); err != nil {
-					exitWithError(ExitGeneralError, ErrorTypeNetwork, "Failed to enable network monitoring: %v", err)
-				}
+				// Map for domain writers in simple mode
+				simpleDomainWriters := make(map[string]*os.File)
+				var simpleWritersMu sync.Mutex
 
-				// Set up network event listeners based on mode
-				if harMode == "enhanced" {
-					chromedp.ListenTarget(browserCtx, enhancedRecorder.HandleNetworkEvent(browserCtx))
-					if harFile != "" {
-						fmt.Printf("Recording network traffic to: %s (enhanced mode)\n", harFile)
+				// Check if all-tabs monitoring is enabled
+				if monitorAllTabs && harMode == "enhanced" {
+					// Use AllTabsMonitor for monitoring all browser tabs
+					allTabsMonitor := NewAllTabsMonitor(browserCtx, enhancedRecorder, verbose)
+					if err := allTabsMonitor.Start(); err != nil {
+						exitWithError(ExitGeneralError, ErrorTypeNetwork, "Failed to start all-tabs monitoring: %v", err)
 					}
-				} else {
-					chromedp.ListenTarget(browserCtx, func(ev interface{}) {
-						switch ev := ev.(type) {
-						case *network.EventResponseReceived:
-							if verbose {
-								log.Printf("Response received: %s", ev.Response.URL)
-							}
-
-							// Create basic HAR entry
-							entry := HAREntry{
-								StartedDateTime: time.Now().Format(time.RFC3339),
-								Request: map[string]interface{}{
-									"method":  "GET", // Simplified
-									"url":     ev.Response.URL,
-									"headers": []interface{}{},
-								},
-								Response: map[string]interface{}{
-									"status":     ev.Response.Status,
-									"statusText": ev.Response.StatusText,
-									"headers":    []interface{}{},
-									"content": map[string]interface{}{
-										"size":     0,
-										"mimeType": ev.Response.MimeType,
-									},
-								},
-								Time: 0, // Simplified
-							}
-
-							recorder.AddEntry(entry)
-
-							// Stream entry as NDJSON if --harl is enabled
-							if harlStream {
-								if jsonBytes, err := json.Marshal(entry); err == nil {
-									fmt.Fprintln(harlWriter, string(jsonBytes))
-								}
-							}
-						}
-					})
+					defer allTabsMonitor.Stop()
 
 					if harFile != "" {
-						fmt.Printf("Recording network traffic to: %s\n", harFile)
-					}
-				}
-
-				if harlStream {
-					if verbose {
-						if harlFile == "-" {
-							log.Println("Streaming HAR entries as NDJSON to stdout")
-						} else {
-							log.Printf("Streaming HAR entries as NDJSON to %s", harlFile)
-						}
-					}
-				}
-			}
-
-			// Handle CSS selector extraction if provided
-			if extractSelector != "" {
-				// Set custom headers before navigation
-				if err := setCustomHeaders(browserCtx, customHeaders); err != nil {
-					exitWithError(ExitGeneralError, ErrorTypeNetwork, "Failed to set custom headers: %v", err)
-				}
-
-				extractionCode := buildExtractionScript(extractSelector, extractMode)
-				var result *runtime.RemoteObject
-				if err := chromedp.Run(browserCtx,
-					chromedp.Navigate(url),
-					chromedp.Evaluate(extractionCode, &result),
-				); err != nil {
-					exitWithError(ExitGeneralError, ErrorTypeGeneral, "Failed to extract content: %v", err)
-				}
-
-				if result != nil && result.Value != nil {
-					resultStr := string(result.Value)
-					if outputFormat == "json" || (strings.HasPrefix(resultStr, "[") || strings.HasPrefix(resultStr, "{")) {
-						var jsonData interface{}
-						if err := json.Unmarshal([]byte(resultStr), &jsonData); err == nil {
-							prettyJSON, _ := json.MarshalIndent(jsonData, "", "  ")
-							fmt.Println(string(prettyJSON))
-						} else {
-							fmt.Println(resultStr)
-						}
+						fmt.Printf("Recording network traffic from ALL TABS to: %s (enhanced mode)\n", harFile)
 					} else {
-						fmt.Println(resultStr)
-					}
-				}
-				return
-			}
-
-			// Execute JavaScript if provided
-			if len(jsScripts) > 0 {
-				var results []interface{}
-				// Prepare results slice with space for all scripts
-				results = make([]interface{}, len(jsScripts))
-
-				// Execute scripts sequentially in the same browser context
-				for scriptIdx, jsCode := range jsScripts {
-					var result *runtime.RemoteObject
-					if err := chromedp.Run(browserCtx, chromedp.Evaluate(jsCode, &result)); err != nil {
-						// Provide improved error messages with context, including script index
-						errorMsg := fmt.Sprintf("script %d: ", scriptIdx+1)
-						if strings.Contains(err.Error(), "SyntaxError") {
-							if strings.Contains(jsCode, ":contains(") {
-								exitWithError(ExitGeneralError, ErrorTypeJavaScript, "%sJavaScript Syntax Error: :contains() is not valid CSS. Use Array.from(document.querySelectorAll('button')).filter(btn => btn.textContent.includes('text')) instead.\nOriginal error: %v", errorMsg, err)
-							} else {
-								exitWithError(ExitGeneralError, ErrorTypeJavaScript, "%sJavaScript Syntax Error in code '%s': %v", errorMsg, jsCode, err)
-							}
-						} else if strings.Contains(err.Error(), "not a valid selector") {
-							exitWithError(ExitGeneralError, ErrorTypeJavaScript, "%sInvalid CSS Selector: Use standard CSS selectors or JavaScript filtering methods.\nOriginal error: %v", errorMsg, err)
-						} else {
-							exitWithError(ExitGeneralError, ErrorTypeJavaScript, "%sFailed to execute JavaScript '%s': %v", errorMsg, jsCode, err)
-						}
-					}
-
-					// Extract result value
-					var resultValue interface{}
-					if result != nil && result.Value != nil {
-						// Try to parse JSON values for proper type preservation
-						var val interface{}
-						if err := json.Unmarshal(result.Value, &val); err == nil {
-							resultValue = val
-						} else {
-							resultValue = string(result.Value)
-						}
-					} else {
-						resultValue = nil
-					}
-					results[scriptIdx] = resultValue
-				}
-
-				// Output results based on format
-				if outputFormat == "json" {
-					jsonData, err := json.MarshalIndent(results, "", "  ")
-					if err != nil {
-						exitWithError(ExitGeneralError, ErrorTypeGeneral, "Failed to marshal script results to JSON: %v", err)
-					}
-					fmt.Println(string(jsonData))
-				} else {
-					// Default text format: one result per line
-					fmt.Printf("✓ Executed %d JavaScript script(s) in Chrome on port %d\n", len(jsScripts), remotePort)
-					if targetTabID != "" {
-						fmt.Printf("Target tab ID: %s\n", targetTabID)
-					}
-					for scriptIdx, result := range results {
-						if scriptIdx > 0 {
-							fmt.Println()
-						}
-						fmt.Printf("Script %d result: %v\n", scriptIdx+1, result)
-					}
-				}
-
-				// Handle URL monitoring if requested
-				if waitForURLChange || monitorURLPattern != "" {
-					if err := monitorURLChanges(browserCtx, monitorURLPattern, verbose); err != nil {
-						log.Printf("URL monitoring failed: %v", err)
-					}
-				}
-
-				// Handle URL monitoring if requested
-				if waitForURLChange || monitorURLPattern != "" {
-					if err := monitorURLChanges(browserCtx, monitorURLPattern, verbose); err != nil {
-						log.Printf("URL monitoring failed: %v", err)
-					}
-				}
-
-				// Save HAR file if recording and exit
-				if recorder != nil && harFile != "" {
-					if err := recorder.SaveHAR(harFile); err != nil {
-						log.Printf("Failed to save HAR file: %v", err)
-					} else {
-						fmt.Printf("HAR file saved to: %s\n", harFile)
-						fmt.Printf("Recorded %d network requests\n", len(recorder.GetEntries()))
-					}
-				}
-
-				// Clean up gently without affecting the target
-				if targetTabID != "" {
-					// Don't cancel browser context for existing tabs
-					return
-				}
-
-				return
-			}
-
-			// Navigate to URL if specified
-			if url != "about:blank" {
-				// Set custom headers before navigation
-				if err := setCustomHeaders(browserCtx, customHeaders); err != nil && verbose {
-					log.Printf("Warning: Failed to set custom headers: %v", err)
-				}
-
-				if err := chromedp.Run(browserCtx, chromedp.Navigate(url)); err != nil {
-					if verbose {
-						log.Printf("Failed to navigate to %s: %v", url, err)
-					}
-				}
-			}
-
-			// If HAR capture without JS, wait for user interaction
-			if harFile != "" || harlStream {
-				if verbose {
-					fmt.Printf("Connected to Chrome on port %d\n", remotePort)
-					if targetTabID != "" {
-						fmt.Printf("Target tab ID: %s\n", targetTabID)
-					}
-					fmt.Println("Press Ctrl+C to stop recording...")
-				}
-
-				// Wait for signal or timeout
-				select {
-				case <-ctx.Done():
-					if verbose {
-						log.Println("Context cancelled...")
-					}
-				case <-sigChan:
-					if verbose {
-						log.Println("Signal received...")
-					}
-				}
-
-				// Save HAR file if specified
-				if harFile != "" && recorder != nil {
-					if err := recorder.SaveHAR(harFile); err != nil {
-						log.Printf("Failed to save HAR file: %v", err)
-					} else {
-						fmt.Printf("HAR file saved to: %s\n", harFile)
-						fmt.Printf("Recorded %d network requests\n", len(recorder.GetEntries()))
-					}
-				}
-
-				return
-			}
-		} else {
-			// Use enhanced browser API for interactive mode
-			// Create profile manager
-			pm, err := chromeprofiles.NewProfileManager(
-				chromeprofiles.WithVerbose(verbose),
-			)
-			if err != nil {
-				exitWithError(ExitGeneralError, ErrorTypeGeneral, "%v", err)
-			}
-
-			// Set up browser options
-			browserOpts := []browser.Option{
-				browser.WithHeadless(headless),
-				browser.WithVerbose(verbose),
-				browser.WithTimeout(timeout),
-			}
-
-			if proxy != "" {
-				browserOpts = append(browserOpts, browser.WithProxy(proxy))
-			}
-			if chromeFlags != "" {
-				browserOpts = append(browserOpts, browser.WithChromeFlags(strings.Split(chromeFlags, " ")))
-			}
-
-			if remoteHost != "" {
-				browserOpts = append(browserOpts, browser.WithRemoteChrome(remoteHost, remotePort))
-				if remoteTab != "" {
-					browserOpts = append(browserOpts, browser.WithRemoteTab(remoteTab))
-				}
-			}
-
-			if debugPort > 0 {
-				browserOpts = append(browserOpts, browser.WithDebugPort(debugPort))
-			}
-
-			// Create browser
-			enhancedBrowser, err = browser.New(ctx, pm, browserOpts...)
-			if err != nil {
-				exitWithError(ExitBrowserError, ErrorTypeBrowser, "Failed to create browser: %v", err)
-			}
-			defer enhancedBrowser.Close()
-
-			// Launch browser
-			if err := enhancedBrowser.Launch(ctx); err != nil {
-				exitWithError(ExitBrowserError, ErrorTypeBrowser, "Failed to launch browser: %v", err)
-			}
-
-			// Get or create page
-			if remoteTab != "" {
-				// When we connect to a specific remote tab, the browser context
-				// is already connected to that tab. Get a page wrapper for it.
-				enhancedPage = enhancedBrowser.GetCurrentPage()
-			} else {
-				pages, err := enhancedBrowser.Pages()
-				if err != nil || len(pages) == 0 {
-					enhancedPage, err = enhancedBrowser.NewPage()
-					if err != nil {
-						exitWithError(ExitGeneralError, ErrorTypeGeneral, "Failed to create page: %v", err)
+						fmt.Println("Monitoring network traffic from ALL TABS")
 					}
 				} else {
-					enhancedPage = pages[0]
-				}
-			}
-
-			// Navigate to initial URL
-			if url != "about:blank" && enhancedPage != nil {
-				if err := enhancedPage.Navigate(url); err != nil {
-					log.Printf("Warning: Failed to navigate to %s: %v", url, err)
-				}
-			}
-
-			browserCtx = enhancedPage.Context()
-			browserCancel = func() {} // browser.Close() will handle cleanup
-
-			if remoteHost != "" {
-				fmt.Printf("Connected to remote Chrome at %s:%d\n", remoteHost, remotePort)
-				if remoteTab != "" {
-					fmt.Printf("Connected to tab: %s\n", remoteTab)
-				}
-			}
-
-			if verbose {
-				fmt.Println("Using enhanced browser API for remote Chrome connection")
-			}
-		}
-	} else {
-		// Local Chrome instance with optional profile support
-		var profileManager chromeprofiles.ProfileManager
-		var err error
-
-		// Set up profile management if requested
-		if useProfile != "" {
-			profileManager, err = chromeprofiles.NewProfileManager(
-				chromeprofiles.WithVerbose(verbose),
-			)
-			if err != nil {
-				exitWithError(ExitGeneralError, ErrorTypeProfile, "Failed to create profile manager: %v", err)
-			}
-
-			if err := profileManager.SetupWorkdir(); err != nil {
-				exitWithError(ExitGeneralError, ErrorTypeProfile, "Failed to setup profile working directory: %v", err)
-			}
-			defer profileManager.Cleanup()
-
-			// Parse cookie domains
-			var cookieDomainsSlice []string
-			if cookieDomains != "" {
-				cookieDomainsSlice = splitAndTrim(cookieDomains, ",")
-			}
-
-			// Check for Brave session isolation needs
-			sessionDetector := browser.NewSessionDetector(verbose)
-			needsIsolation := sessionDetector.NeedsBraveSessionIsolation(ctx, chromePath, true)
-
-			if needsIsolation {
-				// Display warning about Brave session reuse
-				fmt.Println(sessionDetector.ImportantWarning())
-
-				// Use Brave session isolation instead of standard profile copy
-				if err := profileManager.BraveSessionIsolation(useProfile, cookieDomainsSlice); err != nil {
-					exitWithError(ExitGeneralError, ErrorTypeProfile, "Failed to create Brave isolated profile '%s': %v", useProfile, err)
-				}
-
-				// Wait for DevTools to be available if debug port is specified
-				if debugPort > 0 {
-					waitCtx, waitCancel := context.WithTimeout(ctx, 10*time.Second)
-					if err := sessionDetector.WaitForDevTools(waitCtx, debugPort, 5*time.Second); err != nil {
-						if verbose {
-							log.Printf("Warning: DevTools verification timed out (non-fatal): %v", err)
-						}
+					// Standard single-target monitoring
+					// Enable network monitoring
+					if err := chromedp.Run(browserCtx, network.Enable()); err != nil {
+						exitWithError(ExitGeneralError, ErrorTypeNetwork, "Failed to enable network monitoring: %v", err)
 					}
-					waitCancel()
-				}
 
-				if verbose {
-					log.Printf("Brave session isolation created for profile '%s'", useProfile)
-				}
-			} else {
-				// Standard profile copy
-				if err := profileManager.CopyProfile(useProfile, cookieDomainsSlice); err != nil {
-					exitWithError(ExitGeneralError, ErrorTypeProfile, "Failed to copy profile '%s': %v", useProfile, err)
-				}
-			}
-
-			if verbose {
-				if len(cookieDomainsSlice) > 0 {
-					log.Printf("Using profile '%s' with cookies filtered for domains: %v", useProfile, cookieDomainsSlice)
-				} else {
-					log.Printf("Using profile '%s' with all cookies", useProfile)
-				}
-			}
-		}
-
-		opts := []chromedp.ExecAllocatorOption{
-			chromedp.NoFirstRun,
-			chromedp.NoDefaultBrowserCheck,
-
-			// Add stability flags
-			chromedp.Flag("disable-background-networking", true),
-			chromedp.Flag("disable-background-timer-throttling", true),
-			chromedp.Flag("disable-popup-blocking", true),
-			chromedp.Flag("disable-sync", true),
-		}
-
-		// Add background launch flags to prevent window focusing
-		if background || interactive {
-			opts = append(opts,
-				chromedp.Flag("no-startup-window", true),
-				chromedp.Flag("silent-launch", true),
-			)
-			if verbose {
-				log.Println("Launching browser in background mode")
-			}
-		}
-
-		// Add profile directory if using a profile
-		if profileManager != nil {
-			opts = append(opts, chromedp.UserDataDir(profileManager.WorkDir()))
-			if verbose {
-				log.Printf("Using profile data from: %s", profileManager.WorkDir())
-			}
-		}
-
-		if headless {
-			opts = append(opts, chromedp.Headless)
-			if verbose {
-				log.Println("Running Chrome in headless mode")
-			}
-		}
-
-		if debugPort > 0 {
-			opts = append(opts, chromedp.Flag("remote-debugging-port", fmt.Sprintf("%d", debugPort)))
-		}
-
-		// Add Chrome path if specified or discovered
-		if chromePath != "" {
-			opts = append(opts, chromedp.ExecPath(chromePath))
-			if verbose {
-				log.Printf("Using Chrome at: %s", chromePath)
-			}
-		}
-
-		// Add window positioning if specified
-		if windowPosition != "" {
-			opts = append(opts, chromedp.Flag("window-position", windowPosition))
-			if verbose {
-				log.Printf("Setting window position: %s", windowPosition)
-			}
-		}
-
-		// Add window size if specified
-		if windowSize != "" {
-			opts = append(opts, chromedp.Flag("window-size", windowSize))
-			if verbose {
-				log.Printf("Setting window size: %s", windowSize)
-			}
-		}
-
-		// Force new window if specified
-		if newWindow {
-			opts = append(opts, chromedp.Flag("new-window", true))
-			if verbose {
-				log.Println("Forcing new window")
-			}
-		}
-
-		// Create Chrome allocator
-		allocCtx, allocCancel := chromedp.NewExecAllocator(ctx, opts...)
-		defer allocCancel()
-
-		// Create Chrome browser context
-		if verbose {
-			browserCtx, browserCancel = chromedp.NewContext(allocCtx, chromedp.WithLogf(log.Printf))
-		} else {
-			browserCtx, browserCancel = chromedp.NewContext(allocCtx)
-		}
-
-		// Initialize browser context when using profiles to ensure profile loads before navigation
-		if profileManager != nil {
-			if verbose {
-				log.Println("Initializing browser with profile...")
-			}
-			// Ensure browser is fully started and profile is loaded before any navigation
-			if err := chromedp.Run(browserCtx); err != nil {
-				exitWithError(ExitBrowserError, ErrorTypeBrowser, "Failed to initialize browser with profile: %v", err)
-			}
-			if verbose {
-				log.Println("Browser profile initialized successfully")
-			}
-		}
-
-		// Set up HAR recording if requested (for new Chrome instances)
-		var harlWriter *os.File
-		if harlStream {
-			if harlFile == "-" {
-				harlWriter = os.Stdout
-			} else {
-				f, err := os.OpenFile(harlFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-				if err != nil {
-					exitWithError(ExitGeneralError, ErrorTypeGeneral, "Failed to open HARL output file: %v", err)
-				}
-				harlWriter = f
-				defer harlWriter.Close()
-			}
-		}
-
-		if harFile != "" || harlStream {
-			if harMode == "enhanced" {
-				// Use enhanced recorder with full capture
-				var err error
-				enhancedRecorder, err = harrecorder.New(
-					harrecorder.WithVerbose(verbose),
-					harrecorder.WithStreaming(harlStream),
-				)
-				if err != nil {
-					exitWithError(ExitGeneralError, ErrorTypeGeneral, "Failed to create enhanced recorder: %v", err)
-				}
-			} else {
-				recorder = &NetworkRecorder{}
-			}
-
-			// Enable network events BEFORE any navigation
-			// This is critical: network.Enable() and listener attachment must happen before
-			// any navigation to ensure we capture the initial page request and all network events
-			if verbose {
-				log.Printf("Enabling network recording and attaching event listeners...")
-			}
-
-			if err := chromedp.Run(browserCtx,
-				network.Enable(),
-				chromedp.ActionFunc(func(ctx context.Context) error {
-					// Attach listeners synchronously within the same action
+					// Set up network event listeners based on mode
 					if harMode == "enhanced" {
-						chromedp.ListenTarget(ctx, enhancedRecorder.HandleNetworkEvent(ctx))
+						chromedp.ListenTarget(browserCtx, enhancedRecorder.HandleNetworkEvent(browserCtx))
+						if harFile != "" {
+							fmt.Printf("Recording network traffic to: %s (enhanced mode)\n", harFile)
+						}
 					} else {
-						chromedp.ListenTarget(ctx, func(ev interface{}) {
+						chromedp.ListenTarget(browserCtx, func(ev interface{}) {
 							switch ev := ev.(type) {
 							case *network.EventResponseReceived:
 								if verbose {
@@ -1918,160 +1725,1009 @@ func main() {
 
 								// Stream entry as NDJSON if --harl is enabled
 								if harlStream {
-									if jsonBytes, err := json.Marshal(entry); err == nil {
+									jsonBytes, err := json.Marshal(entry)
+									if err != nil {
+										return
+									}
+
+									if outputDir != "" {
+										// Simple mode domain organization
+										uStr := entry.Request["url"].(string)
+										u, err := neturl.Parse(uStr)
+										if err == nil {
+											hostname := u.Hostname()
+											if hostname == "" {
+												hostname = "unknown_domain"
+											}
+
+											simpleWritersMu.Lock()
+											writer, ok := simpleDomainWriters[hostname]
+											if !ok {
+												if err := os.MkdirAll(outputDir, 0755); err == nil {
+													fname := filepath.Join(outputDir, fmt.Sprintf("%s.jsonl", hostname))
+													if f, err := os.OpenFile(fname, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644); err == nil {
+														writer = f
+														simpleDomainWriters[hostname] = writer
+													}
+												}
+											}
+											simpleWritersMu.Unlock()
+
+											if writer != nil {
+												fmt.Fprintln(writer, string(jsonBytes))
+											}
+										}
+									} else {
 										fmt.Fprintln(harlWriter, string(jsonBytes))
 									}
 								}
 							}
 						})
-					}
-					if verbose {
-						log.Printf("Network event listeners attached successfully")
-					}
-					return nil
-				}),
-			); err != nil {
-				exitWithError(ExitGeneralError, ErrorTypeNetwork, "Failed to enable network monitoring: %v", err)
-			}
 
-			if harFile != "" {
-				if harMode == "enhanced" {
-					fmt.Printf("Recording network traffic to: %s (enhanced mode)\n", harFile)
-				} else {
-					fmt.Printf("Recording network traffic to: %s\n", harFile)
+						if harFile != "" {
+							fmt.Printf("Recording network traffic to: %s\n", harFile)
+						}
+					}
+
+					if harlStream {
+						if verbose {
+							if harlFile == "-" {
+								log.Println("Streaming HAR entries as NDJSON to stdout")
+							} else {
+								log.Printf("Streaming HAR entries as NDJSON to %s", harlFile)
+							}
+						}
+					}
 				}
-			}
-			if harlStream {
-				if verbose {
-					if harlFile == "-" {
-						log.Println("Streaming HAR entries as NDJSON to stdout")
+
+				// Handle CSS selector extraction if provided
+				if extractSelector != "" {
+					// Set custom headers before navigation
+					if err := setCustomHeaders(browserCtx, customHeaders); err != nil {
+						exitWithError(ExitGeneralError, ErrorTypeNetwork, "Failed to set custom headers: %v", err)
+					}
+
+					extractionCode := buildExtractionScript(extractSelector, extractMode)
+					var extractTasks []chromedp.Action
+					extractTasks = append(extractTasks, chromedp.Navigate(url))
+					if waitReady {
+						extractTasks = append(extractTasks, chromedp.WaitReady("body", chromedp.ByQuery))
+					}
+					var result *runtime.RemoteObject
+					extractTasks = append(extractTasks, chromedp.Evaluate(extractionCode, &result))
+					if err := chromedp.Run(browserCtx, extractTasks...); err != nil {
+						exitWithError(ExitGeneralError, ErrorTypeGeneral, "Failed to extract content: %v", err)
+					}
+
+					if result != nil && result.Value != nil {
+						resultStr := string(result.Value)
+						if outputFormat == "json" || (strings.HasPrefix(resultStr, "[") || strings.HasPrefix(resultStr, "{")) {
+							var jsonData interface{}
+							if err := json.Unmarshal([]byte(resultStr), &jsonData); err == nil {
+								prettyJSON, _ := json.MarshalIndent(jsonData, "", "  ")
+								fmt.Println(string(prettyJSON))
+							} else {
+								fmt.Println(resultStr)
+							}
+						} else {
+							fmt.Println(resultStr)
+						}
+					}
+					return
+				}
+
+				// Execute JavaScript if provided
+				if len(jsScripts) > 0 {
+					// Navigate to URL first if specified
+					if url != "about:blank" {
+						if err := setCustomHeaders(browserCtx, customHeaders); err != nil && verbose {
+							log.Printf("Warning: Failed to set custom headers: %v", err)
+						}
+						if err := chromedp.Run(browserCtx, chromedp.Navigate(url)); err != nil {
+							exitWithError(ExitNavigationError, ErrorTypeNavigation, "Failed to navigate to %s: %v", url, err)
+						}
+						// Wait for page load + network idle if requested
+						if waitReady {
+							const waitScript = `new Promise(resolve => {
+								let lastActivity = Date.now();
+								try {
+									const observer = new PerformanceObserver(() => { lastActivity = Date.now(); });
+									observer.observe({entryTypes: ['resource']});
+									const poll = () => {
+										if (document.readyState === 'complete' && Date.now() - lastActivity > 500) {
+											observer.disconnect();
+											resolve(true);
+										} else {
+											setTimeout(poll, 200);
+										}
+									};
+									setTimeout(poll, 500);
+								} catch(e) {
+									setTimeout(() => resolve(true), 1000);
+								}
+							})`
+							var ready bool
+							if err := chromedp.Run(browserCtx,
+								chromedp.WaitReady("body", chromedp.ByQuery),
+								chromedp.Evaluate(waitScript, &ready,
+									func(p *runtime.EvaluateParams) *runtime.EvaluateParams {
+										return p.WithAwaitPromise(true)
+									},
+								),
+							); err != nil && verbose {
+								log.Printf("Warning: wait-ready failed: %v", err)
+							}
+						}
+					}
+
+					var results []interface{}
+					results = make([]interface{}, len(jsScripts))
+
+					// Build evaluate options
+					var evalOpts []chromedp.EvaluateOption
+					if awaitPromise {
+						evalOpts = append(evalOpts, func(p *runtime.EvaluateParams) *runtime.EvaluateParams {
+							return p.WithAwaitPromise(true)
+						})
+					}
+
+					// Execute scripts sequentially in the same browser context
+					for scriptIdx, jsCode := range jsScripts {
+						var result *runtime.RemoteObject
+						if err := chromedp.Run(browserCtx, chromedp.Evaluate(jsCode, &result, evalOpts...)); err != nil {
+							// Provide improved error messages with context, including script index
+							errorMsg := fmt.Sprintf("script %d: ", scriptIdx+1)
+							if strings.Contains(err.Error(), "SyntaxError") {
+								if strings.Contains(jsCode, ":contains(") {
+									exitWithError(ExitGeneralError, ErrorTypeJavaScript, "%sJavaScript Syntax Error: :contains() is not valid CSS. Use Array.from(document.querySelectorAll('button')).filter(btn => btn.textContent.includes('text')) instead.\nOriginal error: %v", errorMsg, err)
+								} else {
+									exitWithError(ExitGeneralError, ErrorTypeJavaScript, "%sJavaScript Syntax Error in code '%s': %v", errorMsg, jsCode, err)
+								}
+							} else if strings.Contains(err.Error(), "not a valid selector") {
+								exitWithError(ExitGeneralError, ErrorTypeJavaScript, "%sInvalid CSS Selector: Use standard CSS selectors or JavaScript filtering methods.\nOriginal error: %v", errorMsg, err)
+							} else {
+								exitWithError(ExitGeneralError, ErrorTypeJavaScript, "%sFailed to execute JavaScript '%s': %v", errorMsg, jsCode, err)
+							}
+						}
+
+						// Extract result value
+						var resultValue interface{}
+						if result != nil && result.Value != nil {
+							// Try to parse JSON values for proper type preservation
+							var val interface{}
+							if err := json.Unmarshal(result.Value, &val); err == nil {
+								resultValue = val
+							} else {
+								resultValue = string(result.Value)
+							}
+						} else {
+							resultValue = nil
+						}
+						results[scriptIdx] = resultValue
+					}
+
+					// Output results based on format
+					if outputFormat == "json" {
+						jsonData, err := json.MarshalIndent(results, "", "  ")
+						if err != nil {
+							exitWithError(ExitGeneralError, ErrorTypeGeneral, "Failed to marshal script results to JSON: %v", err)
+						}
+						fmt.Println(string(jsonData))
 					} else {
-						log.Printf("Streaming HAR entries as NDJSON to %s", harlFile)
+						// Default text format: one result per line
+						fmt.Printf("✓ Executed %d JavaScript script(s) in Chrome on port %d\n", len(jsScripts), remotePort)
+						if targetTabID != "" {
+							fmt.Printf("Target tab ID: %s\n", targetTabID)
+						}
+						for scriptIdx, result := range results {
+							if scriptIdx > 0 {
+								fmt.Println()
+							}
+							fmt.Printf("Script %d result: %v\n", scriptIdx+1, result)
+						}
+					}
+
+					// Take screenshot after JS execution if both -js and -screenshot are used
+					if screenshotRequested {
+						if err := handleScreenshotCommand(browserCtx, screenshotSelector, outputFormat); err != nil {
+							exitWithError(ExitGeneralError, ErrorTypeGeneral, "Screenshot failed: %v", err)
+						}
+					}
+
+					// Handle URL monitoring if requested
+					if waitForURLChange || monitorURLPattern != "" {
+						if err := monitorURLChanges(browserCtx, monitorURLPattern, verbose); err != nil {
+							log.Printf("URL monitoring failed: %v", err)
+						}
+					}
+
+					// Save HAR file if recording and exit
+					if recorder != nil && harFile != "" {
+						if err := recorder.SaveHAR(harFile); err != nil {
+							log.Printf("Failed to save HAR file: %v", err)
+						} else {
+							fmt.Printf("HAR file saved to: %s\n", harFile)
+							fmt.Printf("Recorded %d network requests\n", len(recorder.GetEntries()))
+						}
+					}
+
+					// Clean up gently without affecting the target
+					if targetTabID != "" {
+						// Don't cancel browser context for existing tabs
+						return
+					}
+
+					return
+				}
+
+				// Screenshot-only path (no JS scripts)
+				if screenshotRequested && len(jsScripts) == 0 {
+					if url != "about:blank" {
+						if err := setCustomHeaders(browserCtx, customHeaders); err != nil && verbose {
+							log.Printf("Warning: Failed to set custom headers: %v", err)
+						}
+						if err := chromedp.Run(browserCtx, chromedp.Navigate(url)); err != nil {
+							exitWithError(ExitNavigationError, ErrorTypeNavigation, "Failed to navigate to %s: %v", url, err)
+						}
+						if waitReady {
+							const waitScript = `new Promise(resolve => {
+								let lastActivity = Date.now();
+								try {
+									const observer = new PerformanceObserver(() => { lastActivity = Date.now(); });
+									observer.observe({entryTypes: ['resource']});
+									const poll = () => {
+										if (document.readyState === 'complete' && Date.now() - lastActivity > 500) {
+											observer.disconnect();
+											resolve(true);
+										} else {
+											setTimeout(poll, 200);
+										}
+									};
+									setTimeout(poll, 500);
+								} catch(e) {
+									setTimeout(() => resolve(true), 1000);
+								}
+							})`
+							var ready bool
+							if err := chromedp.Run(browserCtx,
+								chromedp.WaitReady("body", chromedp.ByQuery),
+								chromedp.Evaluate(waitScript, &ready,
+									func(p *runtime.EvaluateParams) *runtime.EvaluateParams {
+										return p.WithAwaitPromise(true)
+									},
+								),
+							); err != nil && verbose {
+								log.Printf("Warning: wait-ready failed: %v", err)
+							}
+						}
+					}
+					if err := handleScreenshotCommand(browserCtx, screenshotSelector, outputFormat); err != nil {
+						exitWithError(ExitGeneralError, ErrorTypeGeneral, "Screenshot failed: %v", err)
+					}
+					return
+				}
+
+				// Navigate to URL if specified
+				if url != "about:blank" {
+					// Set custom headers before navigation
+					if err := setCustomHeaders(browserCtx, customHeaders); err != nil && verbose {
+						log.Printf("Warning: Failed to set custom headers: %v", err)
+					}
+
+					if err := chromedp.Run(browserCtx, chromedp.Navigate(url)); err != nil {
+						if verbose {
+							log.Printf("Failed to navigate to %s: %v", url, err)
+						}
+					}
+				}
+
+				// If HAR capture without JS, wait for user interaction OR fall through to shell
+				if harFile != "" || harlStream {
+					// When --harl is specified, we want interactive shell mode for browsing
+					// When --har is specified without other commands, wait for signal
+					if harFile != "" && !harlStream && len(jsScripts) == 0 {
+						if verbose {
+							fmt.Printf("Connected to Chrome on port %d\n", remotePort)
+							if targetTabID != "" {
+								fmt.Printf("Target tab ID: %s\n", targetTabID)
+							}
+							fmt.Println("Press Ctrl+C to stop recording...")
+						}
+
+						// Wait for signal or timeout
+						select {
+						case <-ctx.Done():
+							if verbose {
+								log.Println("Context cancelled...")
+							}
+						case <-sigChan:
+							if verbose {
+								log.Println("Signal received...")
+							}
+						}
+
+						// Save HAR file if specified
+						if recorder != nil {
+							if err := recorder.SaveHAR(harFile); err != nil {
+								log.Printf("Failed to save HAR file: %v", err)
+							} else {
+								fmt.Printf("HAR file saved to: %s\n", harFile)
+								fmt.Printf("Recorded %d network requests\n", len(recorder.GetEntries()))
+							}
+						}
+
+						return
+					}
+					// For --harl mode, don't return - fall through to let the shell run
+				}
+			} else {
+				// Use enhanced browser API for interactive mode
+				// Create profile manager
+				pm, err := chromeprofiles.NewProfileManager(
+					chromeprofiles.WithVerbose(verbose),
+				)
+				if err != nil {
+					exitWithError(ExitGeneralError, ErrorTypeGeneral, "%v", err)
+				}
+
+				// Set up browser options
+				browserOpts := []browser.Option{
+					browser.WithHeadless(headless),
+					browser.WithVerbose(verbose),
+					browser.WithTimeout(timeout),
+				}
+
+				if proxy != "" {
+					browserOpts = append(browserOpts, browser.WithProxy(proxy))
+				}
+				if chromeFlags != "" {
+					browserOpts = append(browserOpts, browser.WithChromeFlags(strings.Split(chromeFlags, " ")))
+				}
+
+				if remoteHost != "" {
+					browserOpts = append(browserOpts, browser.WithRemoteChrome(remoteHost, remotePort))
+					if remoteTab != "" {
+						browserOpts = append(browserOpts, browser.WithRemoteTab(remoteTab))
+					}
+				}
+
+				if debugPort > 0 {
+					browserOpts = append(browserOpts, browser.WithDebugPort(debugPort))
+				}
+
+				// Create browser
+				enhancedBrowser, err = browser.New(ctx, pm, browserOpts...)
+				if err != nil {
+					exitWithError(ExitBrowserError, ErrorTypeBrowser, "Failed to create browser: %v", err)
+				}
+				defer enhancedBrowser.Close()
+
+				// Launch browser
+				if err := enhancedBrowser.Launch(ctx); err != nil {
+					exitWithError(ExitBrowserError, ErrorTypeBrowser, "Failed to launch browser: %v", err)
+				}
+
+				// Get or create page
+				if remoteTab != "" {
+					// When we connect to a specific remote tab, the browser context
+					// is already connected to that tab. Get a page wrapper for it.
+					enhancedPage = enhancedBrowser.GetCurrentPage()
+				} else {
+					pages, err := enhancedBrowser.Pages()
+					if err != nil || len(pages) == 0 {
+						enhancedPage, err = enhancedBrowser.NewPage()
+						if err != nil {
+							exitWithError(ExitGeneralError, ErrorTypeGeneral, "Failed to create page: %v", err)
+						}
+					} else {
+						enhancedPage = pages[0]
+					}
+				}
+
+				// Navigate to initial URL
+				if url != "about:blank" && enhancedPage != nil {
+					if err := enhancedPage.Navigate(url); err != nil {
+						log.Printf("Warning: Failed to navigate to %s: %v", url, err)
+					}
+				}
+
+				browserCtx = enhancedPage.Context()
+				browserCancel = func() {} // browser.Close() will handle cleanup
+
+				if remoteHost != "" {
+					fmt.Printf("Connected to remote Chrome at %s:%d\n", remoteHost, remotePort)
+					if remoteTab != "" {
+						fmt.Printf("Connected to tab: %s\n", remoteTab)
+					}
+				}
+
+				if verbose {
+					fmt.Println("Using enhanced browser API for remote Chrome connection")
+				}
+			}
+		} else {
+			// Local Chrome instance with optional profile support
+			var profileManager chromeprofiles.ProfileManager
+			var err error
+
+			// Set up profile management if requested
+			if useProfile != "" {
+				profileManager, err = chromeprofiles.NewProfileManager(
+					chromeprofiles.WithVerbose(verbose),
+				)
+				if err != nil {
+					exitWithError(ExitGeneralError, ErrorTypeProfile, "Failed to create profile manager: %v", err)
+				}
+
+				if err := profileManager.SetupWorkdir(); err != nil {
+					exitWithError(ExitGeneralError, ErrorTypeProfile, "Failed to setup profile working directory: %v", err)
+				}
+				defer profileManager.Cleanup()
+
+				// Parse cookie domains
+				var cookieDomainsSlice []string
+				if cookieDomains != "" {
+					cookieDomainsSlice = splitAndTrim(cookieDomains, ",")
+				}
+
+				// Check for Brave session isolation needs
+				sessionDetector := browser.NewSessionDetector(verbose)
+				needsIsolation := sessionDetector.NeedsBraveSessionIsolation(ctx, chromePath, true)
+
+				if needsIsolation {
+					// Display warning about Brave session reuse
+					fmt.Println(sessionDetector.ImportantWarning())
+
+					// Use Brave session isolation instead of standard profile copy
+					if err := profileManager.BraveSessionIsolation(useProfile, cookieDomainsSlice); err != nil {
+						exitWithError(ExitGeneralError, ErrorTypeProfile, "Failed to create Brave isolated profile '%s': %v", useProfile, err)
+					}
+
+					// Wait for DevTools to be available if debug port is specified
+					if debugPort > 0 {
+						waitCtx, waitCancel := context.WithTimeout(ctx, 10*time.Second)
+						if err := sessionDetector.WaitForDevTools(waitCtx, debugPort, 5*time.Second); err != nil {
+							if verbose {
+								log.Printf("Warning: DevTools verification timed out (non-fatal): %v", err)
+							}
+						}
+						waitCancel()
+					}
+
+					if verbose {
+						log.Printf("Brave session isolation created for profile '%s'", useProfile)
+					}
+				} else {
+					// Standard profile copy
+					if err := profileManager.CopyProfile(useProfile, cookieDomainsSlice); err != nil {
+						exitWithError(ExitGeneralError, ErrorTypeProfile, "Failed to copy profile '%s': %v", useProfile, err)
+					}
+				}
+
+				if verbose {
+					if len(cookieDomainsSlice) > 0 {
+						log.Printf("Using profile '%s' with cookies filtered for domains: %v", useProfile, cookieDomainsSlice)
+					} else {
+						log.Printf("Using profile '%s' with all cookies", useProfile)
 					}
 				}
 			}
-		}
 
-		// Handle CSS selector extraction if provided (for new Chrome instances)
-		if extractSelector != "" {
-			// Ensure browser is fully started before executing extraction
-			if err := chromedp.Run(browserCtx); err != nil {
-				exitWithError(ExitBrowserError, ErrorTypeBrowser, "Failed to start browser context: %v", err)
+			opts := []chromedp.ExecAllocatorOption{
+				chromedp.NoFirstRun,
+				chromedp.NoDefaultBrowserCheck,
+
+				// Add stability flags
+				chromedp.Flag("disable-background-networking", true),
+				chromedp.Flag("disable-background-timer-throttling", true),
+				chromedp.Flag("disable-popup-blocking", true),
+				chromedp.Flag("disable-sync", true),
 			}
 
-			extractionCode := buildExtractionScript(extractSelector, extractMode)
-			var result *runtime.RemoteObject
-			if err := chromedp.Run(browserCtx,
-				chromedp.Navigate(url),
-				chromedp.Evaluate(extractionCode, &result),
-			); err != nil {
-				exitWithError(ExitGeneralError, ErrorTypeGeneral, "Failed to extract content: %v", err)
+			// Add background launch flags to prevent window focusing
+			if background || interactive {
+				opts = append(opts,
+					chromedp.Flag("no-startup-window", true),
+					chromedp.Flag("silent-launch", true),
+				)
+				if verbose {
+					log.Println("Launching browser in background mode")
+				}
 			}
 
-			if result != nil && result.Value != nil {
-				resultStr := string(result.Value)
-				if outputFormat == "json" || (strings.HasPrefix(resultStr, "[") || strings.HasPrefix(resultStr, "{")) {
-					var jsonData interface{}
-					if err := json.Unmarshal([]byte(resultStr), &jsonData); err == nil {
-						prettyJSON, _ := json.MarshalIndent(jsonData, "", "  ")
-						fmt.Println(string(prettyJSON))
+			// Add profile directory if using a profile
+			if profileManager != nil {
+				opts = append(opts, chromedp.UserDataDir(profileManager.WorkDir()))
+				if verbose {
+					log.Printf("Using profile data from: %s", profileManager.WorkDir())
+				}
+			} else if profileDir != "" {
+				opts = append(opts, chromedp.UserDataDir(profileDir))
+				if verbose {
+					log.Printf("Using custom profile directory: %s", profileDir)
+				}
+			} else {
+				// Use default profile directory at ~/.cdp/profiles/default
+				homeDir, err := os.UserHomeDir()
+				if err == nil {
+					defaultProfileDir := filepath.Join(homeDir, ".cdp", "profiles", "default")
+					if err := os.MkdirAll(defaultProfileDir, 0755); err == nil {
+						opts = append(opts, chromedp.UserDataDir(defaultProfileDir))
+						if verbose {
+							log.Printf("Using default profile directory: %s", defaultProfileDir)
+						}
+					}
+				}
+			}
+
+			if headless {
+				opts = append(opts, chromedp.Headless)
+				if verbose {
+					log.Println("Running Chrome in headless mode")
+				}
+			}
+
+			if debugPort > 0 {
+				opts = append(opts, chromedp.Flag("remote-debugging-port", fmt.Sprintf("%d", debugPort)))
+			}
+
+			// Add Chrome path if specified or discovered
+			if chromePath != "" {
+				opts = append(opts, chromedp.ExecPath(chromePath))
+				if verbose {
+					log.Printf("Using Chrome at: %s", chromePath)
+				}
+			}
+
+			// Add window positioning if specified
+			if windowPosition != "" {
+				opts = append(opts, chromedp.Flag("window-position", windowPosition))
+				if verbose {
+					log.Printf("Setting window position: %s", windowPosition)
+				}
+			}
+
+			// Add window size if specified
+			if windowSize != "" {
+				opts = append(opts, chromedp.Flag("window-size", windowSize))
+				if verbose {
+					log.Printf("Setting window size: %s", windowSize)
+				}
+			}
+
+			// Force new window if specified
+			if newWindow {
+				opts = append(opts, chromedp.Flag("new-window", true))
+				if verbose {
+					log.Println("Forcing new window")
+				}
+			}
+
+			// Create Chrome allocator
+			allocCtx, allocCancel := chromedp.NewExecAllocator(ctx, opts...)
+			defer allocCancel()
+
+			// Create Chrome browser context
+			if verbose {
+				browserCtx, browserCancel = chromedp.NewContext(allocCtx,
+					chromedp.WithLogf(filteredLogf),
+					chromedp.WithErrorf(filteredErrorf))
+			} else {
+				browserCtx, browserCancel = chromedp.NewContext(allocCtx,
+					chromedp.WithErrorf(filteredErrorf))
+			}
+
+			// Initialize browser context when using profiles to ensure profile loads before navigation
+			if profileManager != nil {
+				if verbose {
+					log.Println("Initializing browser with profile...")
+				}
+				// Ensure browser is fully started and profile is loaded before any navigation
+				if err := chromedp.Run(browserCtx); err != nil {
+					exitWithError(ExitBrowserError, ErrorTypeBrowser, "Failed to initialize browser with profile: %v", err)
+				}
+				if verbose {
+					log.Println("Browser profile initialized successfully")
+				}
+			}
+
+			// If CDP proxy is enabled, reconnect through the proxy after browser launch
+			// This ensures all CDP traffic goes through the observer
+			if proxyConnectViaRemote {
+				// First, ensure browser is fully started
+				if err := chromedp.Run(browserCtx); err != nil {
+					exitWithError(ExitBrowserError, ErrorTypeBrowser, "Failed to start browser: %v", err)
+				}
+
+				// Wait for browser to be fully ready on its debug port
+				time.Sleep(200 * time.Millisecond)
+
+				// Verify browser is responding on target port
+				browserURL := fmt.Sprintf("http://localhost:%d/json/version", proxyTargetBrowserPort)
+				for i := 0; i < 10; i++ {
+					resp, err := http.Get(browserURL)
+					if err == nil {
+						resp.Body.Close()
+						break
+					}
+					time.Sleep(100 * time.Millisecond)
+				}
+
+				if verbose {
+					log.Printf("Browser started on port %d, reconnecting through proxy on port %d", proxyTargetBrowserPort, proxyListenPort)
+				}
+
+				// Cancel the direct connection but don't close the browser
+				// We'll reconnect through the proxy
+				// Note: allocCancel would kill the browser, so we don't call it
+
+				// Create new context connecting through the proxy
+				proxyURL := fmt.Sprintf("ws://localhost:%d", proxyListenPort)
+				proxyAllocCtx, proxyAllocCancel := chromedp.NewRemoteAllocator(ctx, proxyURL)
+				defer proxyAllocCancel()
+
+				var proxyOpts []chromedp.ContextOption
+				proxyOpts = append(proxyOpts, chromedp.WithErrorf(filteredErrorf))
+				if verbose {
+					proxyOpts = append(proxyOpts, chromedp.WithLogf(filteredLogf))
+				}
+
+				browserCtx, browserCancel = chromedp.NewContext(proxyAllocCtx, proxyOpts...)
+
+				if verbose {
+					log.Printf("Reconnected to browser through CDP proxy")
+				}
+			}
+
+			// Set up HAR recording if requested (for new Chrome instances)
+			var harlWriter *os.File
+			if harlStream {
+				if harlFile == "-" {
+					harlWriter = os.Stdout
+				} else {
+					f, err := os.OpenFile(harlFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+					if err != nil {
+						exitWithError(ExitGeneralError, ErrorTypeGeneral, "Failed to open HARL output file: %v", err)
+					}
+					harlWriter = f
+					defer harlWriter.Close()
+				}
+			}
+
+			if harFile != "" || harlStream {
+				if harMode == "enhanced" {
+					// Use enhanced recorder with full capture
+					var err error
+					enhancedRecorder, err = harrecorder.New(
+						harrecorder.WithVerbose(verbose),
+						harrecorder.WithStreaming(harlStream),
+						harrecorder.WithOutputDir(outputDir),
+					)
+					if err != nil {
+						exitWithError(ExitGeneralError, ErrorTypeGeneral, "Failed to create enhanced recorder: %v", err)
+					}
+				} else {
+					recorder = &NetworkRecorder{}
+				}
+
+				// Enable network events BEFORE any navigation
+				// This is critical: network.Enable() and listener attachment must happen before
+				// any navigation to ensure we capture the initial page request and all network events
+				if verbose {
+					log.Printf("Enabling network recording and attaching event listeners...")
+				}
+
+				if err := chromedp.Run(browserCtx,
+					network.Enable(),
+					chromedp.ActionFunc(func(ctx context.Context) error {
+						// Attach listeners synchronously within the same action
+						if harMode == "enhanced" {
+							chromedp.ListenTarget(ctx, enhancedRecorder.HandleNetworkEvent(ctx))
+						} else {
+							chromedp.ListenTarget(ctx, func(ev interface{}) {
+								switch ev := ev.(type) {
+								case *network.EventResponseReceived:
+									if verbose {
+										log.Printf("Response received: %s", ev.Response.URL)
+									}
+
+									// Create basic HAR entry
+									entry := HAREntry{
+										StartedDateTime: time.Now().Format(time.RFC3339),
+										Request: map[string]interface{}{
+											"method":  "GET", // Simplified
+											"url":     ev.Response.URL,
+											"headers": []interface{}{},
+										},
+										Response: map[string]interface{}{
+											"status":     ev.Response.Status,
+											"statusText": ev.Response.StatusText,
+											"headers":    []interface{}{},
+											"content": map[string]interface{}{
+												"size":     0,
+												"mimeType": ev.Response.MimeType,
+											},
+										},
+										Time: 0, // Simplified
+									}
+
+									recorder.AddEntry(entry)
+
+									// Stream entry as NDJSON if --harl is enabled
+									if harlStream {
+										if jsonBytes, err := json.Marshal(entry); err == nil {
+											fmt.Fprintln(harlWriter, string(jsonBytes))
+										}
+									}
+								}
+							})
+						}
+						if verbose {
+							log.Printf("Network event listeners attached successfully")
+						}
+						return nil
+					}),
+				); err != nil {
+					exitWithError(ExitGeneralError, ErrorTypeNetwork, "Failed to enable network monitoring: %v", err)
+				}
+
+				if harFile != "" {
+					if harMode == "enhanced" {
+						fmt.Printf("Recording network traffic to: %s (enhanced mode)\n", harFile)
+					} else {
+						fmt.Printf("Recording network traffic to: %s\n", harFile)
+					}
+				}
+				if harlStream {
+					if verbose {
+						if harlFile == "-" {
+							log.Println("Streaming HAR entries as NDJSON to stdout")
+						} else {
+							log.Printf("Streaming HAR entries as NDJSON to %s", harlFile)
+						}
+					}
+				}
+			}
+
+			// Handle CSS selector extraction if provided (for new Chrome instances)
+			if extractSelector != "" {
+				// Ensure browser is fully started before executing extraction
+				if err := chromedp.Run(browserCtx); err != nil {
+					exitWithError(ExitBrowserError, ErrorTypeBrowser, "Failed to start browser context: %v", err)
+				}
+
+				extractionCode := buildExtractionScript(extractSelector, extractMode)
+				var result *runtime.RemoteObject
+				if err := chromedp.Run(browserCtx,
+					chromedp.Navigate(url),
+					chromedp.Evaluate(extractionCode, &result),
+				); err != nil {
+					exitWithError(ExitGeneralError, ErrorTypeGeneral, "Failed to extract content: %v", err)
+				}
+
+				if result != nil && result.Value != nil {
+					resultStr := string(result.Value)
+					if outputFormat == "json" || (strings.HasPrefix(resultStr, "[") || strings.HasPrefix(resultStr, "{")) {
+						var jsonData interface{}
+						if err := json.Unmarshal([]byte(resultStr), &jsonData); err == nil {
+							prettyJSON, _ := json.MarshalIndent(jsonData, "", "  ")
+							fmt.Println(string(prettyJSON))
+						} else {
+							fmt.Println(resultStr)
+						}
 					} else {
 						fmt.Println(resultStr)
 					}
-				} else {
-					fmt.Println(resultStr)
 				}
-			}
-			return
-		}
-
-		// Execute JavaScript if provided (for new Chrome instances)
-		if len(jsScripts) > 0 {
-			// Ensure browser is fully started before executing JavaScript
-			if err := chromedp.Run(browserCtx); err != nil {
-				exitWithError(ExitBrowserError, ErrorTypeBrowser, "Failed to start browser context: %v", err)
+				return
 			}
 
-			var results []interface{}
-			// Prepare results slice with space for all scripts
-			results = make([]interface{}, len(jsScripts))
+			// Execute JavaScript and/or take screenshots (for new Chrome instances)
+			if len(jsScripts) > 0 || screenshotRequested {
+				// Ensure browser is fully started before executing JavaScript
+				if err := chromedp.Run(browserCtx); err != nil {
+					exitWithError(ExitBrowserError, ErrorTypeBrowser, "Failed to start browser context: %v", err)
+				}
 
-			// Build tasks for all scripts to execute in same context
-			tasks := make([]chromedp.Action, len(jsScripts)+1)
-			scriptResults := make([]*runtime.RemoteObject, len(jsScripts))
+				var results []interface{}
+				// Prepare results slice with space for all scripts
+				results = make([]interface{}, len(jsScripts))
 
-			// First action: navigate to URL
-			tasks[0] = chromedp.Navigate(url)
+				// Build tasks for navigation and script execution
+				var tasks []chromedp.Action
+				scriptResults := make([]*runtime.RemoteObject, len(jsScripts))
 
-			// Build evaluate actions for all scripts
-			for i, jsCode := range jsScripts {
-				// Capture current index to avoid closure issues
-				idx := i
-				code := jsCode
-				tasks[i+1] = chromedp.Evaluate(code, &scriptResults[idx])
-			}
+				// Set up console monitoring if requested
+				if monitorConsole {
+					chromedp.ListenTarget(browserCtx, consoleListener(verbose, consoleStacks))
+					tasks = append(tasks, runtime.Enable())
+				}
 
-			if err := chromedp.Run(browserCtx, tasks...); err != nil {
-				// Provide improved error messages with context
-				for scriptIdx, jsCode := range jsScripts {
-					errorMsg := fmt.Sprintf("script %d: ", scriptIdx+1)
-					if strings.Contains(err.Error(), "SyntaxError") {
-						if strings.Contains(jsCode, ":contains(") {
-							exitWithError(ExitGeneralError, ErrorTypeJavaScript, "%sJavaScript Syntax Error: :contains() is not valid CSS. Use Array.from(document.querySelectorAll('button')).filter(btn => btn.textContent.includes('text')) instead.\nOriginal error: %v", errorMsg, err)
-						} else {
-							exitWithError(ExitGeneralError, ErrorTypeJavaScript, "%sJavaScript Syntax Error in code '%s': %v", errorMsg, jsCode, err)
+				// First action: navigate to URL
+				tasks = append(tasks, chromedp.Navigate(url))
+
+				// If -wait-ready, wait for page load + network idle before running JS
+				if waitReady {
+					tasks = append(tasks,
+						// Wait for document.readyState === 'complete'
+						chromedp.WaitReady("body", chromedp.ByQuery),
+						// Wait for network idle (no new requests for 500ms)
+						chromedp.ActionFunc(func(ctx context.Context) error {
+							const waitScript = `new Promise(resolve => {
+								let timer;
+								const check = () => {
+									timer = setTimeout(() => {
+										if (document.readyState === 'complete') {
+											resolve(true);
+										} else {
+											check();
+										}
+									}, 500);
+								};
+								// Also observe for new resource loads via PerformanceObserver
+								let lastActivity = Date.now();
+								try {
+									const observer = new PerformanceObserver(() => { lastActivity = Date.now(); });
+									observer.observe({entryTypes: ['resource']});
+									const poll = () => {
+										if (Date.now() - lastActivity > 500) {
+											observer.disconnect();
+											resolve(true);
+										} else {
+											setTimeout(poll, 200);
+										}
+									};
+									// Start polling after initial wait
+									setTimeout(poll, 500);
+								} catch(e) {
+									// Fallback: just wait a fixed time
+									setTimeout(() => resolve(true), 1000);
+								}
+							})`
+							var result bool
+							return chromedp.Evaluate(waitScript, &result,
+								func(p *runtime.EvaluateParams) *runtime.EvaluateParams {
+									return p.WithAwaitPromise(true)
+								},
+							).Do(ctx)
+						}),
+					)
+				}
+
+				// Build evaluate actions for all scripts
+				var evalOpts []chromedp.EvaluateOption
+				if awaitPromise {
+					evalOpts = append(evalOpts, func(p *runtime.EvaluateParams) *runtime.EvaluateParams {
+						return p.WithAwaitPromise(true)
+					})
+				}
+				for i, jsCode := range jsScripts {
+					idx := i
+					code := jsCode
+					tasks = append(tasks, chromedp.Evaluate(code, &scriptResults[idx], evalOpts...))
+				}
+
+				if err := chromedp.Run(browserCtx, tasks...); err != nil {
+					// Provide improved error messages with context
+					for scriptIdx, jsCode := range jsScripts {
+						errorMsg := fmt.Sprintf("script %d: ", scriptIdx+1)
+						if strings.Contains(err.Error(), "SyntaxError") {
+							if strings.Contains(jsCode, ":contains(") {
+								exitWithError(ExitGeneralError, ErrorTypeJavaScript, "%sJavaScript Syntax Error: :contains() is not valid CSS. Use Array.from(document.querySelectorAll('button')).filter(btn => btn.textContent.includes('text')) instead.\nOriginal error: %v", errorMsg, err)
+							} else {
+								exitWithError(ExitGeneralError, ErrorTypeJavaScript, "%sJavaScript Syntax Error in code '%s': %v", errorMsg, jsCode, err)
+							}
+						} else if strings.Contains(err.Error(), "not a valid selector") {
+							exitWithError(ExitGeneralError, ErrorTypeJavaScript, "%sInvalid CSS Selector: Use standard CSS selectors or JavaScript filtering methods.\nOriginal error: %v", errorMsg, err)
 						}
-					} else if strings.Contains(err.Error(), "not a valid selector") {
-						exitWithError(ExitGeneralError, ErrorTypeJavaScript, "%sInvalid CSS Selector: Use standard CSS selectors or JavaScript filtering methods.\nOriginal error: %v", errorMsg, err)
 					}
+					// If we couldn't identify which script failed, report the first one
+					exitWithError(ExitGeneralError, ErrorTypeJavaScript, "Failed to execute JavaScript scripts: %v", err)
 				}
-				// If we couldn't identify which script failed, report the first one
-				exitWithError(ExitGeneralError, ErrorTypeJavaScript, "Failed to execute JavaScript scripts: %v", err)
-			}
 
-			// Extract result values from all scripts
-			for i, result := range scriptResults {
-				var resultValue interface{}
-				if result != nil && result.Value != nil {
-					// Try to parse JSON values for proper type preservation
-					var val interface{}
-					if err := json.Unmarshal(result.Value, &val); err == nil {
-						resultValue = val
+				// Extract result values from all scripts
+				for i, result := range scriptResults {
+					var resultValue interface{}
+					if result != nil && result.Value != nil {
+						// Try to parse JSON values for proper type preservation
+						var val interface{}
+						if err := json.Unmarshal(result.Value, &val); err == nil {
+							resultValue = val
+						} else {
+							resultValue = string(result.Value)
+						}
 					} else {
-						resultValue = string(result.Value)
+						resultValue = nil
 					}
-				} else {
-					resultValue = nil
+					results[i] = resultValue
 				}
-				results[i] = resultValue
+
+				// Output results based on format
+				if len(jsScripts) > 0 {
+					if outputFormat == "json" {
+						jsonData, err := json.MarshalIndent(results, "", "  ")
+						if err != nil {
+							exitWithError(ExitGeneralError, ErrorTypeGeneral, "Failed to marshal script results to JSON: %v", err)
+						}
+						fmt.Println(string(jsonData))
+					} else {
+						// Default text format: one result per line
+						fmt.Printf("✓ Executed %d JavaScript script(s) in new Chrome instance\n", len(jsScripts))
+						for scriptIdx, result := range results {
+							if scriptIdx > 0 {
+								fmt.Println()
+							}
+							fmt.Printf("Script %d result: %v\n", scriptIdx+1, result)
+						}
+					}
+				}
+
+				// Take screenshot if requested via -screenshot flag (local Chrome path)
+				if screenshotRequested {
+					if err := handleScreenshotCommand(browserCtx, screenshotSelector, outputFormat); err != nil {
+						exitWithError(ExitGeneralError, ErrorTypeGeneral, "Screenshot failed: %v", err)
+					}
+				}
+
+				// Save HAR file if recording and exit
+				if harFile != "" {
+					if harMode == "enhanced" && enhancedRecorder != nil {
+						if err := enhancedRecorder.WriteHAR(harFile); err != nil {
+							log.Printf("Failed to save HAR file: %v", err)
+						} else {
+							fmt.Printf("HAR file saved to: %s\n", harFile)
+							// Get entry count from HAR
+							har, _ := enhancedRecorder.HAR()
+							if har != nil {
+								fmt.Printf("Recorded %d network requests\n", len(har.Log.Entries))
+							}
+						}
+					} else if recorder != nil {
+						if err := recorder.SaveHAR(harFile); err != nil {
+							log.Printf("Failed to save HAR file: %v", err)
+						} else {
+							fmt.Printf("HAR file saved to: %s\n", harFile)
+							fmt.Printf("Recorded %d network requests\n", len(recorder.GetEntries()))
+						}
+					}
+				}
+
+				return
 			}
 
-			// Output results based on format
-			if outputFormat == "json" {
-				jsonData, err := json.MarshalIndent(results, "", "  ")
-				if err != nil {
-					exitWithError(ExitGeneralError, ErrorTypeGeneral, "Failed to marshal script results to JSON: %v", err)
+			// If HAR capture without JS and NOT in shell mode, navigate and wait for user interaction
+			if (harFile != "" || harlStream) && !shell {
+				// CRITICAL: Navigate to URL with network monitoring active
+				// This ensures we capture all network events including the initial page request
+				if verbose {
+					log.Printf("Network monitoring is active, proceeding with navigation...")
 				}
-				fmt.Println(string(jsonData))
-			} else {
-				// Default text format: one result per line
-				fmt.Printf("✓ Executed %d JavaScript script(s) in new Chrome instance\n", len(jsScripts))
-				for scriptIdx, result := range results {
-					if scriptIdx > 0 {
-						fmt.Println()
-					}
-					fmt.Printf("Script %d result: %v\n", scriptIdx+1, result)
-				}
-			}
 
-			// Save HAR file if recording and exit
-			if harFile != "" {
+				if err := chromedp.Run(browserCtx, chromedp.Navigate(url)); err != nil {
+					exitWithError(ExitNavigationError, ErrorTypeNavigation, "Failed to navigate to %s: %v", url, err)
+				}
+
+				fmt.Printf("Chrome launched and connected to %s\n", url)
+				fmt.Println("Press Ctrl+C to stop recording and save HAR file...")
+
+				// Wait for signal or timeout
+				select {
+				case <-ctx.Done():
+					if verbose {
+						log.Println("Context cancelled...")
+					}
+				case <-sigChan:
+					if verbose {
+						log.Println("Signal received...")
+					}
+				}
+
+				// Save HAR file
 				if harMode == "enhanced" && enhancedRecorder != nil {
 					if err := enhancedRecorder.WriteHAR(harFile); err != nil {
 						log.Printf("Failed to save HAR file: %v", err)
 					} else {
 						fmt.Printf("HAR file saved to: %s\n", harFile)
-						// Get entry count from HAR
 						har, _ := enhancedRecorder.HAR()
 						if har != nil {
 							fmt.Printf("Recorded %d network requests\n", len(har.Log.Entries))
@@ -2085,39 +2741,281 @@ func main() {
 						fmt.Printf("Recorded %d network requests\n", len(recorder.GetEntries()))
 					}
 				}
+
+				return
 			}
 
+			// Start and connect to browser
+			if err := chromedp.Run(browserCtx, chromedp.Navigate(url)); err != nil {
+				exitWithError(ExitBrowserError, ErrorTypeBrowser, "Error launching Chrome: %v", err)
+			}
+		}
+		defer browserCancel()
+
+		// Start console monitoring if requested
+		if monitorConsole {
+			startConsoleMonitor(browserCtx, verbose, consoleStacks)
+			if verbose {
+				log.Println("Console monitoring enabled")
+			}
+		}
+
+		// Determine if we should run interactive shell mode
+		// Enter shell if: --shell flag explicitly set, OR (no JS scripts AND no HAR file AND no HARL streaming)
+		// Note: --harl streaming implies interactive browsing, so we should run shell
+		shouldRunShell := shell || harlStream || (len(jsScripts) == 0 && harFile == "")
+
+		if !shouldRunShell {
+			// Direct execution mode already handled above
 			return
 		}
 
-		// If HAR capture without JS and NOT in shell mode, navigate and wait for user interaction
-		if (harFile != "" || harlStream) && !shell {
-			// CRITICAL: Navigate to URL with network monitoring active
-			// This ensures we capture all network events including the initial page request
-			if verbose {
-				log.Printf("Network monitoring is active, proceeding with navigation...")
+		// Interactive loop
+		fmt.Println("Connected to Chrome. Type commands or 'help' for assistance.")
+		fmt.Println("Examples: 'goto https://example.com', 'title', 'screenshot'")
+		fmt.Println("Type 'exit' or press Ctrl+C to quit")
+
+		scanner := bufio.NewScanner(os.Stdin)
+
+		// Create a channel to signal when scanner input is ready
+		inputChan := make(chan string)
+		go func() {
+			for scanner.Scan() {
+				inputChan <- scanner.Text()
 			}
+			close(inputChan)
+		}()
 
-			if err := chromedp.Run(browserCtx, chromedp.Navigate(url)); err != nil {
-				exitWithError(ExitNavigationError, ErrorTypeNavigation, "Failed to navigate to %s: %v", url, err)
-			}
+		for {
+			fmt.Print("cdp> ")
 
-			fmt.Printf("Chrome launched and connected to %s\n", url)
-			fmt.Println("Press Ctrl+C to stop recording and save HAR file...")
-
-			// Wait for signal or timeout
+			// Wait for either input or context cancellation
 			select {
 			case <-ctx.Done():
-				if verbose {
-					log.Println("Context cancelled...")
+				// Context was canceled (Ctrl+C)
+				fmt.Println()
+				goto cleanup
+			case text, ok := <-inputChan:
+				if !ok {
+					// Scanner closed (EOF)
+					goto cleanup
 				}
-			case <-sigChan:
-				if verbose {
-					log.Println("Signal received...")
+
+				line := strings.TrimSpace(text)
+				if line == "" {
+					continue
+				}
+
+				if line == "exit" || line == "quit" {
+					goto cleanup
+				}
+
+				// Handle 'hup' command - detach from browser without closing it
+				if line == "hup" {
+					// Get target info for reconnection
+					c := chromedp.FromContext(browserCtx)
+					var targetID string
+					var port int = debugPort
+					if c != nil && c.Target != nil {
+						targetID = string(c.Target.TargetID)
+					}
+					if port == 0 {
+						port = remotePort
+					}
+
+					fmt.Println("\nDetaching from browser (browser will remain open)")
+					fmt.Println("\nTo reconnect to this session:")
+					if targetID != "" {
+						fmt.Printf("  cdp --remote-port=%d --tab=%s\n", port, targetID)
+					} else {
+						fmt.Printf("  cdp --remote-port=%d\n", port)
+					}
+					fmt.Println("\nTo list available tabs:")
+					fmt.Printf("  cdp --remote-port=%d --list-tabs\n", port)
+
+					// Cancel only the cdp context, not the browser
+					// Use os.Exit to avoid cleanup that would close the browser
+					os.Exit(0)
+				}
+
+				if line == "help" {
+					printHelp()
+					continue
+				}
+
+				if line == "help aliases" {
+					printAliases()
+					continue
+				}
+
+				// Handle special commands
+				parts := strings.SplitN(line, " ", 2)
+				cmd := parts[0]
+
+				// Handle console monitoring toggle
+				if cmd == "console" {
+					if !monitorConsole {
+						monitorConsole = true
+						startConsoleMonitor(browserCtx, verbose, consoleStacks)
+						fmt.Println("Console monitoring enabled (errors, warnings, and logs will appear)")
+					} else {
+						fmt.Println("Console monitoring is already active")
+					}
+					continue
+				}
+
+				// Handle screenshot command
+				if cmd == "screenshot" {
+					args := ""
+					if len(parts) > 1 {
+						args = parts[1]
+					}
+					if err := handleScreenshotCommand(browserCtx, args, outputFormat); err != nil {
+						fmt.Printf("Error: %v\n", err)
+					}
+					continue
+				}
+
+				// Handle sources command
+				if cmd == "sources" {
+					if err := handleSourcesCommand(browserCtx, parts); err != nil {
+						fmt.Printf("Error: %v\n", err)
+					}
+					continue
+				}
+
+				// Handle jsfile command - execute JavaScript from a file
+				if cmd == "jsfile" {
+					if len(parts) < 2 {
+						fmt.Println("Usage: jsfile <path>")
+						continue
+					}
+					filePath := strings.TrimSpace(parts[1])
+					scriptBytes, err := os.ReadFile(filePath)
+					if err != nil {
+						fmt.Printf("Error reading file: %v\n", err)
+						continue
+					}
+					script := string(scriptBytes)
+					var result interface{}
+					if err := chromedp.Run(browserCtx, chromedp.Evaluate(script, &result)); err != nil {
+						fmt.Printf("Error: %v\n", err)
+						continue
+					}
+					if result != nil {
+						resultJSON, _ := json.MarshalIndent(result, "", "  ")
+						fmt.Printf("Result: %s\n", resultJSON)
+					}
+					continue
+				}
+
+				// Handle annotation commands if enhanced recorder is active
+				if enhancedRecorder != nil {
+					switch cmd {
+					case "note":
+						if len(parts) < 2 {
+							fmt.Println("Usage: note <description>")
+							continue
+						}
+						if verbose {
+							fmt.Printf("\033[90m[verbose] Adding note annotation...\033[0m\n")
+						}
+						if err := enhancedRecorder.AddNote(browserCtx, parts[1]); err != nil {
+							fmt.Printf("Error adding note: %v\n", err)
+							if verbose {
+								fmt.Printf("\033[90m[verbose] Note addition failed: %v\033[0m\n", err)
+							}
+						} else {
+							fmt.Printf("✓ Note added: %s\n", parts[1])
+							if verbose {
+								fmt.Printf("\033[90m[verbose] Note annotation completed successfully\033[0m\n")
+							}
+						}
+						continue
+					case "screenshot":
+						description := "Screenshot"
+						if len(parts) >= 2 {
+							description = parts[1]
+						}
+						if verbose {
+							fmt.Printf("\033[90m[verbose] Capturing screenshot annotation...\033[0m\n")
+						}
+						if err := enhancedRecorder.AddScreenshot(browserCtx, description); err != nil {
+							fmt.Printf("Error capturing screenshot: %v\n", err)
+							if verbose {
+								fmt.Printf("\033[90m[verbose] Screenshot capture failed: %v\033[0m\n", err)
+							}
+						} else {
+							fmt.Printf("✓ Screenshot captured: %s\n", description)
+							if verbose {
+								fmt.Printf("\033[90m[verbose] Screenshot annotation completed successfully\033[0m\n")
+							}
+						}
+						continue
+					case "dom":
+						description := "DOM Snapshot"
+						if len(parts) >= 2 {
+							description = parts[1]
+						}
+						if verbose {
+							fmt.Printf("\033[90m[verbose] Capturing DOM snapshot annotation...\033[0m\n")
+						}
+						if err := enhancedRecorder.AddDOMSnapshot(browserCtx, description); err != nil {
+							fmt.Printf("Error capturing DOM: %v\n", err)
+							if verbose {
+								fmt.Printf("\033[90m[verbose] DOM capture failed: %v\033[0m\n", err)
+							}
+						} else {
+							fmt.Printf("✓ DOM snapshot captured: %s\n", description)
+							if verbose {
+								fmt.Printf("\033[90m[verbose] DOM snapshot annotation completed successfully\033[0m\n")
+							}
+						}
+						continue
+					}
+				}
+
+				// Process command or alias
+				var cmdToRun string
+
+				if alias, ok := aliases[cmd]; ok {
+					// It's an alias
+					cmdToRun = alias
+
+					// Check if it has parameters
+					if strings.Contains(alias, "$1") && len(parts) > 1 {
+						cmdToRun = strings.ReplaceAll(cmdToRun, "$1", parts[1])
+					}
+
+					fmt.Printf("Alias: %s\n", cmdToRun)
+				} else {
+					// Raw CDP command
+					cmdToRun = line
+				}
+
+				// Execute command with enhanced page if available
+				if enhancedPage != nil && strings.HasPrefix(cmdToRun, "@") {
+					// Execute enhanced command
+					if err := executeEnhancedCommand(enhancedPage, strings.TrimPrefix(cmdToRun, "@")); err != nil {
+						fmt.Printf("Error: %v\n", err)
+					}
+				} else {
+					// Execute standard CDP command
+					if err := executeCommand(browserCtx, cmdToRun); err != nil {
+						fmt.Printf("Error: %v\n", err)
+					}
 				}
 			}
+		}
 
-			// Save HAR file
+	cleanup:
+
+		if err := scanner.Err(); err != nil {
+			exitWithError(ExitGeneralError, ErrorTypeGeneral, "Error reading input: %v", err)
+		}
+
+		// Save HAR file if recording was enabled
+		if harFile != "" {
 			if harMode == "enhanced" && enhancedRecorder != nil {
 				if err := enhancedRecorder.WriteHAR(harFile); err != nil {
 					log.Printf("Failed to save HAR file: %v", err)
@@ -2136,217 +3034,10 @@ func main() {
 					fmt.Printf("Recorded %d network requests\n", len(recorder.GetEntries()))
 				}
 			}
-
-			return
 		}
 
-		// Start and connect to browser
-		if err := chromedp.Run(browserCtx, chromedp.Navigate(url)); err != nil {
-			exitWithError(ExitBrowserError, ErrorTypeBrowser, "Error launching Chrome: %v", err)
-		}
+		fmt.Println("Exiting...")
 	}
-	defer browserCancel()
-
-	// Determine if we should run interactive shell mode
-	// Enter shell if: --shell flag explicitly set, OR (no JS scripts AND no HAR file)
-	// Note: --shell allows combining interactive mode with HAR recording
-	shouldRunShell := shell || (len(jsScripts) == 0 && harFile == "" && !harlStream)
-
-	if !shouldRunShell {
-		// Direct execution mode already handled above
-		return
-	}
-
-	// Interactive loop
-	fmt.Println("Connected to Chrome. Type commands or 'help' for assistance.")
-	fmt.Println("Examples: 'goto https://example.com', 'title', 'screenshot'")
-	fmt.Println("Type 'exit' or press Ctrl+C to quit")
-
-	scanner := bufio.NewScanner(os.Stdin)
-
-	// Create a channel to signal when scanner input is ready
-	inputChan := make(chan string)
-	go func() {
-		for scanner.Scan() {
-			inputChan <- scanner.Text()
-		}
-		close(inputChan)
-	}()
-
-	for {
-		fmt.Print("cdp> ")
-
-		// Wait for either input or context cancellation
-		select {
-		case <-ctx.Done():
-			// Context was canceled (Ctrl+C)
-			fmt.Println()
-			goto cleanup
-		case text, ok := <-inputChan:
-			if !ok {
-				// Scanner closed (EOF)
-				goto cleanup
-			}
-
-			line := strings.TrimSpace(text)
-			if line == "" {
-				continue
-			}
-
-			if line == "exit" || line == "quit" {
-				goto cleanup
-			}
-
-			if line == "help" {
-				printHelp()
-				continue
-			}
-
-			if line == "help aliases" {
-				printAliases()
-				continue
-			}
-
-			// Handle special commands
-			parts := strings.SplitN(line, " ", 2)
-			cmd := parts[0]
-
-			// Handle sources command
-			if cmd == "sources" {
-				if err := handleSourcesCommand(browserCtx, parts); err != nil {
-					fmt.Printf("Error: %v\n", err)
-				}
-				continue
-			}
-
-			// Handle annotation commands if enhanced recorder is active
-			if enhancedRecorder != nil {
-				switch cmd {
-				case "note":
-					if len(parts) < 2 {
-						fmt.Println("Usage: note <description>")
-						continue
-					}
-					if verbose {
-						fmt.Printf("\033[90m[verbose] Adding note annotation...\033[0m\n")
-					}
-					if err := enhancedRecorder.AddNote(browserCtx, parts[1]); err != nil {
-						fmt.Printf("Error adding note: %v\n", err)
-						if verbose {
-							fmt.Printf("\033[90m[verbose] Note addition failed: %v\033[0m\n", err)
-						}
-					} else {
-						fmt.Printf("✓ Note added: %s\n", parts[1])
-						if verbose {
-							fmt.Printf("\033[90m[verbose] Note annotation completed successfully\033[0m\n")
-						}
-					}
-					continue
-				case "screenshot":
-					description := "Screenshot"
-					if len(parts) >= 2 {
-						description = parts[1]
-					}
-					if verbose {
-						fmt.Printf("\033[90m[verbose] Capturing screenshot annotation...\033[0m\n")
-					}
-					if err := enhancedRecorder.AddScreenshot(browserCtx, description); err != nil {
-						fmt.Printf("Error capturing screenshot: %v\n", err)
-						if verbose {
-							fmt.Printf("\033[90m[verbose] Screenshot capture failed: %v\033[0m\n", err)
-						}
-					} else {
-						fmt.Printf("✓ Screenshot captured: %s\n", description)
-						if verbose {
-							fmt.Printf("\033[90m[verbose] Screenshot annotation completed successfully\033[0m\n")
-						}
-					}
-					continue
-				case "dom":
-					description := "DOM Snapshot"
-					if len(parts) >= 2 {
-						description = parts[1]
-					}
-					if verbose {
-						fmt.Printf("\033[90m[verbose] Capturing DOM snapshot annotation...\033[0m\n")
-					}
-					if err := enhancedRecorder.AddDOMSnapshot(browserCtx, description); err != nil {
-						fmt.Printf("Error capturing DOM: %v\n", err)
-						if verbose {
-							fmt.Printf("\033[90m[verbose] DOM capture failed: %v\033[0m\n", err)
-						}
-					} else {
-						fmt.Printf("✓ DOM snapshot captured: %s\n", description)
-						if verbose {
-							fmt.Printf("\033[90m[verbose] DOM snapshot annotation completed successfully\033[0m\n")
-						}
-					}
-					continue
-				}
-			}
-
-			// Process command or alias
-			var cmdToRun string
-
-			if alias, ok := aliases[cmd]; ok {
-				// It's an alias
-				cmdToRun = alias
-
-				// Check if it has parameters
-				if strings.Contains(alias, "$1") && len(parts) > 1 {
-					cmdToRun = strings.ReplaceAll(cmdToRun, "$1", parts[1])
-				}
-
-				fmt.Printf("Alias: %s\n", cmdToRun)
-			} else {
-				// Raw CDP command
-				cmdToRun = line
-			}
-
-			// Execute command with enhanced page if available
-			if enhancedPage != nil && strings.HasPrefix(cmdToRun, "@") {
-				// Execute enhanced command
-				if err := executeEnhancedCommand(enhancedPage, strings.TrimPrefix(cmdToRun, "@")); err != nil {
-					fmt.Printf("Error: %v\n", err)
-				}
-			} else {
-				// Execute standard CDP command
-				if err := executeCommand(browserCtx, cmdToRun); err != nil {
-					fmt.Printf("Error: %v\n", err)
-				}
-			}
-		}
-	}
-
-cleanup:
-
-	if err := scanner.Err(); err != nil {
-		exitWithError(ExitGeneralError, ErrorTypeGeneral, "Error reading input: %v", err)
-	}
-
-	// Save HAR file if recording was enabled
-	if harFile != "" {
-		if harMode == "enhanced" && enhancedRecorder != nil {
-			if err := enhancedRecorder.WriteHAR(harFile); err != nil {
-				log.Printf("Failed to save HAR file: %v", err)
-			} else {
-				fmt.Printf("HAR file saved to: %s\n", harFile)
-				har, _ := enhancedRecorder.HAR()
-				if har != nil {
-					fmt.Printf("Recorded %d network requests\n", len(har.Log.Entries))
-				}
-			}
-		} else if recorder != nil {
-			if err := recorder.SaveHAR(harFile); err != nil {
-				log.Printf("Failed to save HAR file: %v", err)
-			} else {
-				fmt.Printf("HAR file saved to: %s\n", harFile)
-				fmt.Printf("Recorded %d network requests\n", len(recorder.GetEntries()))
-			}
-		}
-	}
-
-	fmt.Println("Exiting...")
 }
 
 func executeCommand(ctx context.Context, command string) error {
@@ -2414,19 +3105,7 @@ func executeCommand(ctx context.Context, command string) error {
 
 	// Special case for screenshots which are very common
 	if method == "Page.captureScreenshot" {
-		var buf []byte
-		if err := chromedp.Run(ctx, chromedp.CaptureScreenshot(&buf)); err != nil {
-			return err
-		}
-
-		// Save screenshot to file
-		filename := fmt.Sprintf("screenshot-%d.png", time.Now().Unix())
-		if err := os.WriteFile(filename, buf, 0644); err != nil {
-			return errors.Wrap(err, "saving screenshot")
-		}
-
-		fmt.Println("Screenshot saved to:", filename)
-		return nil
+		return handleScreenshotCommand(ctx, "", "text")
 	}
 
 	// For other commands, we provide a simplified implementation
@@ -2742,6 +3421,164 @@ func handleSourcesCommand(ctx context.Context, parts []string) error {
 	return nil
 }
 
+// consoleListener returns a chromedp event handler that prints console
+// messages and exceptions to stderr. When showStacks is false, exceptions
+// are rendered as a compact single line.
+func consoleListener(verbose, showStacks bool) func(interface{}) {
+	return func(ev interface{}) {
+		switch ev := ev.(type) {
+		case *runtime.EventConsoleAPICalled:
+			var args []string
+			for _, arg := range ev.Args {
+				if arg.Value != nil {
+					var val interface{}
+					if err := json.Unmarshal(arg.Value, &val); err == nil {
+						args = append(args, fmt.Sprintf("%v", val))
+					} else {
+						args = append(args, string(arg.Value))
+					}
+				} else if arg.Description != "" {
+					args = append(args, arg.Description)
+				} else if arg.ClassName != "" {
+					args = append(args, arg.ClassName)
+				}
+			}
+			msg := strings.Join(args, " ")
+			switch ev.Type {
+			case runtime.APITypeError:
+				fmt.Fprintf(os.Stderr, "\033[31m[console.error]\033[0m %s\n", msg)
+			case runtime.APITypeWarning:
+				fmt.Fprintf(os.Stderr, "\033[33m[console.warn]\033[0m %s\n", msg)
+			case runtime.APITypeDebug:
+				if verbose {
+					fmt.Fprintf(os.Stderr, "\033[90m[console.debug]\033[0m %s\n", msg)
+				}
+			case runtime.APITypeInfo:
+				fmt.Fprintf(os.Stderr, "\033[34m[console.info]\033[0m %s\n", msg)
+			default:
+				fmt.Fprintf(os.Stderr, "[console.log] %s\n", msg)
+			}
+
+		case *runtime.EventExceptionThrown:
+			details := ev.ExceptionDetails
+			if showStacks {
+				fmt.Fprintf(os.Stderr, "\033[31m[exception]\033[0m %s\n", details.Text)
+				if details.Exception != nil && details.Exception.Description != "" {
+					fmt.Fprintf(os.Stderr, "  %s\n", details.Exception.Description)
+				}
+				if details.StackTrace != nil {
+					for _, frame := range details.StackTrace.CallFrames {
+						name := frame.FunctionName
+						if name == "" {
+							name = "(anonymous)"
+						}
+						fmt.Fprintf(os.Stderr, "    at %s (%s:%d:%d)\n",
+							name, frame.URL, frame.LineNumber, frame.ColumnNumber)
+					}
+				}
+			} else {
+				msg := details.Text
+				if details.Exception != nil && details.Exception.Description != "" {
+					desc := details.Exception.Description
+					if idx := strings.IndexByte(desc, '\n'); idx >= 0 {
+						desc = desc[:idx]
+					}
+					msg = desc
+				}
+				loc := ""
+				if details.StackTrace != nil && len(details.StackTrace.CallFrames) > 0 {
+					f := details.StackTrace.CallFrames[0]
+					source := f.URL
+					if idx := strings.LastIndex(source, "/"); idx >= 0 {
+						source = source[idx+1:]
+					}
+					loc = fmt.Sprintf(" (%s:%d:%d)", source, f.LineNumber, f.ColumnNumber)
+				}
+				fmt.Fprintf(os.Stderr, "\033[31m[exception]\033[0m %s%s\n", msg, loc)
+			}
+		}
+	}
+}
+
+// startConsoleMonitor enables Runtime domain and installs a listener for
+// console API calls and uncaught exceptions.
+// handleScreenshotCommand captures a screenshot and saves to file or outputs as JSON.
+// args format: "[--json] [selector] [filename]"
+func handleScreenshotCommand(ctx context.Context, args string, outputFormat string) error {
+	fields := strings.Fields(args)
+	jsonOutput := outputFormat == "json"
+	selector := ""
+	filename := ""
+
+	for i := 0; i < len(fields); i++ {
+		switch {
+		case fields[i] == "--json":
+			jsonOutput = true
+		case selector == "" && strings.HasPrefix(fields[i], "-"):
+			// skip unknown flags
+		case selector == "":
+			selector = fields[i]
+		case filename == "":
+			filename = fields[i]
+		}
+	}
+
+	// "full" is a convenience alias for full-page
+	if selector == "full" {
+		selector = ""
+	}
+
+	var buf []byte
+	if selector != "" {
+		// Element screenshot via CSS selector
+		if err := chromedp.Run(ctx, chromedp.Screenshot(selector, &buf, chromedp.ByQuery)); err != nil {
+			return fmt.Errorf("screenshot selector %q: %w", selector, err)
+		}
+	} else {
+		// Full-page screenshot
+		if err := chromedp.Run(ctx, chromedp.FullScreenshot(&buf, 100)); err != nil {
+			return fmt.Errorf("full screenshot: %w", err)
+		}
+	}
+
+	if jsonOutput {
+		result := struct {
+			Type      string `json:"type"`
+			MediaType string `json:"media_type"`
+			Data      string `json:"data"`
+		}{
+			Type:      "image",
+			MediaType: "image/png",
+			Data:      base64.StdEncoding.EncodeToString(buf),
+		}
+		enc := json.NewEncoder(os.Stdout)
+		return enc.Encode(result)
+	}
+
+	// Save to file
+	if filename == "" {
+		if selector != "" {
+			filename = fmt.Sprintf("screenshot-element-%d.png", time.Now().Unix())
+		} else {
+			filename = fmt.Sprintf("screenshot-%d.png", time.Now().Unix())
+		}
+	}
+	if err := os.WriteFile(filename, buf, 0644); err != nil {
+		return fmt.Errorf("saving screenshot: %w", err)
+	}
+	fmt.Printf("Screenshot saved to: %s (%d bytes)\n", filename, len(buf))
+	return nil
+}
+
+func startConsoleMonitor(ctx context.Context, verbose, showStacks bool) {
+	chromedp.ListenTarget(ctx, consoleListener(verbose, showStacks))
+	if err := chromedp.Run(ctx, runtime.Enable()); err != nil {
+		if verbose {
+			log.Printf("Warning: failed to enable Runtime domain for console monitoring: %v", err)
+		}
+	}
+}
+
 func printHelp() {
 	fmt.Println("\nCDP - Chrome DevTools Protocol CLI")
 	fmt.Println("\nCommand format:")
@@ -2761,12 +3598,19 @@ func printHelp() {
 	fmt.Println("  goto <url>        - Navigate to URL")
 	fmt.Println("  title             - Get page title")
 	fmt.Println("  html              - Get page HTML")
-	fmt.Println("  screenshot        - Take screenshot")
+	fmt.Println("  screenshot        - Take full-page screenshot")
 	fmt.Println("  Type 'help aliases' for a full list")
+
+	fmt.Println("\nScreenshots:")
+	fmt.Println("  screenshot                    - Full-page screenshot saved to file")
+	fmt.Println("  screenshot <selector>         - Element screenshot (CSS selector)")
+	fmt.Println("  screenshot <selector> <file>  - Save element screenshot to specific file")
+	fmt.Println("  screenshot --json             - Full-page screenshot as base64 JSON")
+	fmt.Println("  screenshot --json <selector>  - Element screenshot as base64 JSON")
+	fmt.Println("  Use -format=json flag for JSON output by default")
 
 	fmt.Println("\nAnnotation commands (--har-mode=enhanced only):")
 	fmt.Println("  note <text>       - Add a text annotation to HAR file")
-	fmt.Println("  screenshot <desc> - Capture annotated screenshot (optional description)")
 	fmt.Println("  dom <desc>        - Capture DOM snapshot (optional description)")
 	fmt.Println("  Annotations are saved in HAR file's _annotations field")
 
@@ -2776,11 +3620,16 @@ func printHelp() {
 	fmt.Println("  sources --type js|css|inline - Filter by source type")
 	fmt.Println("  sources --get <url>          - Display specific source content")
 
+	fmt.Println("\nConsole monitoring:")
+	fmt.Println("  console           - Enable console monitoring (show console.log/error/warn)")
+	fmt.Println("  Use -console flag to enable from startup")
+
 	fmt.Println("\nCommands:")
 	fmt.Println("  help              - Show this help")
 	fmt.Println("  help aliases      - List all alias commands")
 	fmt.Println("  help enhanced     - List enhanced commands (remote Chrome only)")
-	fmt.Println("  exit / quit       - Exit the program")
+	fmt.Println("  hup               - Detach from browser (leave browser running)")
+	fmt.Println("  exit / quit       - Exit the program (closes browser)")
 
 	fmt.Println("\nExit Codes:")
 	fmt.Println("  0 - Success")
@@ -3002,8 +3851,9 @@ func setupChromeForEnhanced(ctx context.Context, verbose bool, chromePath string
 			allocCtx, allocCancel := chromedp.NewRemoteAllocator(ctx, remoteURL)
 
 			var opts []chromedp.ContextOption
+			opts = append(opts, chromedp.WithErrorf(filteredErrorf))
 			if verbose {
-				opts = append(opts, chromedp.WithLogf(log.Printf))
+				opts = append(opts, chromedp.WithLogf(filteredLogf))
 			}
 
 			browserCtx, browserCancel := chromedp.NewContext(allocCtx, opts...)
@@ -3067,8 +3917,9 @@ func setupChromeForEnhanced(ctx context.Context, verbose bool, chromePath string
 	allocCtx, allocCancel := chromedp.NewExecAllocator(ctx, opts...)
 
 	var browserOpts []chromedp.ContextOption
+	browserOpts = append(browserOpts, chromedp.WithErrorf(filteredErrorf))
 	if verbose {
-		browserOpts = append(browserOpts, chromedp.WithLogf(log.Printf))
+		browserOpts = append(browserOpts, chromedp.WithLogf(filteredLogf))
 	}
 
 	browserCtx, browserCancel := chromedp.NewContext(allocCtx, browserOpts...)
