@@ -19,7 +19,7 @@ if [[ "$OSTYPE" == "darwin"* ]]; then
             echo "Found: $chrome"
             DATA_DIR=$(mktemp -d -t "chrome-remote-data.XXXXXX")
             echo "Using user data dir: $DATA_DIR"
-            "$chrome" --remote-debugging-port=9222 --user-data-dir="$DATA_DIR" --no-first-run --no-default-browser-check --new-window about:blank &
+            "$chrome" --remote-debugging-port=9222 --user-data-dir="$DATA_DIR" --no-first-run --no-default-browser-check --new-window --use-fake-ui-for-media-stream --enable-features=NetworkService,NetworkServiceInProcess about:blank &
             break
         fi
     done
@@ -28,9 +28,9 @@ elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
     # Linux
     DATA_DIR=$(mktemp -d -t "chrome-remote-data.XXXXXX")
     if command -v brave-browser &> /dev/null; then
-        brave-browser --remote-debugging-port=9222 --user-data-dir="$DATA_DIR" --no-first-run --no-default-browser-check --new-window about:blank &
+        brave-browser --remote-debugging-port=9222 --user-data-dir="$DATA_DIR" --no-first-run --no-default-browser-check --new-window --use-fake-ui-for-media-stream --enable-features=NetworkService,NetworkServiceInProcess about:blank &
     elif command -v google-chrome &> /dev/null; then
-        google-chrome --remote-debugging-port=9222 --user-data-dir="$DATA_DIR" --no-first-run --no-default-browser-check --new-window about:blank &
+        google-chrome --remote-debugging-port=9222 --user-data-dir="$DATA_DIR" --no-first-run --no-default-browser-check --new-window --use-fake-ui-for-media-stream --enable-features=NetworkService,NetworkServiceInProcess about:blank &
     elif command -v chromium &> /dev/null; then
         chromium --remote-debugging-port=9222 --user-data-dir="$DATA_DIR" --no-first-run --no-default-browser-check --new-window about:blank &
     else
