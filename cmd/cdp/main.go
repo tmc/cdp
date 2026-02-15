@@ -1575,8 +1575,8 @@ func main() {
 
 	// Use enhanced browser API when connecting to remote Chrome or launching with profiles
 	if remoteHost != "" || useProfile != "" || profileDir != "" || chromePath != "" {
-		// Handle direct tab connection for specific operations
-		if len(jsScripts) > 0 || tabID != "" || harFile != "" || harlStream || extractSelector != "" || screenshotRequested {
+		// Handle direct tab connection for specific operations (only when connecting to remote)
+		if remoteHost != "" && (len(jsScripts) > 0 || tabID != "" || harFile != "" || harlStream || extractSelector != "" || screenshotRequested) {
 			// Get available tabs
 			_, err := getChromeTabs(remotePort)
 			if err != nil {
