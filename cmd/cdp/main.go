@@ -31,6 +31,7 @@ import (
 	"github.com/tmc/misc/chrome-to-har/internal/browser"
 	"github.com/tmc/misc/chrome-to-har/internal/cdpproxy"
 	"github.com/tmc/misc/chrome-to-har/internal/chromeprofiles"
+	"github.com/tmc/misc/chrome-to-har/internal/htmltomd"
 	harrecorder "github.com/tmc/misc/chrome-to-har/internal/recorder"
 )
 
@@ -1112,6 +1113,9 @@ func main() {
 		extractSelector string
 		extractMode     string
 
+		// Render as markdown
+		renderSelector string
+
 		// HTTP headers flag
 		headers stringSlice
 
@@ -1201,6 +1205,7 @@ func main() {
 	// CSS selector extraction flags
 	flag.StringVar(&extractSelector, "extract", "", "Extract content using CSS selector (e.g., 'p', 'h1', '.class', '#id')")
 	flag.StringVar(&extractMode, "extract-mode", "text", "Extraction mode: text, html, attr:name, count (default: text)")
+	flag.StringVar(&renderSelector, "render", "", "Render page as markdown (optional CSS selector, use 'body' for full page)")
 
 	// Custom HTTP headers flags
 	flag.Var(&headers, "H", "Custom HTTP header (can be used multiple times, e.g., -H 'Authorization: Bearer token')")
@@ -1213,15 +1218,29 @@ func main() {
 
 	flag.Parse()
 
-	// Check if -screenshot flag was explicitly set (even with empty value means "full page")
+	// Check if certain flags were explicitly set (even with empty value)
 	screenshotRequested := false
+	renderRequested := false
+	waitReadyExplicit := false
 	flag.Visit(func(f *flag.Flag) {
-		if f.Name == "screenshot" {
+		switch f.Name {
+		case "screenshot":
 			screenshotRequested = true
+		case "render":
+			renderRequested = true
+		case "wait-ready":
+			waitReadyExplicit = true
 		}
 	})
 	if screenshotRequested && screenshotSelector == "" {
 		screenshotSelector = "full"
+	}
+	if renderRequested && renderSelector == "" {
+		renderSelector = "body"
+	}
+	// Default wait-ready to true when connecting to existing Chrome (SPA use case)
+	if connectExisting && !waitReadyExplicit {
+		waitReady = true
 	}
 
 	// Validate har-mode flag
@@ -1576,7 +1595,7 @@ func main() {
 	// Use enhanced browser API when connecting to remote Chrome or launching with profiles
 	if remoteHost != "" || useProfile != "" || profileDir != "" || chromePath != "" {
 		// Handle direct tab connection for specific operations (only when connecting to remote)
-		if remoteHost != "" && (len(jsScripts) > 0 || tabID != "" || harFile != "" || harlStream || extractSelector != "" || screenshotRequested) {
+		if remoteHost != "" && (len(jsScripts) > 0 || tabID != "" || harFile != "" || harlStream || extractSelector != "" || screenshotRequested || renderRequested) {
 			// Get available tabs
 			_, err := getChromeTabs(remotePort)
 			if err != nil {
@@ -1778,6 +1797,31 @@ func main() {
 							}
 						}
 					}
+				}
+
+				// Handle render as markdown if provided
+				if renderSelector != "" {
+					if err := setCustomHeaders(browserCtx, customHeaders); err != nil {
+						exitWithError(ExitGeneralError, ErrorTypeNetwork, "Failed to set custom headers: %v", err)
+					}
+
+					var renderTasks []chromedp.Action
+					renderTasks = append(renderTasks, chromedp.Navigate(url))
+					if waitReady {
+						renderTasks = append(renderTasks, chromedp.WaitReady("body", chromedp.ByQuery))
+					}
+					var html string
+					renderTasks = append(renderTasks, chromedp.OuterHTML(renderSelector, &html, chromedp.ByQuery))
+					if err := chromedp.Run(browserCtx, renderTasks...); err != nil {
+						exitWithError(ExitGeneralError, ErrorTypeGeneral, "Failed to render page: %v", err)
+					}
+
+					markdown, err := htmltomd.Convert(html)
+					if err != nil {
+						exitWithError(ExitGeneralError, ErrorTypeGeneral, "Failed to convert HTML to markdown: %v", err)
+					}
+					fmt.Println(strings.TrimSpace(markdown))
+					return
 				}
 
 				// Handle CSS selector extraction if provided
@@ -2487,6 +2531,31 @@ func main() {
 						}
 					}
 				}
+			}
+
+			// Handle render as markdown if provided (for new Chrome instances)
+			if renderSelector != "" {
+				if err := chromedp.Run(browserCtx); err != nil {
+					exitWithError(ExitBrowserError, ErrorTypeBrowser, "Failed to start browser context: %v", err)
+				}
+
+				var renderTasks []chromedp.Action
+				renderTasks = append(renderTasks, chromedp.Navigate(url))
+				if waitReady {
+					renderTasks = append(renderTasks, chromedp.WaitReady("body", chromedp.ByQuery))
+				}
+				var html string
+				renderTasks = append(renderTasks, chromedp.OuterHTML(renderSelector, &html, chromedp.ByQuery))
+				if err := chromedp.Run(browserCtx, renderTasks...); err != nil {
+					exitWithError(ExitGeneralError, ErrorTypeGeneral, "Failed to render page: %v", err)
+				}
+
+				markdown, err := htmltomd.Convert(html)
+				if err != nil {
+					exitWithError(ExitGeneralError, ErrorTypeGeneral, "Failed to convert HTML to markdown: %v", err)
+				}
+				fmt.Println(strings.TrimSpace(markdown))
+				return
 			}
 
 			// Handle CSS selector extraction if provided (for new Chrome instances)

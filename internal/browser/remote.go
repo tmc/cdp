@@ -278,7 +278,7 @@ func (b *Browser) ConnectToWebSocket(ctx context.Context, wsURL string) error {
 	return nil
 }
 
-// ConnectToRunningChrome connects to an already running Chrome instance
+// ConnectToRunningChrome connects to an already running Chrome instance (creates new tab)
 func (b *Browser) ConnectToRunningChrome(ctx context.Context, host string, port int) error {
 	// Get debugging info
 	info, err := GetRemoteDebuggingInfo(host, port)
@@ -292,4 +292,31 @@ func (b *Browser) ConnectToRunningChrome(ctx context.Context, host string, port 
 
 	// Connect via WebSocket
 	return b.ConnectToWebSocket(ctx, info.WebSocketDebuggerURL)
+}
+
+// ConnectToFirstTab connects to the first page tab in a running Chrome instance
+// without creating a new blank tab. Falls back to ConnectToRunningChrome if no
+// page tabs are found.
+func (b *Browser) ConnectToFirstTab(ctx context.Context, host string, port int) error {
+	tabs, err := ListTabs(host, port)
+	if err != nil {
+		// Fall back to creating a new tab if we can't list tabs
+		return b.ConnectToRunningChrome(ctx, host, port)
+	}
+
+	// Find the first page-type tab
+	for _, tab := range tabs {
+		if tab.Type == "page" && tab.WebSocketDebuggerURL != "" {
+			if b.opts.Verbose {
+				log.Printf("Connecting to existing tab: %s (%s)", tab.Title, tab.URL)
+			}
+			return b.ConnectToTabWebSocket(ctx, tab.WebSocketDebuggerURL)
+		}
+	}
+
+	// No page tabs found, fall back to creating a new tab
+	if b.opts.Verbose {
+		log.Printf("No existing page tabs found, creating new tab")
+	}
+	return b.ConnectToRunningChrome(ctx, host, port)
 }

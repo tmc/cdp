@@ -130,10 +130,9 @@ func (b *Browser) Launch(ctx context.Context) error {
 		if b.opts.RemoteTabID != "" {
 			// Connect to specific tab
 			return b.ConnectToTab(ctx, b.opts.RemoteHost, b.opts.RemotePort, b.opts.RemoteTabID)
-		} else {
-			// Connect to browser instance
-			return b.ConnectToRunningChrome(ctx, b.opts.RemoteHost, b.opts.RemotePort)
 		}
+		// Connect to first existing page tab (avoids creating a new blank tab)
+		return b.ConnectToFirstTab(ctx, b.opts.RemoteHost, b.opts.RemotePort)
 	}
 
 	// Set up the profile directory if needed
