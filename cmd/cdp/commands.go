@@ -8,10 +8,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/chromedp/chromedp"
 	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/cdproto/page"
+	"github.com/chromedp/chromedp"
 	"github.com/pkg/errors"
+	"github.com/tmc/misc/chrome-to-har/internal/htmltomd"
 )
 
 // Command represents a CDP command with metadata
@@ -816,6 +817,31 @@ func (r *CommandRegistry) registerPageCommands() {
 				return err
 			}
 			fmt.Println(source)
+			return nil
+		},
+	})
+
+	r.RegisterCommand(&Command{
+		Name:        "render",
+		Category:    "Page",
+		Description: "Render page or element as markdown",
+		Usage:       "render [selector]",
+		Examples:    []string{"render", "render h1", "render #content", "render .article"},
+		Aliases:     []string{"md", "markdown"},
+		Handler: func(ctx context.Context, args []string) error {
+			selector := "body"
+			if len(args) > 0 {
+				selector = strings.Join(args, " ")
+			}
+			var html string
+			if err := chromedp.Run(ctx, chromedp.OuterHTML(selector, &html)); err != nil {
+				return errors.Wrap(err, "getting HTML")
+			}
+			markdown, err := htmltomd.Convert(html)
+			if err != nil {
+				return errors.Wrap(err, "converting to markdown")
+			}
+			fmt.Println(strings.TrimSpace(markdown))
 			return nil
 		},
 	})

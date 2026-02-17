@@ -17,7 +17,9 @@ import (
 	"github.com/tmc/misc/chrome-to-har/internal/browser"
 	"github.com/tmc/misc/chrome-to-har/internal/chromeprofiles"
 	"github.com/tmc/misc/chrome-to-har/internal/discovery"
+	"github.com/tmc/misc/chrome-to-har/internal/htmltomd"
 	"github.com/tmc/misc/chrome-to-har/internal/recorder"
+	"github.com/tmc/misc/chrome-to-har/internal/termmd"
 	"golang.org/x/tools/txtar"
 	"gopkg.in/yaml.v3"
 	"rsc.io/script"
@@ -332,6 +334,7 @@ func (e *Engine) commands() map[string]script.Cmd {
 		"extract": e.cmdExtract(),
 		"title":   e.cmdTitle(),
 		"url":     e.cmdURL(),
+		"render":  e.cmdRender(),
 
 		// Assertions
 		"assert": e.cmdAssert(),
@@ -766,6 +769,63 @@ func (e *Engine) cmdURL() script.Cmd {
 		fmt.Println(url)
 		return nil
 	})
+}
+
+func (e *Engine) cmdRender() script.Cmd {
+	return script.Command(
+		script.CmdUsage{
+			Summary: "render page or element as markdown",
+			Args:    "[--term] [selector]",
+			Detail: []string{
+				"Gets the outerHTML of the page (or a CSS selector) and converts it to markdown.",
+				"  --term     render through terminal formatter instead of raw markdown",
+				"  selector   CSS selector to scope rendering (default: body)",
+				"",
+				"Sets $RENDERED with the markdown output.",
+			},
+		},
+		func(s *script.State, args ...string) (script.WaitFunc, error) {
+			termRender := false
+			selector := "body"
+
+			for i := 0; i < len(args); i++ {
+				switch args[i] {
+				case "--term":
+					termRender = true
+				default:
+					selector = strings.Join(args[i:], " ")
+					i = len(args) // consume remaining
+				}
+			}
+
+			if e.verbose {
+				fmt.Fprintf(os.Stderr, "[render] selector=%s term=%v\n", selector, termRender)
+			}
+
+			var html string
+			if err := chromedp.Run(e.browser.Context(), chromedp.OuterHTML(selector, &html)); err != nil {
+				return nil, fmt.Errorf("getting HTML: %w", err)
+			}
+
+			markdown, err := htmltomd.Convert(html)
+			if err != nil {
+				return nil, fmt.Errorf("converting to markdown: %w", err)
+			}
+
+			output := strings.TrimSpace(markdown)
+			if termRender {
+				rendered, err := termmd.RenderMarkdown(output)
+				if err != nil {
+					return nil, fmt.Errorf("rendering for terminal: %w", err)
+				}
+				output = rendered
+			}
+
+			s.Setenv("RENDERED", output)
+			fmt.Println(output)
+			return nil, nil
+		},
+	)
 }
 
 func (e *Engine) cmdAssert() script.Cmd {
