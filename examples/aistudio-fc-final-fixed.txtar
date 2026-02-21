@@ -1,0 +1,166 @@
+-- meta.yaml --
+name: AI Studio FS Final Fixed
+description: Fully working function calling demo with synchronous steps to avoid async/promise issues
+browser: brave
+timeout: 300s
+
+-- main.cdp --
+# Start fresh
+goto https://aistudio.google.com/prompts/new_chat
+wait 5s
+
+log Step 1: Inject handler
+jsfile fc-handler.js
+
+log Step 2: Open Tools panel if needed
+jsfile ensure-tools-open.js
+wait 2s
+
+log Step 3: Enable Function Calling and Open Editor
+jsfile open-fc-editor.js
+wait 5s
+
+log Step 4a: Switch to Code Editor
+jsfile switch-code-editor.js
+wait 2s
+
+log Step 4b: Set Tools JSON and Save
+jsfile set-tools-json.js
+wait 2s
+
+log Step 5: Send Message
+jsfile send-message.js
+
+log Step 6: Wait for Function Call
+wait 20s
+
+log Step 7: Inspect Function Call UI
+jsfile inspect-fc-ui.js
+
+log Done!
+
+-- fc-handler.js --
+(() => {
+  window.__fc_tools = [
+      {
+        "name": "get_current_time",
+        "description": "Gets the current time for a specified timezone",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "timezone": { "type": "string", "description": "Timezone like America/Los_Angeles" }
+          },
+          "required": ["timezone"]
+        }
+      }
+  ];
+  return 'Handler constants set';
+})();
+
+-- ensure-tools-open.js --
+(() => {
+  const toolsHeader = Array.from(document.querySelectorAll('mat-expansion-panel-header'))
+      .find(h => h.textContent.includes('Tools'));
+  if (toolsHeader) {
+     const panel = toolsHeader.closest('mat-expansion-panel');
+     if (!panel.classList.contains('mat-expanded')) toolsHeader.click();
+     return 'Tools panel open';
+  }
+  const btn = Array.from(document.querySelectorAll('button')).find(b => b.textContent.includes('Tools'));
+  if (btn) btn.click();
+  return 'Clicked Tools button';
+})();
+
+-- open-fc-editor.js --
+(() => {
+  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+  let fcNode;
+  while(walker.nextNode()) {
+    if(walker.currentNode.textContent.includes('Function calling')) {
+      fcNode = walker.currentNode.parentElement;
+      break;
+    }
+  }
+  if(!fcNode) return 'Function calling not found';
+  
+  let p = fcNode;
+  for(let i=0; i<6 && p; i++) {
+    const editBtn = Array.from(p.querySelectorAll('button')).find(b => b.textContent.includes('Edit'));
+    if(editBtn) { editBtn.click(); return 'Clicked Edit'; }
+    p = p.parentElement;
+  }
+  return 'Edit button not found';
+})();
+
+-- switch-code-editor.js --
+(() => {
+  const dialog = document.querySelector('.mat-mdc-dialog-panel') || document.querySelector('.cdk-overlay-pane');
+  if (!dialog) return 'Error: Dialog not open';
+  
+  const codeEditorBtn = Array.from(dialog.querySelectorAll('button')).find(b => b.textContent.includes('Code Editor'));
+  if (codeEditorBtn) {
+    codeEditorBtn.click();
+    return 'Clicked Code Editor';
+  }
+  return 'Code Editor button not found (might already be active)';
+})();
+
+-- set-tools-json.js --
+(() => {
+  const dialog = document.querySelector('.mat-mdc-dialog-panel') || document.querySelector('.cdk-overlay-pane');
+  if (!dialog) return 'Error: Dialog not open';
+  
+  const ta = dialog.querySelector('textarea');
+  if (!ta) return 'Error: Textarea not found';
+  
+  ta.focus();
+  ta.value = JSON.stringify(window.__fc_tools, null, 2);
+  ta.dispatchEvent(new Event('input', {bubbles: true}));
+  ta.dispatchEvent(new Event('change', {bubbles: true}));
+  
+  const saveBtn = Array.from(dialog.querySelectorAll('button')).find(b => b.textContent.includes('Save'));
+  if (saveBtn) {
+    saveBtn.click();
+    return 'Success: Tools set and Saved';
+  }
+  return 'Error: Save button not found';
+})();
+
+-- send-message.js --
+(() => {
+  const msg = "What time is it in Tokyo?";
+  const inputs = Array.from(document.querySelectorAll('textarea'));
+  const chatInput = inputs.find(i => i.placeholder.includes('Type') || i.placeholder.includes('prompt'));
+  if(chatInput) {
+    chatInput.focus();
+    chatInput.value = msg;
+    chatInput.dispatchEvent(new Event('input', {bubbles: true}));
+    setTimeout(() => {
+      const runBtn = Array.from(document.querySelectorAll('button')).find(b => b.textContent.includes('Run'));
+      if(runBtn) runBtn.click();
+    }, 1000);
+    return 'Message sent';
+  }
+  return 'Chat input not found';
+})();
+
+-- inspect-fc-ui.js --
+(() => {
+  const results = [];
+  const body = document.body.innerText;
+  if(body.includes('get_current_time')) {
+    results.push('FOUND function call in text');
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    while(walker.nextNode()){
+       if(walker.currentNode.textContent.includes('get_current_time')){
+         const el = walker.currentNode.parentElement;
+         const container = el.closest('div, mat-card, .message-bubble') || el.parentElement;
+         results.push(`Element: <${el.tagName} class="${el.className}"> inside <${container.tagName}>`);
+         results.push(`Container text: ` + container.textContent.slice(0, 100));
+       }
+    }
+  } else {
+    results.push('Function call NOT found');
+  }
+  return results.join('\n');
+})();

@@ -1,0 +1,22 @@
+# Simple AI Studio Navigation
+# Tests navigation to AI Studio (no login required for viewing)
+
+-- meta.yaml --
+name: AI Studio Simple
+description: Navigate to AI Studio
+version: "1.0"
+browser: brave
+headless: false
+timeout: 60s
+
+-- main.cdp --
+# Navigate to AI Studio
+goto https://aistudio.google.com
+
+# Wait for page to load
+wait 3s
+
+# Take a screenshot
+screenshot /tmp/aistudio-simple.png
+
+log "AI Studio navigation completed"

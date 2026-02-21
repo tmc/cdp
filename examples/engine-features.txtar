@@ -1,0 +1,32 @@
+-- meta.yaml --
+name: engine-features
+description: Demonstrate new script engine features (assert, block, title, url)
+browser: brave
+headless: false
+timeout: 30s
+
+-- main.cdp --
+# Test blocking
+block */ads/*
+log Blocking ads patterns
+
+goto https://example.com
+wait 2s
+
+# Test title command
+title
+
+# Test url command
+url
+
+# Test assert exists
+assert exists h1
+
+# Test assert text
+assert text h1 Example
+
+# Test assert visible
+assert visible h1
+
+screenshot example-features.png
+log Done!

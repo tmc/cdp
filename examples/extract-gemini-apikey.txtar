@@ -1,0 +1,96 @@
+-- meta.yaml --
+name: Extract Gemini API Key
+description: Extract API key from Google AI Studio for use in automation
+browser: brave
+headless: false
+timeout: 60s
+
+-- main.cdp --
+# Extract Gemini API Key from Google AI Studio
+# Requires: User logged into Google account in browser
+#
+# Usage: cdp run extract-gemini-apikey.txtar
+# Output: API key printed to stdout
+
+log Navigating to Google AI Studio API Keys page...
+goto https://aistudio.google.com/apikey
+
+# Wait for page to load
+wait 5s
+
+# Wait for the API key table to appear
+log Waiting for API keys to load...
+wait .api-key-table
+
+# Extract the API key
+log Extracting API key...
+jsfile extract-key.js
+
+-- extract-key.js --
+(() => {
+  // Method 1: Look for the API key in the table
+  const keyTable = document.querySelector('.api-key-table');
+  if (keyTable) {
+    // Find the key cell - usually contains the masked key with a copy button
+    const keyCells = keyTable.querySelectorAll('td');
+    for (const cell of keyCells) {
+      const text = cell.textContent.trim();
+      // API keys start with "AIza" and are ~39 characters
+      if (text.match(/^AIza[A-Za-z0-9_-]{35,}$/)) {
+        console.log('GEMINI_API_KEY=' + text);
+        return text;
+      }
+    }
+
+    // Check for copy buttons that might have the key in data attribute
+    const copyBtns = keyTable.querySelectorAll('button[data-value], [data-clipboard-text]');
+    for (const btn of copyBtns) {
+      const key = btn.getAttribute('data-value') || btn.getAttribute('data-clipboard-text');
+      if (key && key.match(/^AIza/)) {
+        console.log('GEMINI_API_KEY=' + key);
+        return key;
+      }
+    }
+  }
+
+  // Method 2: Try to find "Show" button and click it to reveal the key
+  const showButtons = Array.from(document.querySelectorAll('button'))
+    .filter(b => b.textContent.includes('Show') || b.textContent.includes('Reveal'));
+
+  if (showButtons.length > 0) {
+    showButtons[0].click();
+    // Wait a moment for the key to appear
+    return new Promise(resolve => {
+      setTimeout(() => {
+        // Try to find the revealed key
+        const allText = document.body.innerText;
+        const keyMatch = allText.match(/AIza[A-Za-z0-9_-]{35,}/);
+        if (keyMatch) {
+          console.log('GEMINI_API_KEY=' + keyMatch[0]);
+          resolve(keyMatch[0]);
+        } else {
+          resolve('Key not found after reveal');
+        }
+      }, 1000);
+    });
+  }
+
+  // Method 3: Search all text content for API key pattern
+  const allText = document.body.innerText;
+  const keyMatch = allText.match(/AIza[A-Za-z0-9_-]{35,}/);
+  if (keyMatch) {
+    console.log('GEMINI_API_KEY=' + keyMatch[0]);
+    return keyMatch[0];
+  }
+
+  // Method 4: Check for "Create API Key" button if no key exists
+  const createBtn = Array.from(document.querySelectorAll('button'))
+    .find(b => b.textContent.includes('Create API key') || b.textContent.includes('Get API key'));
+
+  if (createBtn) {
+    console.log('No API key found. Click "Create API key" to generate one.');
+    return 'NO_KEY_FOUND - create one first';
+  }
+
+  return 'Could not find API key on page';
+})();

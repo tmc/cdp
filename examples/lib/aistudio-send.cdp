@@ -1,0 +1,8 @@
+# aistudio-send.cdp - Send a message to AI Studio
+# Requires $ARG1 to be the message to send
+
+js document.querySelector("textarea").value="$ARG1"
+js document.querySelector("textarea").dispatchEvent(new Event("input",{bubbles:true}))
+wait 500ms
+js document.querySelector("button[aria-label='Run']").click()
+log Sent message: $ARG1

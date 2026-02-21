@@ -1,0 +1,43 @@
+# AI Studio Chat Script - Supports existing tab or opens new one
+-- meta.yaml --
+name: AI Studio Chat v3
+description: Send a message to Google AI Studio Live (with tab reuse support)
+browser: brave
+profile: Default
+headless: false
+timeout: 5m
+env:
+  MODEL: gemini-2.5-flash-native-audio-preview-12-2025
+
+-- main.cdp --
+# If no existing tab, navigate to AI Studio
+[!has-tab] goto https://aistudio.google.com/live?model=$MODEL
+
+# Wait for the chat textarea to appear
+wait textarea
+
+# Take screenshot showing ready state
+screenshot /tmp/aistudio-1-ready.png
+log Chat interface ready
+
+# Type the message using JavaScript
+js document.querySelector("textarea").value="What is 2+2?"
+js document.querySelector("textarea").dispatchEvent(new Event("input",{bubbles:true}))
+
+# Wait a moment for the UI to update
+wait 500ms
+
+# Take screenshot showing typed message
+screenshot /tmp/aistudio-2-typed.png
+log Message typed
+
+# Click the Run button using JS
+js document.querySelector("button[aria-label='Run']").click()
+
+# Wait for response
+wait 10s
+
+# Take screenshot of the response
+screenshot /tmp/aistudio-3-response.png
+
+log AI Studio chat completed!

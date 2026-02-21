@@ -1,0 +1,17 @@
+# Simple test for rsc.io/script engine
+-- meta.yaml --
+name: Simple Test V2
+headless: false
+timeout: 30s
+
+-- main.cdp --
+# Navigate to example.com
+goto https://example.com
+
+# Wait for page to load
+wait 2s
+
+# Take a screenshot
+screenshot /tmp/simple-v2.png
+
+log Test completed successfully!

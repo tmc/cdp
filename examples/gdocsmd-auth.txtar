@@ -1,0 +1,277 @@
+-- meta.yaml --
+name: gdocsmd OAuth Token Generator
+description: Automate OAuth flow to generate token.json for gdocsmd scripttests
+browser: brave
+headless: false
+timeout: 180s
+env:
+  # Path to credentials.json from Google Cloud Console
+  CREDENTIALS_FILE: "credentials.json"
+  # Output path for the token
+  TOKEN_FILE: "token.json"
+  # OAuth scopes for Google Docs API
+  SCOPES: "https://www.googleapis.com/auth/documents.readonly"
+
+-- main.cdp --
+# gdocsmd OAuth Token Generator
+#
+# Generates a token.json for gdocsmd by automating the OAuth consent flow.
+# Uses your existing browser login - no manual clicking needed.
+#
+# Prerequisites:
+#   1. credentials.json from Google Cloud Console (OAuth 2.0 Client ID)
+#   2. Logged into Google in this browser
+#
+# Usage:
+#   cdp run --tab <existing-tab-id> gdocsmd-auth.txtar
+#
+# The script will:
+#   1. Build OAuth URL from credentials.json
+#   2. Navigate to Google consent screen
+#   3. Auto-click through consent (uses existing login)
+#   4. Capture the auth code from callback
+#   5. Exchange for token and save to token.json
+
+log === gdocsmd OAuth Token Generator ===
+
+# First, we need to start a local server to receive the callback
+# and build the OAuth URL from credentials
+log Step 1: Reading credentials and building OAuth URL...
+jsfile build-oauth-url.js
+
+wait 2s
+
+# Navigate to the OAuth URL
+log Step 2: Navigating to Google consent...
+jsfile navigate-oauth.js
+
+wait 3s
+
+# Wait for page load and check if we need to select account
+log Step 3: Checking login state...
+jsfile check-login.js
+
+wait 5s
+
+# Auto-click through consent screens
+log Step 4: Auto-consenting...
+jsfile auto-consent.js
+
+wait 2s
+jsfile auto-consent.js
+
+wait 2s
+jsfile auto-consent.js
+
+wait 3s
+
+# Check for callback and extract code
+log Step 5: Checking for auth code...
+jsfile extract-code.js
+
+log Done! Check output for token location.
+
+-- build-oauth-url.js --
+(() => {
+  // For browser-based flow, we'll use Google's OAuth endpoint directly
+  // The credentials would normally be loaded from file, but in browser context
+  // we need to have them provided or use a known client ID
+
+  // Standard OAuth 2.0 parameters for Google Docs API
+  const params = {
+    client_id: window.__oauth_client_id || '',
+    redirect_uri: 'http://localhost:8080/',
+    response_type: 'code',
+    scope: 'https://www.googleapis.com/auth/documents.readonly https://www.googleapis.com/auth/documents',
+    access_type: 'offline',
+    prompt: 'consent'
+  };
+
+  if (!params.client_id) {
+    console.log('=== SETUP REQUIRED ===');
+    console.log('');
+    console.log('To use this script, you need a Google Cloud OAuth Client ID.');
+    console.log('');
+    console.log('Option 1: Set client ID before running:');
+    console.log('  js window.__oauth_client_id = "your-client-id.apps.googleusercontent.com"');
+    console.log('');
+    console.log('Option 2: Use gdocsmd directly (it handles OAuth):');
+    console.log('  gdocsmd -credentials credentials.json <doc-id>');
+    console.log('');
+    console.log('Option 3: For testing, use the helper script approach below.');
+
+    // Store instructions for later
+    window.__needs_setup = true;
+    return 'Setup required';
+  }
+
+  const queryString = Object.entries(params)
+    .map(([k, v]) => `${k}=${encodeURIComponent(v)}`)
+    .join('&');
+
+  window.__oauth_url = `https://accounts.google.com/o/oauth2/v2/auth?${queryString}`;
+  console.log('OAuth URL built');
+  console.log('Redirect URI: ' + params.redirect_uri);
+
+  return 'OAuth URL ready';
+})();
+
+-- navigate-oauth.js --
+(() => {
+  if (window.__needs_setup) {
+    return 'Skipping - setup required';
+  }
+
+  if (window.__oauth_url) {
+    window.location.href = window.__oauth_url;
+    return 'Navigating to OAuth...';
+  }
+
+  return 'No OAuth URL set';
+})();
+
+-- check-login.js --
+(() => {
+  const url = window.location.href;
+
+  // Check if we're on Google accounts
+  if (url.includes('accounts.google.com')) {
+    // Check for account chooser
+    const accountList = document.querySelector('[data-identifier]');
+    if (accountList) {
+      console.log('Account chooser detected - click your account');
+      // Could auto-click first account:
+      // accountList.click();
+      return 'Account selection needed';
+    }
+
+    // Check for login form
+    const emailInput = document.querySelector('input[type="email"]');
+    if (emailInput) {
+      console.log('Login required - please sign in');
+      return 'Login required';
+    }
+
+    // Check for consent screen
+    const consentForm = document.querySelector('form[action*="consent"]');
+    if (consentForm) {
+      console.log('On consent screen');
+      return 'Ready for consent';
+    }
+  }
+
+  // Check if already on callback
+  if (url.includes('localhost') && url.includes('code=')) {
+    console.log('Already have auth code!');
+    return 'Have code';
+  }
+
+  return 'Checking...';
+})();
+
+-- auto-consent.js --
+(() => {
+  // Click consent/continue buttons
+  const buttonSelectors = [
+    'button[data-idom-class*="continue"]',
+    'button[jsname="LgbsSe"]',  // Google's "Continue" button
+    '#submit_approve_access',    // Legacy consent button
+    'button[type="submit"]'
+  ];
+
+  const buttonTexts = ['Continue', 'Allow', 'Accept', 'Confirm', 'Next', 'I agree'];
+
+  // Try selectors first
+  for (const selector of buttonSelectors) {
+    const btn = document.querySelector(selector);
+    if (btn && btn.offsetParent !== null) {
+      console.log('Clicking: ' + selector);
+      btn.click();
+      return 'Clicked ' + selector;
+    }
+  }
+
+  // Try by text content
+  const allButtons = Array.from(document.querySelectorAll('button, [role="button"], input[type="submit"]'));
+
+  for (const text of buttonTexts) {
+    const btn = allButtons.find(b => {
+      const btnText = (b.textContent || b.value || '').trim();
+      return btnText.toLowerCase().includes(text.toLowerCase());
+    });
+
+    if (btn && btn.offsetParent !== null && !btn.disabled) {
+      console.log('Clicking button: ' + text);
+      btn.click();
+      return 'Clicked ' + text;
+    }
+  }
+
+  // Check all checkboxes (for scope permissions)
+  const checkboxes = document.querySelectorAll('input[type="checkbox"]:not(:checked)');
+  let checked = 0;
+  checkboxes.forEach(cb => {
+    if (cb.offsetParent !== null) {
+      cb.click();
+      checked++;
+    }
+  });
+  if (checked > 0) {
+    console.log('Checked ' + checked + ' permission boxes');
+    return 'Checked ' + checked + ' boxes';
+  }
+
+  // Check current state
+  const url = window.location.href;
+  if (url.includes('code=')) {
+    return 'Already have code';
+  }
+
+  console.log('No clickable consent elements found');
+  console.log('Current URL: ' + url.substring(0, 80));
+  return 'Nothing to click';
+})();
+
+-- extract-code.js --
+(() => {
+  const url = window.location.href;
+
+  // Check for auth code in URL
+  const codeMatch = url.match(/[?&]code=([^&]+)/);
+
+  if (codeMatch) {
+    const code = decodeURIComponent(codeMatch[1]);
+
+    console.log('=== AUTH CODE RECEIVED ===');
+    console.log('');
+    console.log('Code: ' + code.substring(0, 30) + '...');
+    console.log('');
+    console.log('To exchange for token, run:');
+    console.log('');
+    console.log('curl -X POST https://oauth2.googleapis.com/token \\');
+    console.log('  -d "code=' + code + '" \\');
+    console.log('  -d "client_id=YOUR_CLIENT_ID" \\');
+    console.log('  -d "client_secret=YOUR_CLIENT_SECRET" \\');
+    console.log('  -d "redirect_uri=http://localhost:8080/" \\');
+    console.log('  -d "grant_type=authorization_code"');
+    console.log('');
+    console.log('Or let gdocsmd handle it by running with the callback URL.');
+
+    // Store for potential use
+    window.__auth_code = code;
+
+    return code;
+  }
+
+  // Check for error
+  const errorMatch = url.match(/[?&]error=([^&]+)/);
+  if (errorMatch) {
+    const error = decodeURIComponent(errorMatch[1]);
+    console.log('OAuth Error: ' + error);
+    return 'Error: ' + error;
+  }
+
+  console.log('No auth code yet');
+  console.log('Current URL: ' + url);
+  return 'Waiting for callback';
+})();

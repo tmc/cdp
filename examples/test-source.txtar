@@ -1,0 +1,18 @@
+# Test source command
+-- meta.yaml --
+name: Source Command Test
+timeout: 30s
+
+-- main.cdp --
+log === Testing has-tab condition ===
+[has-tab] log Has existing tab - skipping navigation
+[!has-tab] log No existing tab - would navigate here
+
+log === Testing source -x (trace) ===
+source -x examples/lib/wait-for-load.cdp
+
+log === Testing source -as (register command) ===
+source -as take-shot examples/lib/screenshot.cdp
+take-shot /tmp/source-test.png
+
+log === All tests passed! ===

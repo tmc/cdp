@@ -1,0 +1,271 @@
+-- meta.yaml --
+name: AI Studio Function Calling Complete
+description: Full function calling setup, conversation, and response handling
+browser: brave
+timeout: 300s
+
+-- main.cdp --
+# AI Studio Function Calling - Complete Workflow
+# Usage: cdp run --tab <TAB_ID> examples/aistudio-fc-complete.txtar
+#
+# Prerequisites: Be on aistudio.google.com/prompts/new_chat
+
+# Step 1: Inject the function call handler
+log [1/6] Injecting FC handler...
+jsfile fc-handler.js
+
+# Step 2: Open Tools panel
+log [2/6] Opening Tools panel...
+jsfile open-tools.js
+wait 2s
+
+# Step 3: Enable Function calling toggle
+log [3/6] Enabling Function calling...
+jsfile enable-fc.js
+wait 2s
+
+# Step 4: Open FC editor and set declarations
+log [4/6] Setting function declarations...
+jsfile open-fc-editor.js
+wait 2s
+jsfile set-declarations.js
+wait 1s
+jsfile save-declarations.js
+wait 2s
+
+# Step 5: Send a message that triggers function call
+log [5/6] Sending test message...
+jsfile send-message.js
+wait 10s
+
+# Step 6: Handle the function call
+log [6/6] Handling function call...
+jsfile handle-fc.js
+wait 5s
+
+log Done! Check the conversation in the browser.
+screenshot output/aistudio-fc-result.png
+
+-- fc-handler.js --
+(() => {
+  window.__fc = {
+    // Check for pending function call
+    check: () => {
+      const inp = document.querySelector('input[placeholder="Enter function response"]');
+      if (!inp) return { pending: false };
+
+      const text = document.body.innerText;
+      let fn = null, args = null;
+
+      for (const f of ['get_current_time', 'search_web', 'read_file', 'write_file', 'execute_command']) {
+        if (text.includes(f)) {
+          fn = f;
+          const idx = text.indexOf(f);
+          const after = text.substring(idx);
+          const match = after.match(/\{[\s\S]*?\}/);
+          if (match) {
+            try { args = JSON.parse(match[0].replace(/[\n\r]/g, '')); } catch(e) {}
+          }
+          break;
+        }
+      }
+
+      return { pending: true, fn, args };
+    },
+
+    // Inject function response
+    respond: (json) => {
+      const inp = document.querySelector('input[placeholder="Enter function response"]');
+      if (!inp) return false;
+      inp.focus();
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')
+        .set.call(inp, typeof json === 'string' ? json : JSON.stringify(json));
+      inp.dispatchEvent(new Event('input', { bubbles: true }));
+      return true;
+    },
+
+    // Click submit button
+    send: () => {
+      const btn = document.querySelector('button[type="submit"]');
+      if (!btn || btn.disabled) return false;
+      btn.click();
+      return true;
+    },
+
+    // Built-in function executors
+    execute: (fn, args) => {
+      switch(fn) {
+        case 'get_current_time': {
+          const now = new Date();
+          const fmt = new Intl.DateTimeFormat('en-CA', {
+            timeZone: args?.timezone || 'UTC', hour12: false,
+            year: 'numeric', month: '2-digit', day: '2-digit',
+            hour: '2-digit', minute: '2-digit', second: '2-digit'
+          });
+          const p = fmt.formatToParts(now);
+          const g = t => p.find(x => x.type === t)?.value || '';
+          return {
+            current_time: `${g('year')}-${g('month')}-${g('day')}T${g('hour')}:${g('minute')}:${g('second')}`,
+            timezone: args?.timezone || 'UTC',
+            timestamp: Math.floor(now.getTime()/1000)
+          };
+        }
+        case 'search_web':
+          return { query: args?.query, results: [{ title: 'Result', snippet: 'Placeholder for: ' + args?.query }] };
+        default:
+          return { error: 'Unknown function: ' + fn };
+      }
+    },
+
+    // Auto-detect and handle function call
+    auto: () => {
+      const c = window.__fc.check();
+      if (!c.pending || !c.fn) return { handled: false, check: c };
+
+      const result = window.__fc.execute(c.fn, c.args);
+      window.__fc.respond(result);
+      window.__fc.send();
+
+      return { handled: true, fn: c.fn, args: c.args, result };
+    },
+
+    // Start polling for function calls
+    poll: (ms) => {
+      if (window.__fcInterval) clearInterval(window.__fcInterval);
+      window.__fcInterval = setInterval(() => {
+        const r = window.__fc.auto();
+        if (r.handled) console.log('[FC]', r.fn, '->', JSON.stringify(r.result));
+      }, ms || 1000);
+      return 'Polling every ' + (ms||1000) + 'ms';
+    },
+
+    stop: () => {
+      if (window.__fcInterval) { clearInterval(window.__fcInterval); window.__fcInterval = null; }
+      return 'Stopped';
+    }
+  };
+  return 'FC Handler ready';
+})();
+
+-- open-tools.js --
+(() => {
+  for (const b of document.querySelectorAll('button')) {
+    if ((b.textContent || '').includes('Tools') && (b.textContent || '').includes('widgets')) {
+      b.click();
+      return 'Opened Tools panel';
+    }
+  }
+  return 'Tools button not found';
+})();
+
+-- enable-fc.js --
+(() => {
+  const labels = document.querySelectorAll('label, h3, div');
+  for (const lbl of labels) {
+    if ((lbl.textContent || '').trim() === 'Function calling') {
+      let el = lbl.parentElement;
+      for (let i = 0; i < 10 && el; i++) {
+        const toggle = el.querySelector('mat-slide-toggle button');
+        if (toggle) {
+          const parent = toggle.closest('mat-slide-toggle');
+          if (!parent?.classList.contains('mat-mdc-slide-toggle-checked')) {
+            toggle.click();
+            return 'Enabled Function calling';
+          }
+          return 'Already enabled';
+        }
+        el = el.parentElement;
+      }
+    }
+  }
+  return 'Toggle not found';
+})();
+
+-- open-fc-editor.js --
+(() => {
+  const btn = document.querySelector('.edit-function-declarations-button');
+  if (btn) {
+    btn.click();
+    return 'Opened FC editor';
+  }
+  return 'Edit button not found';
+})();
+
+-- set-declarations.js --
+(() => {
+  const tools = [
+    {
+      name: "get_current_time",
+      description: "Gets the current date and time for a specified timezone",
+      parameters: {
+        type: "object",
+        properties: {
+          timezone: {
+            type: "string",
+            description: "Timezone like America/Los_Angeles, America/New_York, Asia/Tokyo, or UTC"
+          }
+        }
+      }
+    },
+    {
+      name: "search_web",
+      description: "Searches the web for information",
+      parameters: {
+        type: "object",
+        properties: {
+          query: { type: "string", description: "Search query" }
+        },
+        required: ["query"]
+      }
+    }
+  ];
+
+  for (const ta of document.querySelectorAll('textarea')) {
+    if ((ta.placeholder || '').includes('Tab')) {
+      ta.focus();
+      ta.select();
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')
+        .set.call(ta, JSON.stringify(tools, null, 2));
+      ta.dispatchEvent(new Event('input', { bubbles: true }));
+      return 'Set ' + tools.length + ' functions';
+    }
+  }
+  return 'Textarea not found';
+})();
+
+-- save-declarations.js --
+(() => {
+  for (const b of document.querySelectorAll('button')) {
+    if ((b.textContent || '').trim() === 'Save') {
+      b.click();
+      return 'Saved';
+    }
+  }
+  return 'Save button not found';
+})();
+
+-- send-message.js --
+(() => {
+  const msg = "What time is it right now in Tokyo?";
+  for (const ta of document.querySelectorAll('textarea')) {
+    if ((ta.placeholder || '').toLowerCase().includes('typing') ||
+        (ta.placeholder || '').toLowerCase().includes('prompt')) {
+      ta.focus();
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')
+        .set.call(ta, msg);
+      ta.dispatchEvent(new Event('input', { bubbles: true }));
+      setTimeout(() => {
+        const btn = document.querySelector('button[type="submit"]');
+        if (btn && !btn.disabled) btn.click();
+      }, 500);
+      return 'Sent: ' + msg;
+    }
+  }
+  return 'Chat input not found';
+})();
+
+-- handle-fc.js --
+(() => {
+  const result = window.__fc.auto();
+  return JSON.stringify(result, null, 2);
+})();

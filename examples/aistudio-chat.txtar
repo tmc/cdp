@@ -1,0 +1,142 @@
+# AI Studio Chat Script
+#
+# This script demonstrates interacting with Google AI Studio Live.
+# Usage: cdp script aistudio-chat.txtar
+#
+# Requires a Chrome profile with Google login (use -profile Default)
+
+-- meta.yaml --
+name: AI Studio Chat
+description: Interact with Google AI Studio Live
+version: "1.0"
+author: Claude
+browser: brave
+profile: Default
+headless: false
+timeout: 5m
+env:
+  MODEL: gemini-2.5-flash-native-audio-preview-12-2025
+  MESSAGE: "What is the weather like today?"
+
+-- main.cdp --
+# Navigate to AI Studio Live
+goto https://aistudio.google.com/live?model=${MODEL}
+
+# Wait for the chat interface to load
+wait for textarea[placeholder="Start typing a prompt"]
+wait 2s
+
+# Take initial screenshot
+screenshot screenshots/aistudio-ready.png
+
+# Enable function calling (optional)
+# First find and click the function calling toggle
+js {
+  const toggle = document.querySelector('[data-test-id="function-calling-toggle"] button');
+  if (toggle && toggle.getAttribute('aria-checked') === 'false') {
+    toggle.click();
+  }
+}
+wait 500ms
+
+# Type a message in the chat input
+fill textarea[placeholder="Start typing a prompt"] ${MESSAGE}
+wait 500ms
+
+# Take screenshot showing typed message
+screenshot screenshots/aistudio-message-typed.png
+
+# Click the Run button to send the message
+js {
+  const buttons = Array.from(document.querySelectorAll('button'));
+  const runBtn = buttons.find(b => b.innerText.includes('Run'));
+  if (runBtn) runBtn.click();
+}
+
+# Wait for response (adjust timeout as needed)
+wait until network idle
+wait 5s
+
+# Take screenshot of the response
+screenshot screenshots/aistudio-response.png
+
+# Extract any response text (if visible)
+# extract .model-response as response_text
+
+log "AI Studio chat completed"
+
+-- functions.json --
+[
+  {
+    "name": "get_weather",
+    "description": "Gets the current weather for a specified location",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "location": {
+          "type": "string",
+          "description": "The city and state, e.g. San Francisco, CA"
+        },
+        "unit": {
+          "type": "string",
+          "enum": ["celsius", "fahrenheit"],
+          "description": "Temperature unit"
+        }
+      },
+      "required": ["location"]
+    }
+  }
+]
+
+-- setup.js --
+// Helper script to configure AI Studio
+function setupToolUse(functionsJSON) {
+  // Enable function calling
+  const toggle = document.querySelector('[data-test-id="function-calling-toggle"] button');
+  if (toggle && toggle.getAttribute('aria-checked') === 'false') {
+    toggle.click();
+  }
+
+  // Wait a moment for UI update
+  return new Promise(resolve => setTimeout(resolve, 500));
+}
+
+function setFunctionDeclarations(functionsJSON) {
+  // Click Edit button
+  const editBtn = document.querySelector('.edit-button');
+  if (editBtn) editBtn.click();
+
+  // Wait for dialog
+  return new Promise(resolve => {
+    setTimeout(() => {
+      // Find and populate the code editor
+      const dialog = document.querySelector('.cdk-overlay-container');
+      if (dialog) {
+        const textarea = dialog.querySelector('textarea');
+        if (textarea) {
+          textarea.value = functionsJSON;
+          textarea.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+      }
+
+      // Click Save
+      setTimeout(() => {
+        const buttons = Array.from(document.querySelectorAll('button'));
+        const saveBtn = buttons.find(b => b.innerText.includes('Save'));
+        if (saveBtn) saveBtn.click();
+        resolve();
+      }, 300);
+    }, 500);
+  });
+}
+
+-- assertions.yaml --
+# Assertions to validate the script execution
+assertions:
+  - name: "AI Studio page loads"
+    type: selector
+    selector: textarea[placeholder="Start typing a prompt"]
+    condition: exists
+
+  - name: "No JavaScript errors"
+    type: no-errors

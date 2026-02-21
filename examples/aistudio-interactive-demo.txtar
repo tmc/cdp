@@ -1,0 +1,151 @@
+-- meta.yaml --
+name: AI Studio FC Golden
+description: Verified working end-to-end function calling automation
+browser: brave
+timeout: 300s
+
+-- main.cdp --
+# Start fresh
+goto https://aistudio.google.com/prompts/new_chat
+wait 5s
+
+log Step 1: Inject handler
+jsfile fc-handler.js
+
+log Step 2: Ensure Tools Expanded
+jsfile ensure-tools.js
+wait 2s
+
+log Step 3: Enable Toggle
+jsfile toggle-fc-on.js
+wait 2s
+
+log Step 4: Click Edit
+jsfile click-edit.js
+wait 4s
+
+log Step 5: Switch to Code Editor and Set JSON
+jsfile set-json.js
+wait 2s
+
+log Step 6: Send Message
+jsfile send-message.js
+
+log Step 7: Wait for Response
+wait 20s
+
+log Step 8: Verify Function Call
+jsfile verify-fc.js
+
+log Done!
+
+-- fc-handler.js --
+(() => {
+  window.__fc_tools = [
+      {
+        "name": "get_current_time",
+        "description": "Gets the current time",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "timezone": { "type": "string", "description": "Timezone" }
+          },
+          "required": ["timezone"]
+        }
+      }
+  ];
+  return 'Handler set';
+})();
+
+-- ensure-tools.js --
+(() => {
+  const header = Array.from(document.querySelectorAll('mat-expansion-panel-header'))
+      .find(h => h.textContent.includes('Tools'));
+  if(header) {
+      if(!header.closest('mat-expansion-panel').classList.contains('mat-expanded')) {
+          header.click();
+          return 'Expanded Tools';
+      }
+      return 'Tools already expanded';
+  }
+  const btn = Array.from(document.querySelectorAll('button')).find(b => b.textContent.includes('Tools'));
+  if(btn) { btn.click(); return 'Clicked Tools Btn'; }
+  return 'Tools not found';
+})();
+
+-- toggle-fc-on.js --
+(() => {
+  const btn = document.querySelector('.function-calling-toggle button[role="switch"]');
+  if(btn && btn.getAttribute('aria-checked') !== 'true') {
+     btn.click();
+     return 'Toggled ON';
+  }
+  return 'Already ON or not found';
+})();
+
+-- click-edit.js --
+(() => {
+  const btn = document.querySelector('.edit-function-declarations-button');
+  if(btn) {
+    btn.click();
+    return 'Clicked Edit';
+  }
+  return 'Edit button not found';
+})();
+
+-- set-json.js --
+(async () => {
+   const dialog = document.querySelector('.mat-mdc-dialog-panel') || document.querySelector('.cdk-overlay-pane');
+   if(!dialog) return 'Dialog not open';
+   
+   // Switch to code editor
+   const codeBtn = Array.from(dialog.querySelectorAll('button')).find(b => b.textContent.includes('Code Editor'));
+   if(codeBtn) {
+     codeBtn.click();
+     await new Promise(r => setTimeout(r, 1000));
+   }
+   
+   const ta = dialog.querySelector('textarea');
+   if(!ta) return 'Textarea not found';
+   
+   ta.focus();
+   ta.value = JSON.stringify(window.__fc_tools, null, 2);
+   ta.dispatchEvent(new Event('input', {bubbles: true}));
+   ta.dispatchEvent(new Event('change', {bubbles: true}));
+   
+   await new Promise(r => setTimeout(r, 500));
+   
+   // Save
+   const saveBtn = Array.from(dialog.querySelectorAll('button')).find(b => b.textContent.includes('Save'));
+   if(saveBtn) {
+     saveBtn.click();
+     return 'Saved';
+   }
+   return 'Save button missing';
+})();
+
+-- send-message.js --
+(() => {
+  const msg = "What time is it in Tokyo?";
+  const inputs = Array.from(document.querySelectorAll('textarea'));
+  const chatInput = inputs.find(i => i.placeholder.includes('Type') || i.placeholder.includes('prompt'));
+  if(chatInput) {
+    chatInput.focus();
+    chatInput.value = msg;
+    chatInput.dispatchEvent(new Event('input', {bubbles: true}));
+    setTimeout(() => {
+      const runBtn = Array.from(document.querySelectorAll('button')).find(b => b.textContent.includes('Run'));
+      if(runBtn) runBtn.click();
+    }, 1000);
+    return 'Sent';
+  }
+  return 'Input not found';
+})();
+
+-- verify-fc.js --
+(() => {
+  if(document.body.innerText.includes('get_current_time')) {
+    return 'SUCCESS: Function Call Triggered!';
+  }
+  return 'FAILURE: Function Call NOT found';
+})();

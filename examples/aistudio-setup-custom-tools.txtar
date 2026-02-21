@@ -1,0 +1,50 @@
+-- meta.yaml --
+name: AI Studio Function Calling Setup
+description: Sets up function calling with custom tool definitions in Google AI Studio
+timeout: 60s
+
+-- main.cdp --
+# AI Studio Function Calling Setup
+#
+# PREREQUISITES: Browser must be logged into Google and AI Studio must be open.
+#
+# USAGE:
+#   1. Open AI Studio: https://aistudio.google.com/prompts/new_chat
+#   2. Get tab ID: curl -s http://localhost:9222/json | jq -r '.[] | select(.url | contains("aistudio")) | .id'
+#   3. Run: cdp run --tab <TAB_ID> examples/aistudio-setup-custom-tools.txtar
+#
+# The script will:
+#   - Disable Grounding (required before enabling Function Calling)
+#   - Enable Function Calling toggle
+#   - Open the Function Declarations dialog
+#   - Add 5 tool definitions (get_current_time, search_web, read_file, write_file, execute_command)
+#   - Save the configuration
+
+# Step 1: Disable Grounding (required)
+jsfile examples/lib/disable-grounding.js
+log Step 1: Grounding check done
+
+# Step 2: Enable Function Calling
+jsfile examples/lib/enable-fc.js
+log Step 2: Function Calling enabled
+
+screenshot /tmp/aistudio-output/01-fc-enabled.png
+
+# Step 3: Open Function Declarations dialog
+jsfile examples/lib/open-dialog.js
+log Step 3: Dialog opened
+
+screenshot /tmp/aistudio-output/02-dialog-open.png
+
+# Step 4: Set tool definitions
+jsfile examples/lib/set-tools.js
+log Step 4: Tools configured
+
+screenshot /tmp/aistudio-output/03-tools-set.png
+
+# Step 5: Save
+jsfile examples/lib/save.js
+log Step 5: Saved
+
+screenshot /tmp/aistudio-output/04-complete.png
+log Function calling setup complete!

@@ -1,0 +1,193 @@
+-- meta.yaml --
+name: AI Studio FC Loop
+description: Full end-to-end function calling loop
+browser: brave
+timeout: 300s
+
+-- main.cdp --
+# Start fresh
+goto https://aistudio.google.com/prompts/new_chat
+wait 5s
+
+log Step 1: Inject handler
+jsfile fc-handler.js
+
+log Step 2: Ensure Tools Expanded
+jsfile ensure-tools.js
+wait 2s
+
+log Step 3: Enable Toggle
+jsfile toggle-fc-on.js
+wait 2s
+
+log Step 4: Click Edit
+jsfile click-edit.js
+wait 4s
+
+log Step 5: Switch to Code Editor and Set JSON
+jsfile set-json.js
+wait 2s
+
+log Step 6: Send Message
+jsfile send-message.js
+
+log Step 7: Wait for Function Call
+wait 20s
+
+log Step 8: Handle Function Call
+jsfile handle-fc.js
+
+log Step 9: Wait for Final Response
+wait 15s
+
+log Done!
+
+-- fc-handler.js --
+(() => {
+  window.__fc_tools = [
+      {
+        "name": "get_current_time",
+        "description": "Gets the current time",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "timezone": { "type": "string", "description": "Timezone" }
+          },
+          "required": ["timezone"]
+        }
+      }
+  ];
+  return 'Handler set';
+})();
+
+-- ensure-tools.js --
+(() => {
+  const header = Array.from(document.querySelectorAll('mat-expansion-panel-header'))
+      .find(h => h.textContent.includes('Tools'));
+  if(header) {
+      if(!header.closest('mat-expansion-panel').classList.contains('mat-expanded')) {
+          header.click();
+          return 'Expanded Tools';
+      }
+      return 'Tools already expanded';
+  }
+  const btn = Array.from(document.querySelectorAll('button')).find(b => b.textContent.includes('Tools'));
+  if(btn) { btn.click(); return 'Clicked Tools Btn'; }
+  return 'Tools not found';
+})();
+
+-- toggle-fc-on.js --
+(() => {
+  const btn = document.querySelector('.function-calling-toggle button[role="switch"]');
+  if(btn && btn.getAttribute('aria-checked') !== 'true') {
+     btn.click();
+     return 'Toggled ON';
+  }
+  return 'Already ON or not found';
+})();
+
+-- click-edit.js --
+(() => {
+  const btn = document.querySelector('.edit-function-declarations-button');
+  if(btn) {
+    btn.click();
+    return 'Clicked Edit';
+  }
+  return 'Edit button not found';
+})();
+
+-- set-json.js --
+(async () => {
+   const dialog = document.querySelector('.mat-mdc-dialog-panel') || document.querySelector('.cdk-overlay-pane');
+   if(!dialog) return 'Dialog not open';
+   
+   const codeBtn = Array.from(dialog.querySelectorAll('button')).find(b => b.textContent.includes('Code Editor'));
+   if(codeBtn) {
+     codeBtn.click();
+     await new Promise(r => setTimeout(r, 1000));
+   }
+   
+   const ta = dialog.querySelector('textarea');
+   if(!ta) return 'Textarea not found';
+   
+   ta.focus();
+   ta.value = JSON.stringify(window.__fc_tools, null, 2);
+   ta.dispatchEvent(new Event('input', {bubbles: true}));
+   ta.dispatchEvent(new Event('change', {bubbles: true}));
+   
+   await new Promise(r => setTimeout(r, 500));
+   
+   const saveBtn = Array.from(dialog.querySelectorAll('button')).find(b => b.textContent.includes('Save'));
+   if(saveBtn) {
+     saveBtn.click();
+     return 'Saved';
+   }
+   return 'Save button missing';
+})();
+
+-- send-message.js --
+(() => {
+  const msg = "What time is it in Tokyo?";
+  const inputs = Array.from(document.querySelectorAll('textarea'));
+  const chatInput = inputs.find(i => i.placeholder.includes('Type') || i.placeholder.includes('prompt'));
+  if(chatInput) {
+    chatInput.focus();
+    chatInput.value = msg;
+    chatInput.dispatchEvent(new Event('input', {bubbles: true}));
+    setTimeout(() => {
+      const runBtn = Array.from(document.querySelectorAll('button')).find(b => b.textContent.includes('Run'));
+      if(runBtn) runBtn.click();
+    }, 1000);
+    return 'Sent';
+  }
+  return 'Input not found';
+})();
+
+-- handle-fc.js --
+(() => {
+  // 1. Find the code block with arguments
+  const codeBlocks = Array.from(document.querySelectorAll('pre code'));
+  // Filter for one that contains "timezone" or appears last
+  const lastCode = codeBlocks[codeBlocks.length-1];
+  
+  if(!lastCode) return 'No code block found';
+  
+  let args = {};
+  try {
+      args = JSON.parse(lastCode.textContent);
+  } catch(e) {
+      return 'Failed to parse JSON: ' + lastCode.textContent;
+  }
+  
+  // 2. Calculate result
+  let timeStr = "Unknown";
+  if(args.timezone === 'Asia/Tokyo') {
+      timeStr = "2024-01-01T12:00:00+09:00"; 
+  }
+  
+  const result = { time: timeStr };
+  
+  // 3. Find input form
+  // Look for .function-response-input inside the same container or generally last one
+  const inputs = Array.from(document.querySelectorAll('.function-response-input input'));
+  const lastInput = inputs[inputs.length-1];
+  
+  if(!lastInput) return 'Response input not found';
+  
+  lastInput.focus();
+  lastInput.value = JSON.stringify(result);
+  lastInput.dispatchEvent(new Event('input', {bubbles: true}));
+  lastInput.dispatchEvent(new Event('change', {bubbles: true}));
+  
+  // 4. Click Send
+  const form = lastInput.closest('form');
+  if(!form) return 'Form not found';
+  
+  const sendBtn = form.querySelector('button');
+  if(sendBtn && sendBtn.textContent.includes('Send')) {
+      sendBtn.click();
+      return 'Response Sent: ' + JSON.stringify(result);
+  }
+  
+  return 'Send button not found';
+})();

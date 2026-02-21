@@ -1,0 +1,21 @@
+# Simple Test Script
+# Usage: cdp script simple-test.txtar
+
+-- meta.yaml --
+name: Simple Test
+description: Simple test script without profile
+version: "1.0"
+headless: false
+timeout: 30s
+
+-- main.cdp --
+# Navigate to example.com
+goto https://example.com
+
+# Wait for page
+wait 2s
+
+# Take screenshot
+screenshot /tmp/simple-test.png
+
+log "Test completed!"

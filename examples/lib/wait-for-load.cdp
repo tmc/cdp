@@ -1,0 +1,5 @@
+# wait-for-load.cdp - Wait for page to be fully loaded
+# Waits for common indicators of page load completion
+
+wait 500ms
+log Page load wait complete

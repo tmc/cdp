@@ -1,0 +1,35 @@
+# AI Studio with sourced commands
+-- meta.yaml --
+name: AI Studio with Source
+description: Demonstrates the source command
+browser: brave
+profile: Default
+headless: false
+timeout: 5m
+env:
+  MODEL: gemini-2.5-flash-native-audio-preview-12-2025
+
+-- main.cdp --
+# Register a reusable send command
+source -as send-msg examples/lib/aistudio-send.cdp
+
+# Navigate if needed
+[!has-tab] goto https://aistudio.google.com/live?model=$MODEL
+
+# Wait for textarea
+wait textarea
+
+# Screenshot initial state
+screenshot /tmp/aistudio-source-1.png
+
+# Use the sourced command with tracing
+source -x examples/lib/wait-for-load.cdp
+
+# Use our registered command to send a message
+send-msg "Hello from a sourced command!"
+
+# Wait for response
+wait 5s
+
+screenshot /tmp/aistudio-source-2.png
+log Done!

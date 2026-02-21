@@ -1,0 +1,54 @@
+-- meta.yaml --
+name: AI Studio Function Call Auto-Handler
+description: Automatically detects and handles function calls in Google AI Studio
+timeout: 300s
+
+-- main.cdp --
+# AI Studio Function Call Auto-Handler
+#
+# PREREQUISITES:
+#   1. Browser must be logged into Google
+#   2. AI Studio must have function calling enabled with tool definitions
+#   3. Navigate to a prompt that has function calling configured
+#
+# USAGE:
+#   # First, attach to an AI Studio tab:
+#   cdp --debug-port 9223 --tab <TAB_ID>
+#
+#   # Then in the REPL:
+#   jsfile examples/lib/aistudio-fc-handler-mini.js
+#
+# MANUAL USAGE IN REPL:
+#   jsfile examples/lib/aistudio-fc-handler-mini.js   # Load handler
+#   Runtime.evaluate {"expression":"JSON.stringify(window.__fcHandler.check())"}  # Check for pending FC
+#   Runtime.evaluate {"expression":"JSON.stringify(window.__fcHandler.auto())"}   # Auto-respond
+#
+# The handler provides:
+#   window.__fcHandler.check()   - Check for pending function calls
+#   window.__fcHandler.respond() - Inject a response
+#   window.__fcHandler.send()    - Click the send button
+#   window.__fcHandler.auto()    - Auto-detect and respond
+#   window.__fcHandler.time(tz)  - Get current time for timezone
+
+# Load the function call handler
+jsfile examples/lib/aistudio-fc-handler-mini.js
+log Function call handler loaded
+
+# Check for any pending function calls
+js JSON.stringify(window.__fcHandler.check())
+log Checked for pending function calls
+
+# If there's a pending call, auto-handle it
+js window.__fcHandler.auto()
+log Auto-handler executed
+
+# Poll for new function calls (simple loop)
+wait 2s
+js JSON.stringify(window.__fcHandler.check())
+js window.__fcHandler.auto()
+
+wait 2s
+js JSON.stringify(window.__fcHandler.check())
+js window.__fcHandler.auto()
+
+log Script complete - for continuous monitoring, use the REPL manually

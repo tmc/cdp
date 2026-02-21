@@ -1,0 +1,310 @@
+-- meta.yaml --
+name: Google Doc to Markdown
+description: Extract content from a Google Doc and convert to Markdown
+browser: brave
+headless: false
+timeout: 60s
+env:
+  GDOC_URL: "https://docs.google.com/document/d/YOUR_DOC_ID/edit"
+
+-- main.cdp --
+# Google Doc to Markdown Converter
+# Usage: Set GDOC_URL env var to your Google Doc URL
+# Example: GDOC_URL="https://docs.google.com/document/d/abc123/edit" cdp run gdoc-to-markdown.txtar
+
+log Navigating to Google Doc...
+goto ${GDOC_URL}
+
+# Wait for the document editor to load
+wait 5s
+wait .kix-appview-editor
+
+log Waiting for document content to fully load...
+wait 3s
+
+# Extract and convert the document content
+log Extracting document content...
+jsfile extract-and-convert.js
+
+log Done!
+
+-- extract-and-convert.js --
+(() => {
+  // HTML to Markdown converter
+  function htmlToMarkdown(html) {
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    return convertNode(doc.body);
+  }
+
+  function convertNode(node) {
+    if (node.nodeType === Node.TEXT_NODE) {
+      return node.textContent;
+    }
+
+    if (node.nodeType !== Node.ELEMENT_NODE) {
+      return '';
+    }
+
+    const tag = node.tagName.toLowerCase();
+    const children = Array.from(node.childNodes).map(convertNode).join('');
+
+    // Handle Google Docs specific classes
+    const classList = node.classList || [];
+
+    // Headers (Google Docs uses specific classes)
+    if (classList.contains('kix-paragraphrenderer')) {
+      const style = node.getAttribute('style') || '';
+      // Check for heading sizes based on font-size or specific classes
+      const headingLevel = detectHeadingLevel(node);
+      if (headingLevel > 0) {
+        return '#'.repeat(headingLevel) + ' ' + children.trim() + '\n\n';
+      }
+      // Regular paragraph
+      const trimmed = children.trim();
+      if (trimmed) {
+        return trimmed + '\n\n';
+      }
+      return '';
+    }
+
+    switch (tag) {
+      case 'b':
+      case 'strong':
+        return '**' + children + '**';
+
+      case 'i':
+      case 'em':
+        return '*' + children + '*';
+
+      case 'u':
+        return '__' + children + '__';
+
+      case 's':
+      case 'strike':
+      case 'del':
+        return '~~' + children + '~~';
+
+      case 'code':
+        return '`' + children + '`';
+
+      case 'pre':
+        return '```\n' + children + '\n```\n\n';
+
+      case 'h1':
+        return '# ' + children.trim() + '\n\n';
+      case 'h2':
+        return '## ' + children.trim() + '\n\n';
+      case 'h3':
+        return '### ' + children.trim() + '\n\n';
+      case 'h4':
+        return '#### ' + children.trim() + '\n\n';
+      case 'h5':
+        return '##### ' + children.trim() + '\n\n';
+      case 'h6':
+        return '###### ' + children.trim() + '\n\n';
+
+      case 'a':
+        const href = node.getAttribute('href');
+        if (href) {
+          // Handle Google redirect URLs
+          const cleanUrl = cleanGoogleUrl(href);
+          return '[' + children + '](' + cleanUrl + ')';
+        }
+        return children;
+
+      case 'img':
+        const src = node.getAttribute('src');
+        const alt = node.getAttribute('alt') || 'image';
+        if (src) {
+          return '![' + alt + '](' + src + ')';
+        }
+        return '';
+
+      case 'ul':
+        return convertList(node, false) + '\n';
+
+      case 'ol':
+        return convertList(node, true) + '\n';
+
+      case 'li':
+        return children;
+
+      case 'blockquote':
+        return children.split('\n').map(line => '> ' + line).join('\n') + '\n\n';
+
+      case 'hr':
+        return '\n---\n\n';
+
+      case 'br':
+        return '\n';
+
+      case 'table':
+        return convertTable(node) + '\n\n';
+
+      case 'p':
+      case 'div':
+        const trimmedContent = children.trim();
+        if (trimmedContent) {
+          // Check if it's inside a list or other container
+          if (node.closest('li')) {
+            return trimmedContent;
+          }
+          return trimmedContent + '\n\n';
+        }
+        return '';
+
+      case 'span':
+        // Handle Google Docs formatting spans
+        const spanStyle = node.getAttribute('style') || '';
+        let result = children;
+
+        if (spanStyle.includes('font-weight: 700') || spanStyle.includes('font-weight:700') ||
+            spanStyle.includes('font-weight: bold') || spanStyle.includes('font-weight:bold')) {
+          result = '**' + result + '**';
+        }
+        if (spanStyle.includes('font-style: italic') || spanStyle.includes('font-style:italic')) {
+          result = '*' + result + '*';
+        }
+        if (spanStyle.includes('text-decoration: underline') || spanStyle.includes('text-decoration:underline') ||
+            spanStyle.includes('text-decoration-line: underline')) {
+          result = '__' + result + '__';
+        }
+        if (spanStyle.includes('text-decoration: line-through') || spanStyle.includes('text-decoration:line-through') ||
+            spanStyle.includes('text-decoration-line: line-through')) {
+          result = '~~' + result + '~~';
+        }
+
+        return result;
+
+      default:
+        return children;
+    }
+  }
+
+  function detectHeadingLevel(node) {
+    // Try to detect heading level from Google Docs structure
+    // Google Docs uses specific CSS classes and styles for headings
+    const style = node.getAttribute('style') || '';
+    const classList = Array.from(node.classList || []);
+
+    // Check for heading paragraphs in Google Docs
+    // The heading level is sometimes indicated by font size
+    const fontSizeMatch = style.match(/font-size:\s*(\d+(?:\.\d+)?)(pt|px)/);
+    if (fontSizeMatch) {
+      const size = parseFloat(fontSizeMatch[1]);
+      const unit = fontSizeMatch[2];
+      const sizeInPt = unit === 'px' ? size * 0.75 : size;
+
+      if (sizeInPt >= 26) return 1;
+      if (sizeInPt >= 20) return 2;
+      if (sizeInPt >= 16) return 3;
+      if (sizeInPt >= 14) return 4;
+      if (sizeInPt >= 12) return 5;
+    }
+
+    return 0;
+  }
+
+  function convertList(listNode, ordered) {
+    const items = Array.from(listNode.querySelectorAll(':scope > li'));
+    return items.map((item, index) => {
+      const prefix = ordered ? `${index + 1}. ` : '- ';
+      const content = convertNode(item).trim();
+      return prefix + content;
+    }).join('\n');
+  }
+
+  function convertTable(tableNode) {
+    const rows = Array.from(tableNode.querySelectorAll('tr'));
+    if (rows.length === 0) return '';
+
+    const result = [];
+
+    rows.forEach((row, rowIndex) => {
+      const cells = Array.from(row.querySelectorAll('td, th'));
+      const cellContents = cells.map(cell => convertNode(cell).trim().replace(/\|/g, '\\|'));
+      result.push('| ' + cellContents.join(' | ') + ' |');
+
+      // Add header separator after first row
+      if (rowIndex === 0) {
+        result.push('| ' + cells.map(() => '---').join(' | ') + ' |');
+      }
+    });
+
+    return result.join('\n');
+  }
+
+  function cleanGoogleUrl(url) {
+    // Google Docs wraps external URLs in redirect URLs
+    if (url.includes('google.com/url?')) {
+      const match = url.match(/[?&]q=([^&]+)/);
+      if (match) {
+        return decodeURIComponent(match[1]);
+      }
+    }
+    return url;
+  }
+
+  // Extract content from Google Docs
+  function extractGoogleDocContent() {
+    // Method 1: Try to get from the rendered pages
+    const pages = document.querySelectorAll('.kix-page');
+    if (pages.length > 0) {
+      const htmlContent = Array.from(pages).map(page => {
+        // Get the actual content area within each page
+        const content = page.querySelector('.kix-page-content-wrapper');
+        return content ? content.innerHTML : page.innerHTML;
+      }).join('\n');
+
+      return htmlToMarkdown(htmlContent);
+    }
+
+    // Method 2: Try the canvas-based viewer (newer Google Docs)
+    const canvasContent = document.querySelector('.kix-appview-editor');
+    if (canvasContent) {
+      // For canvas-based rendering, we need to access the document model
+      // This requires using Google Docs internal APIs or accessibility tree
+
+      // Try getting from accessibility tree / ARIA
+      const textContent = [];
+      const paragraphs = document.querySelectorAll('[role="textbox"] [data-p]');
+      if (paragraphs.length > 0) {
+        paragraphs.forEach(p => {
+          textContent.push(p.textContent);
+        });
+        return textContent.join('\n\n');
+      }
+
+      // Fallback: try to get any visible text
+      const allText = canvasContent.innerText;
+      if (allText && allText.trim()) {
+        return allText;
+      }
+    }
+
+    // Method 3: Try clipboard approach (requires user action)
+    // This is a hint for users - they can Ctrl+A, Ctrl+C and paste elsewhere
+
+    return 'Unable to extract content. Google Docs may be using canvas rendering.\n\n' +
+           'Try these alternatives:\n' +
+           '1. File > Download > Plain Text (.txt)\n' +
+           '2. File > Download > Web Page (.html) and convert\n' +
+           '3. Select all (Ctrl+A), copy (Ctrl+C), and paste into a markdown editor';
+  }
+
+  // Main extraction
+  const markdown = extractGoogleDocContent();
+
+  // Clean up the markdown
+  const cleaned = markdown
+    .replace(/\n{3,}/g, '\n\n')  // Normalize multiple newlines
+    .replace(/^\s+|\s+$/g, '')    // Trim whitespace
+    .trim();
+
+  // Output the result
+  console.log('--- MARKDOWN OUTPUT ---');
+  console.log(cleaned);
+  console.log('--- END MARKDOWN ---');
+
+  return cleaned;
+})();

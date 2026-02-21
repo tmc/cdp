@@ -1,0 +1,181 @@
+-- meta.yaml --
+name: Google OAuth Helper
+description: Automate Google OAuth consent flow for API tools like gdocsmd
+browser: brave
+headless: false
+timeout: 120s
+env:
+  # Set this to the OAuth URL from gdocsmd or similar tool
+  OAUTH_URL: ""
+
+-- main.cdp --
+# Google OAuth Consent Flow Helper
+#
+# This script helps automate the OAuth consent flow for Google APIs.
+# It navigates to the OAuth URL, waits for user to select account,
+# then auto-clicks through the consent screens.
+#
+# Usage:
+#   1. Run gdocsmd (or similar) which prints an OAuth URL
+#   2. Set OAUTH_URL env var to that URL
+#   3. Run this script: OAUTH_URL="https://accounts.google.com/..." cdp run google-oauth-helper.txtar
+#
+# The script will:
+#   - Navigate to the OAuth URL
+#   - Wait for you to select/login your Google account
+#   - Auto-click "Continue" and "Allow" buttons
+#   - Report when the callback is triggered
+
+log Starting Google OAuth helper...
+
+# Navigate to OAuth URL if provided, otherwise show instructions
+jsfile check-url.js
+
+# Wait for the OAuth page to load
+wait 3s
+
+log Waiting for account selection...
+log (Select your Google account in the browser)
+wait 10s
+
+# Try to auto-click through consent screens
+log Attempting to auto-accept consent...
+jsfile auto-consent.js
+
+wait 3s
+
+# Check if we landed on callback
+jsfile check-callback.js
+
+log OAuth flow complete!
+
+-- check-url.js --
+(() => {
+  const oauthUrl = window.__oauth_url;
+
+  if (!oauthUrl || oauthUrl === '${OAUTH_URL}') {
+    console.log('=== INSTRUCTIONS ===');
+    console.log('No OAUTH_URL provided.');
+    console.log('');
+    console.log('To use this script:');
+    console.log('1. Run your OAuth tool (e.g., gdocsmd) which will print an OAuth URL');
+    console.log('2. Copy that URL');
+    console.log('3. Run: OAUTH_URL="<the-url>" cdp run google-oauth-helper.txtar');
+    console.log('');
+    console.log('Or navigate to the OAuth URL manually in this browser window.');
+    return 'No URL provided';
+  }
+
+  return 'URL check passed';
+})();
+
+-- auto-consent.js --
+(() => {
+  // Helper to click a button with delay
+  function clickButton(btn, label) {
+    if (btn && !btn.disabled) {
+      console.log('Clicking: ' + label);
+      btn.click();
+      return true;
+    }
+    return false;
+  }
+
+  // Find and click consent buttons
+  function findAndClick() {
+    // Look for common Google OAuth consent buttons
+    const buttonTexts = [
+      'Continue',
+      'Allow',
+      'Accept',
+      'Confirm',
+      'Grant',
+      'Authorize',
+      'Yes',
+      'Next'
+    ];
+
+    const allButtons = Array.from(document.querySelectorAll('button, [role="button"]'));
+
+    for (const text of buttonTexts) {
+      const btn = allButtons.find(b => {
+        const btnText = b.textContent.trim();
+        return btnText === text || btnText.toLowerCase() === text.toLowerCase();
+      });
+
+      if (btn) {
+        // Check if button is visible
+        const rect = btn.getBoundingClientRect();
+        if (rect.width > 0 && rect.height > 0) {
+          clickButton(btn, text);
+          return text;
+        }
+      }
+    }
+
+    // Also check for checkboxes that need to be checked
+    const checkboxes = document.querySelectorAll('input[type="checkbox"]:not(:checked)');
+    checkboxes.forEach(cb => {
+      const label = cb.closest('label')?.textContent || '';
+      if (label.includes('access') || label.includes('permission')) {
+        cb.click();
+        console.log('Checked: ' + label.substring(0, 50));
+      }
+    });
+
+    return 'No button found';
+  }
+
+  // Try clicking with retries
+  let result = findAndClick();
+
+  // Set up retry for dynamic content
+  let retries = 0;
+  const maxRetries = 5;
+
+  const interval = setInterval(() => {
+    result = findAndClick();
+    retries++;
+    if (result !== 'No button found' || retries >= maxRetries) {
+      clearInterval(interval);
+    }
+  }, 1000);
+
+  return 'Auto-consent initiated';
+})();
+
+-- check-callback.js --
+(() => {
+  const url = window.location.href;
+
+  // Check if we're on a callback URL
+  if (url.includes('localhost') && url.includes('code=')) {
+    console.log('=== SUCCESS ===');
+    console.log('OAuth callback received!');
+    console.log('URL: ' + url);
+
+    // Extract the code
+    const codeMatch = url.match(/code=([^&]+)/);
+    if (codeMatch) {
+      console.log('Auth code: ' + codeMatch[1].substring(0, 20) + '...');
+    }
+
+    return 'Callback received';
+  }
+
+  // Check if we're still on Google
+  if (url.includes('accounts.google.com')) {
+    console.log('Still on Google accounts page - waiting for user action');
+    return 'Waiting for user';
+  }
+
+  // Check for error
+  if (url.includes('error=')) {
+    const errorMatch = url.match(/error=([^&]+)/);
+    console.log('OAuth error: ' + (errorMatch ? errorMatch[1] : 'unknown'));
+    return 'Error';
+  }
+
+  console.log('Current URL: ' + url);
+  return 'Unknown state';
+})();

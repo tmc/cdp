@@ -1,0 +1,157 @@
+-- meta.yaml --
+name: Extract Slack Tokens
+description: Extract session tokens and cookies from logged-in Slack workspace
+browser: brave
+headless: false
+timeout: 60s
+
+-- main.cdp --
+# Extract Slack Session Tokens
+#
+# Extracts authentication tokens from a logged-in Slack session.
+# These tokens can be used by slackdump for backup automation.
+#
+# Usage: cdp run extract-slack-tokens.txtar
+# Requires: User logged into Slack in the browser
+
+log Navigating to Slack...
+goto https://app.slack.com
+
+wait 5s
+
+log Extracting tokens from localStorage and cookies...
+jsfile extract-slack-auth.js
+
+log Done! Check output above for token values.
+
+-- extract-slack-auth.js --
+(() => {
+  const results = {
+    tokens: [],
+    cookies: {},
+    workspaces: []
+  };
+
+  // Extract tokens from localStorage
+  // Slack stores tokens in localConfig_v2 and other keys
+  const localStorageKeys = ['localConfig_v2', 'redux', 'teams', 'token'];
+
+  console.log('=== Slack Token Extraction ===\n');
+
+  // Search all localStorage for token patterns
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
+    const value = localStorage.getItem(key);
+
+    // Look for xoxc tokens (client tokens)
+    const xoxcMatches = value.match(/xoxc-[0-9]+-[0-9]+-[0-9]+-[a-f0-9]+/g);
+    if (xoxcMatches) {
+      xoxcMatches.forEach(token => {
+        if (!results.tokens.includes(token)) {
+          results.tokens.push(token);
+          console.log('Found xoxc token in localStorage[' + key + ']');
+        }
+      });
+    }
+
+    // Look for xoxs tokens (session tokens)
+    const xoxsMatches = value.match(/xoxs-[0-9]+-[0-9]+-[0-9]+-[a-f0-9]+/g);
+    if (xoxsMatches) {
+      xoxsMatches.forEach(token => {
+        if (!results.tokens.includes(token)) {
+          results.tokens.push(token);
+          console.log('Found xoxs token in localStorage[' + key + ']');
+        }
+      });
+    }
+
+    // Look for xoxd tokens (device tokens)
+    const xoxdMatches = value.match(/xoxd-[A-Za-z0-9%]+/g);
+    if (xoxdMatches) {
+      xoxdMatches.forEach(token => {
+        if (!results.tokens.includes(token)) {
+          results.tokens.push(token);
+          console.log('Found xoxd token in localStorage[' + key + ']');
+        }
+      });
+    }
+
+    // Extract team/workspace info
+    if (key.includes('team') || key.includes('workspace')) {
+      try {
+        const parsed = JSON.parse(value);
+        if (parsed && typeof parsed === 'object') {
+          results.workspaces.push({ key, data: parsed });
+        }
+      } catch (e) {
+        // Not JSON, skip
+      }
+    }
+  }
+
+  // Extract the 'd' cookie which is critical for Slack API auth
+  const cookies = document.cookie.split(';').reduce((acc, cookie) => {
+    const [name, ...valueParts] = cookie.trim().split('=');
+    if (name) {
+      acc[name] = valueParts.join('=');
+    }
+    return acc;
+  }, {});
+
+  results.cookies = cookies;
+
+  // The 'd' cookie is essential for slackdump
+  if (cookies.d) {
+    console.log('\n=== d Cookie (for slackdump) ===');
+    console.log('d=' + cookies.d);
+  }
+
+  // Also check for 'd-s' cookie (signed session)
+  if (cookies['d-s']) {
+    console.log('\nd-s=' + cookies['d-s']);
+  }
+
+  // Print found tokens
+  if (results.tokens.length > 0) {
+    console.log('\n=== Slack Tokens Found ===');
+    results.tokens.forEach((token, i) => {
+      // Mask for security but show type
+      const type = token.split('-')[0];
+      const masked = token.substring(0, 20) + '...' + token.slice(-10);
+      console.log((i + 1) + '. ' + type + ': ' + masked);
+    });
+  } else {
+    console.log('\nNo xoxc/xoxs/xoxd tokens found in localStorage.');
+    console.log('Make sure you are logged into a Slack workspace.');
+  }
+
+  // Try to extract from window.boot_data if available
+  if (window.boot_data && window.boot_data.api_token) {
+    console.log('\n=== boot_data API Token ===');
+    console.log('api_token: ' + window.boot_data.api_token.substring(0, 20) + '...');
+    results.tokens.push(window.boot_data.api_token);
+  }
+
+  // Output for slackdump usage
+  console.log('\n=== For slackdump ===');
+  if (cookies.d && results.tokens.length > 0) {
+    console.log('Export these to use with slackdump:');
+    console.log('');
+    console.log('export SLACK_TOKEN="' + results.tokens[0] + '"');
+    console.log('export SLACK_COOKIE="d=' + cookies.d + '"');
+  } else if (cookies.d) {
+    console.log('Cookie auth (browser token mode):');
+    console.log('export SLACK_COOKIE="d=' + cookies.d + '"');
+  } else {
+    console.log('Could not extract auth. Make sure you are logged into Slack.');
+  }
+
+  // Store for programmatic access
+  window.__slack_auth = results;
+
+  return JSON.stringify({
+    tokenCount: results.tokens.length,
+    hasDCookie: !!cookies.d,
+    workspaceCount: results.workspaces.length
+  });
+})();

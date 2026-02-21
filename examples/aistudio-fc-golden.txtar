@@ -1,0 +1,233 @@
+-- meta.yaml --
+name: AI Studio FC Loop Sync
+description: End-to-end loop with synchronous steps
+browser: brave
+timeout: 300s
+
+-- main.cdp --
+# Start fresh
+goto https://aistudio.google.com/prompts/new_chat?model=gemini-3-flash-preview
+wait 5s
+
+log Step 1: Inject handler
+jsfile fc-handler.js
+
+log Step 2: Ensure Tools Expanded
+jsfile ensure-tools.js
+wait 2s
+
+log Step 3: Enable Toggle
+jsfile toggle-fc-on.js
+wait 2s
+
+log Step 4: Click Edit
+jsfile click-edit.js
+wait 4s
+
+log Step 5a: Switch to Code Editor
+jsfile switch-code.js
+wait 1s
+
+log Step 5b: Set Tools JSON
+jsfile set-tools.js
+wait 2s
+
+log Step 6: Send Message
+jsfile send-message.js
+
+log Step 7: Wait for Function Call
+wait 20s
+
+log Step 8a: Populate Function Response
+jsfile fc-populate.js
+wait 1s
+
+log Step 8b: Click Send Response
+jsfile fc-send.js
+
+log Step 9: Wait for Final Response
+wait 15s
+
+log Done!
+
+-- fc-handler.js --
+(() => {
+  window.__fc_tools = [
+      {
+        "name": "get_current_time",
+        "description": "Gets the current time",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "timezone": { "type": "string", "description": "Timezone" }
+          },
+          "required": ["timezone"]
+        }
+      }
+  ];
+  return 'Handler set';
+})();
+
+-- ensure-tools.js --
+(() => {
+  const header = Array.from(document.querySelectorAll('mat-expansion-panel-header'))
+      .find(h => h.textContent.includes('Tools'));
+  if(header) {
+      if(!header.closest('mat-expansion-panel').classList.contains('mat-expanded')) {
+          header.click();
+          return 'Expanded Tools';
+      }
+      return 'Tools already expanded';
+  }
+  const btn = Array.from(document.querySelectorAll('button')).find(b => b.textContent.includes('Tools'));
+  if(btn) { btn.click(); return 'Clicked Tools Btn'; }
+  return 'Tools not found';
+})();
+
+-- toggle-fc-on.js --
+(() => {
+  const btn = document.querySelector('.function-calling-toggle button[role="switch"]');
+  if(btn && btn.getAttribute('aria-checked') !== 'true') {
+     btn.click();
+     return 'Toggled ON';
+  }
+  return 'Already ON or not found';
+})();
+
+-- click-edit.js --
+(() => {
+  const btn = document.querySelector('.edit-function-declarations-button');
+  if(btn) {
+    btn.click();
+    return 'Clicked Edit';
+  }
+  return 'Edit button not found';
+})();
+
+-- switch-code.js --
+(() => {
+   const dialog = document.querySelector('.mat-mdc-dialog-panel') || document.querySelector('.cdk-overlay-pane');
+   if(!dialog) return 'Dialog not open';
+   
+   const codeBtn = Array.from(dialog.querySelectorAll('button')).find(b => b.textContent.includes('Code Editor'));
+   if(codeBtn) {
+     codeBtn.click();
+     return 'Clicked Code Editor';
+   }
+   return 'Code Editor button not found (may be active)';
+})();
+
+-- set-tools.js --
+(() => {
+   const dialog = document.querySelector('.mat-mdc-dialog-panel') || document.querySelector('.cdk-overlay-pane');
+   if(!dialog) return 'Dialog not open';
+   
+   const ta = dialog.querySelector('textarea');
+   if(!ta) return 'Textarea not found';
+   
+   ta.focus();
+   ta.value = JSON.stringify(window.__fc_tools, null, 2);
+   ta.dispatchEvent(new Event('input', {bubbles: true}));
+   ta.dispatchEvent(new Event('change', {bubbles: true}));
+   
+   // We click save immediately, assuming no wait needed after input
+   // If wait needed, we'd split this too.
+   // But usually input->click is fine.
+   
+   const saveBtn = Array.from(dialog.querySelectorAll('button')).find(b => b.textContent.includes('Save'));
+   if(saveBtn) {
+     saveBtn.click();
+     return 'Saved';
+   }
+   return 'Save button missing';
+})();
+
+-- send-message.js --
+(() => {
+  const msg = "What time is it in Tokyo?";
+  const inputs = Array.from(document.querySelectorAll('textarea'));
+  const chatInput = inputs.find(i => i.placeholder.includes('Type') || i.placeholder.includes('prompt'));
+  if(chatInput) {
+    chatInput.focus();
+    chatInput.value = msg;
+    chatInput.dispatchEvent(new Event('input', {bubbles: true}));
+    
+    // We can't wait in sync, so we just set value.
+    // We assume the caller handles the wait or we just click immediately if valid.
+    // Let's try finding the button immediately.
+    
+    const runBtn = Array.from(document.querySelectorAll('button')).find(b => b.textContent.includes('Run'));
+    if(runBtn) {
+        // Maybe wait small bit? NO, sync.
+        // runBtn.click(); // Might be too fast
+    }
+    
+    // Set a flag or just hope the next poll clicks it? 
+    // Actually, send-message was working fine before. 
+    // It used setTimeout which IS async but returns immediately.
+    // The previous implementation used setTimeout and returned 'Sent'. 
+    // The click happened 1s later in background. That works!
+    
+    setTimeout(() => {
+       const b = Array.from(document.querySelectorAll('button')).find(btn => btn.textContent.includes('Run'));
+       if(b) b.click();
+    }, 500);
+    
+    return 'Message Queued';
+  }
+  return 'Input not found';
+})();
+
+-- fc-populate.js --
+(() => {
+  const codeBlocks = Array.from(document.querySelectorAll('pre code'));
+  const lastCode = codeBlocks[codeBlocks.length-1];
+  if(!lastCode) return 'No code block found';
+  
+  let args = {};
+  try { args = JSON.parse(lastCode.textContent); } 
+  catch(e) { return 'Failed to parse JSON'; }
+  
+  let timeStr = "Unknown";
+  if(args.timezone === 'Asia/Tokyo') timeStr = "2024-01-01T12:00:00+09:00"; 
+  
+  const result = { time: timeStr };
+  const resultStr = JSON.stringify(result);
+  
+  const inputs = Array.from(document.querySelectorAll('.function-response-input input'));
+  const lastInput = inputs[inputs.length-1];
+  
+  if(!lastInput) return 'Response input not found';
+  
+  lastInput.focus();
+  lastInput.value = resultStr;
+  lastInput.dispatchEvent(new Event('input', {bubbles: true}));
+  lastInput.dispatchEvent(new Event('change', {bubbles: true}));
+  lastInput.dispatchEvent(new KeyboardEvent('keydown', {key: 'Space', bubbles: true}));
+  lastInput.dispatchEvent(new KeyboardEvent('keyup', {key: 'Space', bubbles: true}));
+  lastInput.blur();
+  
+  return 'Populated: ' + resultStr;
+})();
+
+-- fc-send.js --
+(() => {
+  const inputs = Array.from(document.querySelectorAll('.function-response-input input'));
+  const lastInput = inputs[inputs.length-1];
+  if(!lastInput) return 'Input not found';
+  
+  const form = lastInput.closest('form');
+  if(!form) return 'Form not found';
+  
+  const sendBtn = form.querySelector('button');
+  if(!sendBtn || !sendBtn.textContent.includes('Send')) return 'Send button not found';
+  
+  if(!sendBtn.classList.contains('invalid') && !sendBtn.disabled) {
+      sendBtn.click();
+      return 'Clicked Send';
+  } else {
+      // Force it?
+      sendBtn.click();
+      return 'Force Clicked Send';
+  }
+})();

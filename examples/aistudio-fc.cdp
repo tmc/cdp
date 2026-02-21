@@ -1,0 +1,92 @@
+#!/usr/bin/env cdp run
+# AI Studio Function Call Auto-Handler
+#
+# Usage: cdp run examples/aistudio-fc.cdp --tab <TAB_ID>
+#    or: cdp run examples/aistudio-fc.cdp --url https://aistudio.google.com/prompts/<ID>
+#
+# This script monitors AI Studio for function calls and automatically responds.
+
+# Inject the function call handler
+js (() => {
+  window.__fc = {
+    check: () => {
+      const inp = document.querySelector('input[placeholder="Enter function response"]');
+      if (!inp) return { pending: false };
+      const text = document.body.innerText;
+      const fns = ['get_current_time', 'search_web', 'read_file', 'write_file', 'execute_command'];
+      let fn = null, args = null;
+      for (const f of fns) {
+        if (text.includes(f)) {
+          fn = f;
+          const m = text.substring(text.indexOf(f)).match(/\{[\s\S]*?\}/);
+          if (m) try { args = JSON.parse(m[0]); } catch(e) {}
+          break;
+        }
+      }
+      return { pending: true, fn, args };
+    },
+    respond: (json) => {
+      const inp = document.querySelector('input[placeholder="Enter function response"]');
+      if (!inp) return false;
+      inp.focus();
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(inp, typeof json === 'string' ? json : JSON.stringify(json));
+      inp.dispatchEvent(new Event('input', { bubbles: true }));
+      return true;
+    },
+    send: () => {
+      const btn = document.querySelector('button[type="submit"]');
+      if (!btn || btn.disabled || btn.classList.contains('invalid')) return false;
+      btn.click();
+      return true;
+    },
+    time: (tz) => {
+      const now = new Date();
+      const options = { timeZone: tz || 'UTC', hour12: false };
+      const formatter = new Intl.DateTimeFormat('en-CA', {
+        ...options, year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit', second: '2-digit'
+      });
+      const parts = formatter.formatToParts(now);
+      const get = (type) => parts.find(p => p.type === type)?.value || '';
+      return {
+        time: `${get('year')}-${get('month')}-${get('day')}T${get('hour')}:${get('minute')}:${get('second')}`,
+        timezone: tz || 'UTC',
+        unix: Math.floor(now.getTime()/1000)
+      };
+    },
+    auto: () => {
+      const c = window.__fc.check();
+      if (!c.pending || !c.fn) return null;
+      let result;
+      if (c.fn === 'get_current_time') result = window.__fc.time(c.args?.timezone);
+      else result = { error: 'Unknown function: ' + c.fn };
+      if (window.__fc.respond(result) && window.__fc.send()) {
+        return { fn: c.fn, args: c.args, result };
+      }
+      return null;
+    },
+    poll: (ms) => {
+      if (window.__fcInterval) clearInterval(window.__fcInterval);
+      window.__fcInterval = setInterval(() => {
+        const r = window.__fc.auto();
+        if (r) console.log('[FC]', r.fn, JSON.stringify(r.args), '->', JSON.stringify(r.result));
+      }, ms || 1000);
+      return 'Polling started';
+    },
+    stop: () => {
+      if (window.__fcInterval) { clearInterval(window.__fcInterval); window.__fcInterval = null; }
+      return 'Polling stopped';
+    }
+  };
+  return 'FC Handler ready - call __fc.poll(1000) to start auto-monitoring';
+})()
+
+log FC Handler injected
+
+# Start auto-polling (every 1 second)
+js window.__fc.poll(1000)
+
+log Monitoring for function calls... (press Ctrl+C to stop)
+
+# Keep script alive for 5 minutes - handler will auto-respond in background
+wait 300s

@@ -1,0 +1,9 @@
+# Simple test for --tab flag
+-- meta.yaml --
+name: Tab Connect Test
+timeout: 30s
+
+-- main.cdp --
+log Testing tab connection...
+screenshot /tmp/tab-test-1.png
+log Screenshot saved

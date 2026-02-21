@@ -1,0 +1,221 @@
+-- meta.yaml --
+name: AI Studio Live FC Loop
+description: Live interface FC Loop
+browser: brave
+timeout: 300s
+
+-- main.cdp --
+goto https://aistudio.google.com/live?model=gemini-2.5-flash-native-audio-preview-12-2025
+wait 10s
+
+log Step 1: Open Tools Dialog
+jsfile ensure-live-tools.js
+wait 2s
+
+log Step 2: Toggle Function Calling
+jsfile toggle-live-fc.js
+wait 2s
+
+log Step 3: Click Edit
+jsfile click-live-edit.js
+wait 4s
+
+log Step 4: Set Tools JSON
+jsfile set-live-json.js
+wait 2s
+
+log Step 5: Send Message
+jsfile send-message.js
+
+log Step 6: Wait for Function Call
+wait 15s
+
+log Step 7: Populate Response
+jsfile fc-populate.js
+wait 1s
+
+log Step 8: Send Response
+jsfile fc-send.js
+
+log Step 9: Wait for Final Response
+wait 15s
+
+log Done!
+
+-- ensure-live-tools.js --
+(() => {
+  const btns = Array.from(document.querySelectorAll('button'));
+  const toolsBtn = btns.find(b => b.textContent.includes('Tools'));
+  if(toolsBtn) {
+     toolsBtn.click();
+     return 'Clicked Tools';
+  }
+  return 'Tools button not found';
+})();
+
+-- toggle-live-fc.js --
+(() => {
+  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+  let fcNode;
+  while(walker.nextNode()) {
+    if(walker.currentNode.textContent.includes('Function calling')) {
+       fcNode = walker.currentNode.parentElement;
+       break;
+    }
+  }
+  
+  if(!fcNode) return 'FC text not found';
+  
+  const container = fcNode.closest('div') || fcNode.parentElement;
+  let p = container;
+  let switchBtn = null;
+  for(let i=0; i<5 && p; i++) {
+     switchBtn = p.querySelector('.mdc-switch');
+     if(switchBtn) break;
+     p = p.parentElement;
+  }
+  
+  if(switchBtn) {
+      if(switchBtn.classList.contains('mdc-switch--unselected')) {
+          switchBtn.click();
+          return 'Toggled ON';
+      }
+      return 'Already ON';
+  }
+  return 'Switch not found';
+})();
+
+-- click-live-edit.js --
+(() => {
+  const editBtn = document.querySelector('.edit-button');
+  if(editBtn) {
+      editBtn.click();
+      return 'Clicked Edit';
+  }
+  const btns = Array.from(document.querySelectorAll('button'));
+  const b = btns.find(btn => btn.textContent.trim() === 'Edit');
+  if(b) {
+      b.click();
+      return 'Clicked Edit (by text)';
+  }
+  return 'Edit button not found';
+})();
+
+-- set-live-json.js --
+(async () => {
+   const dialog = document.querySelector('.mat-mdc-dialog-panel') || document.querySelector('.cdk-overlay-pane');
+   if(!dialog) return 'Dialog not open';
+   
+   const codeBtn = Array.from(dialog.querySelectorAll('button')).find(b => b.textContent.includes('Code Editor'));
+   if(codeBtn) {
+     codeBtn.click();
+     await new Promise(r => setTimeout(r, 1000));
+   }
+   
+   const ta = dialog.querySelector('textarea');
+   if(!ta) return 'Textarea not found';
+   
+   const tools = [
+      {
+        "name": "get_current_time",
+        "description": "Gets the current time",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "timezone": { "type": "string", "description": "Timezone" }
+          },
+          "required": ["timezone"]
+        }
+      }
+   ];
+   
+   ta.focus();
+   ta.value = JSON.stringify(tools, null, 2);
+   ta.dispatchEvent(new Event('input', {bubbles: true}));
+   ta.dispatchEvent(new Event('change', {bubbles: true}));
+   
+   await new Promise(r => setTimeout(r, 500));
+   
+   const saveBtn = Array.from(dialog.querySelectorAll('button')).find(b => b.textContent.includes('Save'));
+   if(saveBtn) {
+     saveBtn.click();
+     return 'Saved';
+   }
+   return 'Save button missing';
+})();
+
+-- send-message.js --
+(() => {
+  const msg = "What time is it in Tokyo?";
+  const inputs = Array.from(document.querySelectorAll('textarea'));
+  const chatInput = inputs.find(i => i.placeholder.includes('Type') || i.placeholder.includes('prompt'));
+  if(chatInput) {
+    chatInput.focus();
+    chatInput.value = msg;
+    chatInput.dispatchEvent(new Event('input', {bubbles: true}));
+    
+    setTimeout(() => {
+       const b = Array.from(document.querySelectorAll('button')).find(btn => btn.textContent.includes('Run'));
+       if(b) b.click();
+    }, 500);
+    
+    return 'Message Queued';
+  }
+  return 'Input not found';
+})();
+
+-- fc-populate.js --
+(() => {
+  const codeBlocks = Array.from(document.querySelectorAll('code'));
+  // Filter for one that contains "timezone" or appears last
+  const lastCode = codeBlocks[codeBlocks.length-1];
+  
+  if(!lastCode) return 'No code block found';
+  
+  let args = {};
+  try { args = JSON.parse(lastCode.textContent); } 
+  catch(e) { return 'Failed to parse JSON: ' + lastCode.textContent; }
+  
+  let timeStr = "Unknown";
+  if(args.timezone === 'Asia/Tokyo') timeStr = "2024-01-01T12:00:00+09:00"; 
+  
+  const result = { time: timeStr };
+  const resultStr = JSON.stringify(result);
+  
+  // LIVE SPECIFIC SELECTOR
+  const input = document.querySelector('textarea[placeholder*="response value"]');
+  
+  if(!input) return 'Response input not found';
+  
+  input.focus();
+  input.value = resultStr;
+  input.dispatchEvent(new Event('input', {bubbles: true}));
+  input.dispatchEvent(new Event('change', {bubbles: true}));
+  input.dispatchEvent(new KeyboardEvent('keydown', {key: 'Space', bubbles: true}));
+  input.dispatchEvent(new KeyboardEvent('keyup', {key: 'Space', bubbles: true}));
+  input.blur();
+  
+  return 'Populated: ' + resultStr;
+})();
+
+-- fc-send.js --
+(() => {
+  const input = document.querySelector('textarea[placeholder*="response value"]');
+  if(!input) return 'Input not found';
+  
+  // Find the footer container
+  // Structure: textarea -> form -> ... -> footer -> div -> div -> button(send)
+  // Or just find button nearby
+  
+  const form = input.closest('form');
+  if(!form) return 'Form not found';
+  
+  // Look for button with 'send' text (it's a material icon)
+  const buttons = Array.from(form.querySelectorAll('button'));
+  const sendBtn = buttons.find(b => b.textContent.trim() === 'send');
+  
+  if(!sendBtn) return 'Send button not found';
+  
+  sendBtn.click();
+  return 'Clicked Send';
+})();

@@ -1,0 +1,77 @@
+-- meta.yaml --
+name: Extract Google Cookies
+description: Extract session cookies from logged-in Google account
+browser: brave
+headless: false
+timeout: 30s
+
+-- main.cdp --
+# Extract Google Session Cookies
+#
+# Extracts authentication cookies from a logged-in Google session.
+# These can be used for automation that needs browser-like access.
+#
+# Usage: cdp run extract-google-cookies.txtar
+# Requires: User logged into Google in the browser
+
+log Navigating to Google...
+goto https://www.google.com
+
+wait 3s
+
+log Extracting cookies...
+jsfile extract-cookies.js
+
+log Done!
+
+-- extract-cookies.js --
+(() => {
+  // Get all cookies for the current domain
+  const cookies = document.cookie;
+
+  // Parse cookies into object
+  const cookieObj = {};
+  cookies.split(';').forEach(cookie => {
+    const [name, ...valueParts] = cookie.trim().split('=');
+    if (name) {
+      cookieObj[name] = valueParts.join('=');
+    }
+  });
+
+  // Important Google auth cookies
+  const authCookies = ['SID', 'HSID', 'SSID', 'APISID', 'SAPISID', 'NID', '__Secure-1PSID', '__Secure-3PSID'];
+
+  console.log('=== Google Session Cookies ===');
+  console.log('');
+
+  // Output in various formats
+  const found = [];
+  authCookies.forEach(name => {
+    if (cookieObj[name]) {
+      found.push({ name, value: cookieObj[name] });
+      // Mask value for security in logs
+      const masked = cookieObj[name].substring(0, 10) + '...' + cookieObj[name].slice(-5);
+      console.log(name + '=' + masked);
+    }
+  });
+
+  if (found.length === 0) {
+    console.log('No auth cookies found. Are you logged in?');
+    return 'Not logged in';
+  }
+
+  console.log('');
+  console.log('Found ' + found.length + ' auth cookies');
+
+  // Output as curl header format (useful for automation)
+  console.log('');
+  console.log('=== For curl: ===');
+  const cookieHeader = found.map(c => c.name + '=' + c.value).join('; ');
+  console.log('-H "Cookie: ' + cookieHeader.substring(0, 50) + '..."');
+
+  // Store for potential use by other scripts
+  window.__google_cookies = found;
+  window.__google_cookie_header = cookieHeader;
+
+  return 'Cookies extracted: ' + found.length;
+})();

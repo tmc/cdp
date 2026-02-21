@@ -1,0 +1,4 @@
+# screenshot.cdp - Take a screenshot with the given filename
+# $ARG1 = filename
+screenshot $ARG1
+log Captured: $ARG1

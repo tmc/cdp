@@ -1,0 +1,22 @@
+# AI Studio Chat Script (v2 using rsc.io/script)
+-- meta.yaml --
+name: AI Studio Chat V2
+description: Interact with Google AI Studio Live
+browser: brave
+profile: Default
+headless: false
+timeout: 5m
+env:
+  MODEL: gemini-2.5-flash-native-audio-preview-12-2025
+
+-- main.cdp --
+# Navigate to AI Studio Live
+goto https://aistudio.google.com/live?model=$MODEL
+
+# Wait for page to load
+wait 3s
+
+# Take initial screenshot
+screenshot /tmp/aistudio-ready.png
+
+log AI Studio navigation completed
