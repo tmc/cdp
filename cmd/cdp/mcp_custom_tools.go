@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/chromedp/cdproto/input"
 	"github.com/chromedp/chromedp"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/tmc/misc/chrome-to-har/internal/tooldef"
@@ -247,6 +248,144 @@ func builtinScriptCommands(session *mcpSession) map[string]scriptCommandHandler 
 				return "", fmt.Errorf("forward: %w", err)
 			}
 			return "", nil
+		},
+		"snapshot": func(ctx context.Context, args string) (string, error) {
+			if args != "" {
+				// Named snapshot for diffing.
+				root, err := captureAXTree(ctx)
+				if err != nil {
+					return "", fmt.Errorf("snapshot: %w", err)
+				}
+				if session.domSnapshots == nil {
+					session.domSnapshots = newDomSnapshotStore()
+				}
+				session.domSnapshots.save(args, root)
+				return fmt.Sprintf("snapshot %q saved (%d nodes)", args, countNodes(root)), nil
+			}
+			// No name — return the AX tree like page_snapshot.
+			result, err := buildAXSnapshot(ctx, session.refs)
+			if err != nil {
+				return "", fmt.Errorf("snapshot: %w", err)
+			}
+			return result, nil
+		},
+		"snapshot-diff": func(ctx context.Context, args string) (string, error) {
+			before, after, ok := splitFirstArg(args)
+			if !ok {
+				return "", fmt.Errorf("snapshot-diff requires two snapshot names")
+			}
+			if session.domSnapshots == nil {
+				return "", fmt.Errorf("no snapshots available")
+			}
+			b := session.domSnapshots.get(before)
+			if b == nil {
+				return "", fmt.Errorf("snapshot %q not found", before)
+			}
+			a := session.domSnapshots.get(after)
+			if a == nil {
+				return "", fmt.Errorf("snapshot %q not found", after)
+			}
+			return diffDom(b, a), nil
+		},
+		"scroll": func(ctx context.Context, args string) (string, error) {
+			if args == "" {
+				args = "down"
+			}
+			dir, rest, _ := strings.Cut(args, " ")
+			distance := 500
+			if rest != "" {
+				if d, err := fmt.Sscanf(rest, "%d", &distance); err != nil || d == 0 {
+					distance = 500
+				}
+			}
+			var deltaX, deltaY float64
+			switch dir {
+			case "down":
+				deltaY = float64(distance)
+			case "up":
+				deltaY = -float64(distance)
+			case "right":
+				deltaX = float64(distance)
+			case "left":
+				deltaX = -float64(distance)
+			default:
+				return "", fmt.Errorf("scroll: unknown direction %q", dir)
+			}
+			var result map[string]any
+			if err := chromedp.Run(ctx, chromedp.Evaluate(`({x: window.innerWidth/2, y: window.innerHeight/2})`, &result)); err != nil {
+				return "", fmt.Errorf("scroll: %w", err)
+			}
+			x, _ := result["x"].(float64)
+			y, _ := result["y"].(float64)
+			if err := chromedp.Run(ctx, chromedp.ActionFunc(func(ctx context.Context) error {
+				return input.DispatchMouseEvent(input.MouseWheel, x, y).
+					WithDeltaX(deltaX).WithDeltaY(deltaY).Do(ctx)
+			})); err != nil {
+				return "", fmt.Errorf("scroll: %w", err)
+			}
+			return fmt.Sprintf("scrolled %s %dpx", dir, distance), nil
+		},
+		"press": func(ctx context.Context, args string) (string, error) {
+			if args == "" {
+				return "", fmt.Errorf("press requires a key name")
+			}
+			key, mods, _ := strings.Cut(args, " ")
+			if err := chromedp.Run(ctx, chromedp.ActionFunc(func(ctx context.Context) error {
+				return pressKey(ctx, key, mods)
+			})); err != nil {
+				return "", fmt.Errorf("press: %w", err)
+			}
+			return "", nil
+		},
+		"hover": func(ctx context.Context, args string) (string, error) {
+			if args == "" {
+				return "", fmt.Errorf("hover requires a selector")
+			}
+			if err := hoverBySelector(ctx, args); err != nil {
+				return "", fmt.Errorf("hover: %w", err)
+			}
+			return "", nil
+		},
+		"focus": func(ctx context.Context, args string) (string, error) {
+			if args == "" {
+				return "", fmt.Errorf("focus requires a selector")
+			}
+			if err := chromedp.Run(ctx, chromedp.Focus(args, chromedp.ByQuery)); err != nil {
+				return "", fmt.Errorf("focus: %w", err)
+			}
+			return "", nil
+		},
+		"intercept": func(ctx context.Context, args string) (string, error) {
+			// intercept <action> <url-pattern>
+			action, pattern, ok := splitFirstArg(args)
+			if !ok {
+				return "", fmt.Errorf("intercept requires action and url pattern")
+			}
+			if err := ensureInterceptEnabled(session); err != nil {
+				return "", fmt.Errorf("intercept: %w", err)
+			}
+			rule := interceptRule{
+				URLPattern: pattern,
+				Stage:      "request",
+				Action:     action,
+			}
+			id := session.intercepts.addRule(rule)
+			return fmt.Sprintf("intercept rule %s: %s %s", id, action, pattern), nil
+		},
+		"save-state": func(ctx context.Context, args string) (string, error) {
+			if args == "" {
+				args = "state.json"
+			}
+			// Delegate to JS for storage capture.
+			var ls, ss map[string]string
+			chromedp.Run(ctx, chromedp.Evaluate(`(function(){var r={};for(var i=0;i<localStorage.length;i++){var k=localStorage.key(i);r[k]=localStorage.getItem(k);}return r;})()`, &ls))
+			chromedp.Run(ctx, chromedp.Evaluate(`(function(){var r={};for(var i=0;i<sessionStorage.length;i++){var k=sessionStorage.key(i);r[k]=sessionStorage.getItem(k);}return r;})()`, &ss))
+			state := map[string]any{"local_storage": ls, "session_storage": ss}
+			data, _ := json.Marshal(state)
+			if err := os.WriteFile(args, data, 0644); err != nil {
+				return "", fmt.Errorf("save-state: %w", err)
+			}
+			return fmt.Sprintf("state saved to %s", args), nil
 		},
 	}
 }
