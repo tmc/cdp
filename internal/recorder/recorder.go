@@ -217,18 +217,43 @@ func (r *Recorder) HandleNetworkEvent(ctx context.Context) func(interface{}) {
 				break
 			}
 
+			// Snapshot context directory before goroutine to prevent
+			// race with push/pop-context changing the output dir.
+			snapshotDir := r.outputDir
+			snapshotTag := r.currentTag
+
 			// Fetch response bodies for both streaming and non-streaming modes.
 			// NOTE: GetResponseBody can fail with -32000 ("No resource with given
 			// identifier found") for redirects, cached responses, and service worker
 			// responses where Chrome evicts the body before we fetch it. This is a
 			// known CDP limitation.
-			go func(reqID network.RequestID) {
+			go func(reqID network.RequestID, snapDir, snapTag string) {
 				r.Lock()
 				fetchCtx := r.ctx
 				r.Unlock()
 
 				if fetchCtx == nil {
 					return
+				}
+
+				// Fetch request post data if not already captured inline.
+				// Large uploads (e.g. resumable file uploads) set HasPostData
+				// but omit PostDataEntries; GetRequestPostData retrieves them.
+				r.Lock()
+				_, hasPostData := r.postData[reqID]
+				req := r.requests[reqID]
+				r.Unlock()
+				if !hasPostData && req != nil && req.HasPostData {
+					var postData []byte
+					if err := chromedp.Run(fetchCtx, chromedp.ActionFunc(func(ctx context.Context) error {
+						var fetchErr error
+						postData, fetchErr = network.GetRequestPostData(reqID).Do(ctx)
+						return fetchErr
+					})); err == nil && len(postData) > 0 {
+						r.Lock()
+						r.postData[reqID] = string(postData)
+						r.Unlock()
+					}
 				}
 
 				var body []byte
@@ -244,8 +269,14 @@ func (r *Recorder) HandleNetworkEvent(ctx context.Context) func(interface{}) {
 						r.Lock()
 						resp := r.responses[reqID]
 						if resp != nil {
+							if snapTag != "" {
+								r.requestTags[reqID] = snapTag
+							}
+							savedDir := r.outputDir
+							r.outputDir = snapDir
 							entry := r.buildStreamEntry(reqID, resp, nil)
 							r.streamEntry(entry)
+							r.outputDir = savedDir
 						}
 						r.Unlock()
 					}
@@ -261,12 +292,18 @@ func (r *Recorder) HandleNetworkEvent(ctx context.Context) func(interface{}) {
 				if r.streaming {
 					resp := r.responses[reqID]
 					if resp != nil {
+						if snapTag != "" {
+							r.requestTags[reqID] = snapTag
+						}
+						savedDir := r.outputDir
+						r.outputDir = snapDir
 						entry := r.buildStreamEntry(reqID, resp, body)
 						r.streamEntry(entry)
+						r.outputDir = savedDir
 					}
 				}
 				r.Unlock()
-			}(e.RequestID)
+			}(e.RequestID, snapshotDir, snapshotTag)
 		}
 	}
 }
