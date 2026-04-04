@@ -2473,58 +2473,53 @@ func main() {
 					log.Printf("Enabling network recording and attaching event listeners...")
 				}
 
-				if err := chromedp.Run(browserCtx,
-					network.Enable(),
-					chromedp.ActionFunc(func(ctx context.Context) error {
-						// Attach listeners synchronously within the same action
-						if harMode == "enhanced" {
-							chromedp.ListenTarget(ctx, enhancedRecorder.HandleNetworkEvent(ctx))
-						} else {
-							chromedp.ListenTarget(ctx, func(ev interface{}) {
-								switch ev := ev.(type) {
-								case *network.EventResponseReceived:
-									if verbose {
-										log.Printf("Response received: %s", ev.Response.URL)
-									}
-
-									// Create basic HAR entry
-									entry := HAREntry{
-										StartedDateTime: time.Now().Format(time.RFC3339),
-										Request: map[string]interface{}{
-											"method":  "GET", // Simplified
-											"url":     ev.Response.URL,
-											"headers": []interface{}{},
-										},
-										Response: map[string]interface{}{
-											"status":     ev.Response.Status,
-											"statusText": ev.Response.StatusText,
-											"headers":    []interface{}{},
-											"content": map[string]interface{}{
-												"size":     0,
-												"mimeType": ev.Response.MimeType,
-											},
-										},
-										Time: 0, // Simplified
-									}
-
-									recorder.AddEntry(entry)
-
-									// Stream entry as NDJSON if --harl is enabled
-									if harlStream {
-										if jsonBytes, err := json.Marshal(entry); err == nil {
-											fmt.Fprintln(harlWriter, string(jsonBytes))
-										}
-									}
-								}
-							})
-						}
-						if verbose {
-							log.Printf("Network event listeners attached successfully")
-						}
-						return nil
-					}),
-				); err != nil {
+				// Enable network domain, then attach listeners using browserCtx.
+				// Using browserCtx (not an ActionFunc ctx) ensures GetResponseBody
+				// calls in the recorder goroutines have a valid executor.
+				if err := chromedp.Run(browserCtx, network.Enable()); err != nil {
 					exitWithError(ExitGeneralError, ErrorTypeNetwork, "Failed to enable network monitoring: %v", err)
+				}
+				if harMode == "enhanced" {
+					chromedp.ListenTarget(browserCtx, enhancedRecorder.HandleNetworkEvent(browserCtx))
+				} else {
+					chromedp.ListenTarget(browserCtx, func(ev interface{}) {
+						switch ev := ev.(type) {
+						case *network.EventResponseReceived:
+							if verbose {
+								log.Printf("Response received: %s", ev.Response.URL)
+							}
+
+							entry := HAREntry{
+								StartedDateTime: time.Now().Format(time.RFC3339),
+								Request: map[string]interface{}{
+									"method":  "GET",
+									"url":     ev.Response.URL,
+									"headers": []interface{}{},
+								},
+								Response: map[string]interface{}{
+									"status":     ev.Response.Status,
+									"statusText": ev.Response.StatusText,
+									"headers":    []interface{}{},
+									"content": map[string]interface{}{
+										"size":     0,
+										"mimeType": ev.Response.MimeType,
+									},
+								},
+								Time: 0,
+							}
+
+							recorder.AddEntry(entry)
+
+							if harlStream {
+								if jsonBytes, err := json.Marshal(entry); err == nil {
+									fmt.Fprintln(harlWriter, string(jsonBytes))
+								}
+							}
+						}
+					})
+				}
+				if verbose {
+					log.Printf("Network event listeners attached successfully")
 				}
 
 				if harFile != "" {

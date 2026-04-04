@@ -1,23 +1,23 @@
 module github.com/tmc/misc/chrome-to-har
 
-go 1.25.0
+go 1.26
 
 require (
 	github.com/JohannesKaufmann/html-to-markdown v1.6.0
 	github.com/charmbracelet/bubbles v0.21.0
 	github.com/charmbracelet/bubbletea v1.3.10
-	github.com/chromedp/cdproto v0.0.0-20250803210736-d308e07a266d
-	github.com/chromedp/chromedp v0.14.3-0.20251007201053-9d449ea08b61
+	github.com/chromedp/cdproto v0.0.0-20260328224638-b7b298a31867
+	github.com/chromedp/chromedp v0.15.1
 	github.com/fsnotify/fsnotify v1.9.0
 	github.com/go-sourcemap/sourcemap v2.1.4+incompatible
 	github.com/gorilla/websocket v1.5.3
 	github.com/itchyny/gojq v0.12.17
 	github.com/pkg/errors v0.9.1
 	github.com/spf13/cobra v1.10.1
-	github.com/tmc/macgo v0.0.0-00010101000000-000000000000
+	github.com/tmc/macgo v0.1.1
 	github.com/yuin/goldmark v1.7.1
 	golang.org/x/net v0.47.0
-	golang.org/x/sys v0.39.0
+	golang.org/x/sys v0.42.0
 	golang.org/x/term v0.37.0
 	golang.org/x/tools v0.39.0
 	google.golang.org/genai v1.37.0
@@ -41,8 +41,9 @@ require (
 	github.com/charmbracelet/x/term v0.2.1 // indirect
 	github.com/chromedp/sysutil v1.1.0 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
+	github.com/ebitengine/purego v0.9.1 // indirect
 	github.com/erikgeiser/coninput v0.0.0-20211004153227-1c3628e74d0f // indirect
-	github.com/go-json-experiment/json v0.0.0-20250910080747-cc2cfa0554c3 // indirect
+	github.com/go-json-experiment/json v0.0.0-20260214004413-d219187c3433 // indirect
 	github.com/gobwas/httphead v0.1.0 // indirect
 	github.com/gobwas/pool v0.2.1 // indirect
 	github.com/gobwas/ws v1.4.0 // indirect
@@ -77,5 +78,3 @@ require (
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.11.0 // indirect
 )
-
-replace github.com/tmc/macgo => ../../macgo

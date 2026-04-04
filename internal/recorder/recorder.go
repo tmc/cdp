@@ -185,52 +185,13 @@ func (r *Recorder) HandleNetworkEvent(ctx context.Context) func(interface{}) {
 				}
 			}
 
-			if r.streaming {
-				entry := &har.Entry{
-					StartedDateTime: time.Now().Format(time.RFC3339),
-					Request: &har.Request{
-						Method:      e.Request.Method,
-						URL:         e.Request.URL,
-						HTTPVersion: "HTTP/1.1", // Default to HTTP/1.1 as Protocol isn't available
-						Headers:     convertHeaders(e.Request.Headers),
-					},
-				}
-				r.streamEntry(entry)
-			}
-
 		case *network.EventResponseReceived:
 			if r.verbose {
 				log.Printf("Response: %d %s", e.Response.Status, e.Response.URL)
 			}
 			r.responses[e.RequestID] = e.Response
 
-			if r.streaming {
-				req := r.requests[e.RequestID]
-				method := "GET"
-				if req != nil {
-					method = req.Method
-				} else if r.verbose {
-					log.Printf("Warning: no request found for response %s, defaulting to GET", e.RequestID)
-				}
-				entry := &har.Entry{
-					StartedDateTime: time.Now().Format(time.RFC3339),
-					Request: &har.Request{
-						Method: method,
-						URL:    e.Response.URL,
-					},
-					Response: &har.Response{
-						Status:      int64(e.Response.Status),
-						StatusText:  e.Response.StatusText,
-						HTTPVersion: e.Response.Protocol,
-						Headers:     convertHeaders(e.Response.Headers),
-						Content: &har.Content{
-							MimeType: e.Response.MimeType,
-							Size:     int64(e.Response.EncodedDataLength),
-						},
-					},
-				}
-				r.streamEntry(entry)
-			}
+			// Streaming deferred to LoadingFinished for complete entry with body.
 
 		case *network.EventLoadingFinished:
 			r.timings[e.RequestID] = e
@@ -249,10 +210,25 @@ func (r *Recorder) HandleNetworkEvent(ctx context.Context) func(interface{}) {
 					return
 				}
 
-				body, err := network.GetResponseBody(reqID).Do(fetchCtx)
+				var body []byte
+				err := chromedp.Run(fetchCtx, chromedp.ActionFunc(func(ctx context.Context) error {
+					var fetchErr error
+					body, fetchErr = network.GetResponseBody(reqID).Do(ctx)
+					return fetchErr
+				}))
 				if err != nil {
 					if r.verbose {
 						log.Printf("Error getting response body for request %s: %v", reqID, err)
+					}
+					// Still stream the entry without body if we have the response
+					if r.streaming {
+						r.Lock()
+						resp := r.responses[reqID]
+						if resp != nil {
+							entry := r.buildStreamEntry(reqID, resp, nil)
+							r.streamEntry(entry)
+						}
+						r.Unlock()
 					}
 					return
 				}
@@ -262,13 +238,61 @@ func (r *Recorder) HandleNetworkEvent(ctx context.Context) func(interface{}) {
 				if r.verbose {
 					log.Printf("Captured response body for request %s (%d bytes)", reqID, len(body))
 				}
-				r.Unlock()
 
 				if r.streaming {
-					// TODO: Update streaming entry with body
+					resp := r.responses[reqID]
+					if resp != nil {
+						entry := r.buildStreamEntry(reqID, resp, body)
+						r.streamEntry(entry)
+					}
 				}
+				r.Unlock()
 			}(e.RequestID)
 		}
+	}
+}
+
+// buildStreamEntry creates a HAR entry from stored request/response data.
+// Caller must hold r.Lock.
+func (r *Recorder) buildStreamEntry(reqID network.RequestID, resp *network.Response, body []byte) *har.Entry {
+	harReq := &har.Request{
+		Method: "GET",
+		URL:    resp.URL,
+	}
+	if req, ok := r.requests[reqID]; ok && req != nil {
+		harReq.Method = req.Method
+		harReq.URL = req.URL
+		harReq.HTTPVersion = "HTTP/1.1"
+		harReq.Headers = convertHeaders(req.Headers)
+		if pd, ok := r.postData[reqID]; ok && pd != "" {
+			mimeType := ""
+			if ct, ok := req.Headers["content-type"]; ok {
+				mimeType, _ = ct.(string)
+			}
+			harReq.PostData = &har.PostData{
+				MimeType: mimeType,
+				Text:     pd,
+			}
+		}
+	}
+	content := &har.Content{
+		MimeType: resp.MimeType,
+		Size:     int64(resp.EncodedDataLength),
+	}
+	if body != nil {
+		content.Size = int64(len(body))
+		content.Text = string(body)
+	}
+	return &har.Entry{
+		StartedDateTime: time.Now().Format(time.RFC3339),
+		Request:         harReq,
+		Response: &har.Response{
+			Status:      int64(resp.Status),
+			StatusText:  resp.StatusText,
+			HTTPVersion: resp.Protocol,
+			Headers:     convertHeaders(resp.Headers),
+			Content:     content,
+		},
 	}
 }
 
