@@ -41,6 +41,8 @@ type InteractiveMode struct {
 // recorderWithOutputDir is the subset of recorder.Recorder needed for context switching.
 type recorderWithOutputDir interface {
 	SetOutputDir(dir string)
+	SetTag(tag string)
+	AddNote(ctx context.Context, description string) error
 }
 
 // NewInteractiveMode creates a new interactive session.
@@ -749,7 +751,8 @@ func (im *InteractiveMode) contextOutputDir() string {
 }
 
 // pushContext pushes a named context, directing HAR/HARL writes to a subdirectory.
-// If coverage is active, takes an automatic start snapshot.
+// Automatically: starts a HAR tag range, adds a note annotation,
+// and takes a coverage start snapshot (if active).
 func (im *InteractiveMode) pushContext(name string) {
 	if im.baseOutputDir == "" {
 		fmt.Println("No --output-dir configured; push-context has no effect.")
@@ -763,6 +766,10 @@ func (im *InteractiveMode) pushContext(name string) {
 	}
 	if im.recorder != nil {
 		im.recorder.SetOutputDir(dir)
+		im.recorder.SetTag(name)
+		if err := im.recorder.AddNote(im.ctx, fmt.Sprintf("context: %s started", name)); err != nil && im.verbose {
+			log.Printf("context: add note: %v", err)
+		}
 	}
 	if im.coverageCollector != nil {
 		snapName := name + "-start"
@@ -776,7 +783,8 @@ func (im *InteractiveMode) pushContext(name string) {
 }
 
 // popContext pops the current context, returning to the parent directory.
-// If coverage is active, takes an end snapshot, computes delta, and writes lcov.
+// Automatically: ends the HAR tag range, adds a note annotation,
+// takes a coverage end snapshot with delta and lcov output (if active).
 func (im *InteractiveMode) popContext() {
 	if len(im.contextStack) == 0 {
 		fmt.Println("No context to pop.")
@@ -799,7 +807,16 @@ func (im *InteractiveMode) popContext() {
 	im.contextStack = im.contextStack[:len(im.contextStack)-1]
 	dir := im.contextOutputDir()
 	if im.recorder != nil {
+		if err := im.recorder.AddNote(im.ctx, fmt.Sprintf("context: %s ended", name)); err != nil && im.verbose {
+			log.Printf("context: add note: %v", err)
+		}
 		im.recorder.SetOutputDir(dir)
+		// Restore parent context's tag or clear.
+		parentTag := ""
+		if len(im.contextStack) > 0 {
+			parentTag = im.contextStack[len(im.contextStack)-1]
+		}
+		im.recorder.SetTag(parentTag)
 	}
 	if len(im.contextStack) == 0 {
 		fmt.Printf("Context: (root) — %s\n", dir)

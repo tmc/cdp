@@ -59,7 +59,8 @@ func (s *mcpSession) contextOutputDir() string {
 }
 
 // pushContext pushes a named context and updates the output directory.
-// If coverage is active, takes a start snapshot automatically.
+// Automatically: starts a HAR tag range, adds a note annotation,
+// and takes a coverage start snapshot (if active).
 // Returns the new output directory path.
 func (s *mcpSession) pushContext(name string) string {
 	s.mu.Lock()
@@ -72,6 +73,10 @@ func (s *mcpSession) pushContext(name string) string {
 	}
 	if s.recorder != nil {
 		s.recorder.SetOutputDir(dir)
+		s.recorder.SetTag(name)
+		if err := s.recorder.AddNote(s.ctx, fmt.Sprintf("context: %s started", name)); err != nil {
+			log.Printf("context: add note: %v", err)
+		}
 	}
 	if s.coverageCollector != nil && s.coverageCollector.Running() {
 		snapName := name + "-start"
@@ -83,8 +88,8 @@ func (s *mcpSession) pushContext(name string) string {
 }
 
 // popContext pops the current context and updates the output directory.
-// If coverage is active, takes an end snapshot, computes a delta, and
-// writes lcov files to the output directory.
+// Automatically: ends the HAR tag range, adds a note annotation,
+// takes a coverage end snapshot with delta and lcov output (if active).
 // Returns the new output directory path and an error if the stack is empty.
 func (s *mcpSession) popContext() (string, error) {
 	s.mu.Lock()
@@ -98,6 +103,15 @@ func (s *mcpSession) popContext() (string, error) {
 	dir := s.contextOutputDir()
 	if s.recorder != nil {
 		s.recorder.SetOutputDir(dir)
+		// Restore parent context's tag or clear.
+		parentTag := ""
+		if len(s.contextStack) > 0 {
+			parentTag = s.contextStack[len(s.contextStack)-1]
+		}
+		if err := s.recorder.AddNote(s.ctx, fmt.Sprintf("context: %s ended", name)); err != nil {
+			log.Printf("context: add note: %v", err)
+		}
+		s.recorder.SetTag(parentTag)
 	}
 	cc := s.coverageCollector
 	s.mu.Unlock()
