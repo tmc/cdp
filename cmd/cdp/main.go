@@ -3818,8 +3818,8 @@ func handleEnhancedMode(command string, interactive bool, cfg fullCaptureConfig)
 			}
 			defer chromeCancel()
 
-			// Start interactive mode
-			im := NewInteractiveMode(chromeCtx, cfg.Verbose)
+			// Start interactive mode with reconnection support
+			im := NewInteractiveMode(chromeCtx, chromeCancel, cfg)
 			if err := im.Run(); err != nil {
 				exitWithError(ExitGeneralError, ErrorTypeGeneral, "Interactive mode error: %v", err)
 			}

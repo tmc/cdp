@@ -13,6 +13,8 @@ import (
 // InteractiveMode represents an interactive CDP session
 type InteractiveMode struct {
 	ctx      context.Context
+	cancel   context.CancelFunc
+	cfg      fullCaptureConfig
 	registry *CommandRegistry
 	help     *HelpSystem
 	history  []string
@@ -20,14 +22,16 @@ type InteractiveMode struct {
 }
 
 // NewInteractiveMode creates a new interactive session
-func NewInteractiveMode(ctx context.Context, verbose bool) *InteractiveMode {
+func NewInteractiveMode(ctx context.Context, cancel context.CancelFunc, cfg fullCaptureConfig) *InteractiveMode {
 	registry := NewCommandRegistry()
 	return &InteractiveMode{
 		ctx:      ctx,
+		cancel:   cancel,
+		cfg:      cfg,
 		registry: registry,
 		help:     NewHelpSystem(registry),
 		history:  make([]string, 0),
-		verbose:  verbose,
+		verbose:  cfg.Verbose,
 	}
 }
 
@@ -141,6 +145,34 @@ func (im *InteractiveMode) handleSpecialCommand(line string) bool {
 	}
 }
 
+// reconnect attempts to re-establish the browser connection.
+func (im *InteractiveMode) reconnect() error {
+	fmt.Println("Reconnecting to browser...")
+	if im.cancel != nil {
+		im.cancel()
+	}
+	ctx, cancel, err := setupChromeForEnhanced(context.Background(), im.cfg)
+	if err != nil {
+		return fmt.Errorf("reconnect failed: %w", err)
+	}
+	im.ctx = ctx
+	im.cancel = cancel
+	fmt.Println("Reconnected.")
+	return nil
+}
+
+// isDisconnected reports whether an error indicates the browser connection is lost.
+func isDisconnected(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "context canceled") ||
+		strings.Contains(msg, "connection reset") ||
+		strings.Contains(msg, "broken pipe") ||
+		strings.Contains(msg, "use of closed network connection")
+}
+
 // executeCommand executes a CDP command
 func (im *InteractiveMode) executeCommand(line string) error {
 	parts := strings.Fields(line)
@@ -156,7 +188,15 @@ func (im *InteractiveMode) executeCommand(line string) error {
 		if im.verbose {
 			fmt.Printf("Executing: %s\n", cmd.Name)
 		}
-		return cmd.Handler(im.ctx, args)
+		err := cmd.Handler(im.ctx, args)
+		if isDisconnected(err) {
+			if reconnErr := im.reconnect(); reconnErr != nil {
+				return reconnErr
+			}
+			// Retry the command once after reconnecting.
+			return cmd.Handler(im.ctx, args)
+		}
+		return err
 	}
 
 	// Try to execute as raw CDP command
