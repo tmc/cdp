@@ -227,17 +227,19 @@ func (im *InteractiveMode) registerCoverageCommands() {
 		Name:        "coverage",
 		Category:    "Coverage",
 		Description: "Manage code coverage collection",
-		Usage:       "coverage <start|snapshot|delta|stop> [name]",
+		Usage:       "coverage <start|snapshot|delta|compare|report|stop> [args]",
 		Examples: []string{
 			"coverage start",
 			"coverage snapshot before-login",
 			"coverage snapshot after-login",
 			"coverage delta",
+			"coverage compare before-login after-login",
+			"coverage report",
 			"coverage stop",
 		},
 		Handler: func(ctx context.Context, args []string) error {
 			if len(args) == 0 {
-				return fmt.Errorf("subcommand required: start, snapshot, delta, stop")
+				return fmt.Errorf("subcommand required: start, snapshot, delta, compare, report, stop")
 			}
 			switch args[0] {
 			case "start":
@@ -250,10 +252,17 @@ func (im *InteractiveMode) registerCoverageCommands() {
 				return im.coverageSnapshot(name)
 			case "delta":
 				return im.coverageDelta()
+			case "compare":
+				if len(args) < 3 {
+					return fmt.Errorf("usage: coverage compare <snap1> <snap2>")
+				}
+				return im.coverageCompare(args[1], args[2])
+			case "report":
+				return im.coverageReport()
 			case "stop":
 				return im.coverageStop()
 			default:
-				return fmt.Errorf("unknown subcommand %q: use start, snapshot, delta, stop", args[0])
+				return fmt.Errorf("unknown subcommand %q: use start, snapshot, delta, compare, report, stop", args[0])
 			}
 		},
 	})
@@ -314,6 +323,72 @@ func (im *InteractiveMode) coverageDelta() error {
 	}
 	if !any {
 		fmt.Println("No new coverage between snapshots.")
+	}
+	return nil
+}
+
+func (im *InteractiveMode) coverageCompare(snap1, snap2 string) error {
+	if im.coverageCollector == nil {
+		return fmt.Errorf("coverage not running (use: coverage start)")
+	}
+	snapshots := im.coverageCollector.Snapshots()
+	var before, after *coverage.Snapshot
+	for _, snap := range snapshots {
+		if snap.Name == snap1 {
+			before = snap
+		}
+		if snap.Name == snap2 {
+			after = snap
+		}
+	}
+	if before == nil {
+		return fmt.Errorf("snapshot %q not found", snap1)
+	}
+	if after == nil {
+		return fmt.Errorf("snapshot %q not found", snap2)
+	}
+	text := formatDetailedComparison(im.coverageCollector, before, after)
+	fmt.Print(text)
+	return nil
+}
+
+func (im *InteractiveMode) coverageReport() error {
+	if im.coverageCollector == nil {
+		return fmt.Errorf("coverage not running (use: coverage start)")
+	}
+	snapshots := im.coverageCollector.Snapshots()
+	if len(snapshots) == 0 {
+		fmt.Println("No snapshots taken yet.")
+		return nil
+	}
+	fmt.Printf("Coverage report: %d snapshots\n\n", len(snapshots))
+	for i, snap := range snapshots {
+		summary := snap.Summary()
+		totalCov := 0
+		totalLines := 0
+		for _, fs := range summary {
+			totalCov += fs.CoveredLines
+			totalLines += fs.TotalLines
+		}
+		pct := 0.0
+		if totalLines > 0 {
+			pct = float64(totalCov) / float64(totalLines) * 100
+		}
+		fmt.Printf("  %d. %-20s  %s  %d files  %d/%d lines (%.1f%%)\n",
+			i+1, snap.Name, snap.Timestamp.Format("15:04:05"),
+			len(summary), totalCov, totalLines, pct)
+
+		// Show delta from previous snapshot if available.
+		if i > 0 {
+			delta := im.coverageCollector.ComputeDelta(snapshots[i-1], snap)
+			newLines := 0
+			for _, sd := range delta.Scripts {
+				newLines += len(sd.NewlyCovered)
+			}
+			if newLines > 0 {
+				fmt.Printf("       ↳ +%d newly covered lines since %s\n", newLines, snapshots[i-1].Name)
+			}
+		}
 	}
 	return nil
 }
@@ -674,6 +749,7 @@ func (im *InteractiveMode) contextOutputDir() string {
 }
 
 // pushContext pushes a named context, directing HAR/HARL writes to a subdirectory.
+// If coverage is active, takes an automatic start snapshot.
 func (im *InteractiveMode) pushContext(name string) {
 	if im.baseOutputDir == "" {
 		fmt.Println("No --output-dir configured; push-context has no effect.")
@@ -688,15 +764,38 @@ func (im *InteractiveMode) pushContext(name string) {
 	if im.recorder != nil {
 		im.recorder.SetOutputDir(dir)
 	}
+	if im.coverageCollector != nil {
+		snapName := name + "-start"
+		if _, err := im.coverageCollector.TakeSnapshot(snapName); err != nil {
+			fmt.Printf("Coverage auto-snapshot %s: %v\n", snapName, err)
+		} else {
+			fmt.Printf("Coverage: auto-snapshot %s\n", snapName)
+		}
+	}
 	fmt.Printf("Context: %s — %s\n", strings.Join(im.contextStack, "/"), dir)
 }
 
 // popContext pops the current context, returning to the parent directory.
+// If coverage is active, takes an end snapshot, computes delta, and writes lcov.
 func (im *InteractiveMode) popContext() {
 	if len(im.contextStack) == 0 {
 		fmt.Println("No context to pop.")
 		return
 	}
+	name := im.contextStack[len(im.contextStack)-1]
+	contextDir := im.contextOutputDir()
+
+	if im.coverageCollector != nil {
+		snapName := name + "-end"
+		endSnap, err := im.coverageCollector.TakeSnapshot(snapName)
+		if err != nil {
+			fmt.Printf("Coverage auto-snapshot %s: %v\n", snapName, err)
+		} else {
+			fmt.Printf("Coverage: auto-snapshot %s\n", snapName)
+			im.writeCoverageLcov(contextDir, name, endSnap)
+		}
+	}
+
 	im.contextStack = im.contextStack[:len(im.contextStack)-1]
 	dir := im.contextOutputDir()
 	if im.recorder != nil {
@@ -706,6 +805,43 @@ func (im *InteractiveMode) popContext() {
 		fmt.Printf("Context: (root) — %s\n", dir)
 	} else {
 		fmt.Printf("Context: %s — %s\n", strings.Join(im.contextStack, "/"), dir)
+	}
+}
+
+// writeCoverageLcov writes delta and cumulative lcov files for a context pop.
+func (im *InteractiveMode) writeCoverageLcov(contextDir, name string, endSnap *coverage.Snapshot) {
+	covDir := filepath.Join(contextDir, "coverage")
+	if err := os.MkdirAll(covDir, 0755); err != nil {
+		fmt.Printf("Coverage: create dir: %v\n", err)
+		return
+	}
+
+	snapshots := im.coverageCollector.Snapshots()
+	startName := name + "-start"
+	var startSnap *coverage.Snapshot
+	for _, snap := range snapshots {
+		if snap.Name == startName {
+			startSnap = snap
+		}
+	}
+
+	if startSnap != nil {
+		delta := im.coverageCollector.ComputeDelta(startSnap, endSnap)
+		lcov := coverage.DeltaToLcov(delta)
+		path := filepath.Join(covDir, name+"-delta.lcov")
+		if err := os.WriteFile(path, []byte(lcov), 0644); err != nil {
+			fmt.Printf("Coverage: write delta lcov: %v\n", err)
+		} else {
+			fmt.Printf("Coverage: wrote %s\n", path)
+		}
+	}
+
+	cumLcov := coverage.SnapshotToLcov(endSnap)
+	cumPath := filepath.Join(covDir, "cumulative.lcov")
+	if err := os.WriteFile(cumPath, []byte(cumLcov), 0644); err != nil {
+		fmt.Printf("Coverage: write cumulative lcov: %v\n", err)
+	} else {
+		fmt.Printf("Coverage: wrote %s\n", cumPath)
 	}
 }
 

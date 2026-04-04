@@ -7,12 +7,15 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
+	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/chromedp/cdproto/cdp"
 	"github.com/chromedp/cdproto/css"
@@ -41,12 +44,14 @@ type StyleInfo struct {
 
 // Collector captures JavaScript and CSS sources from a browser session.
 type Collector struct {
-	mu        sync.Mutex
-	scripts   map[cdp.ScriptID]*ScriptInfo
-	styles    map[cdp.StyleSheetID]*StyleInfo
-	outputDir string
-	verbose   bool
-	scrubber  *scrub.Scrubber
+	mu            sync.Mutex
+	scripts       map[cdp.ScriptID]*ScriptInfo
+	styles        map[cdp.StyleSheetID]*StyleInfo
+	outputDir     string
+	verbose       bool
+	scrubber      *scrub.Scrubber
+	httpClient    *http.Client
+	sourcemapCache map[string]string // URL -> content
 }
 
 // New creates a source collector that writes to outputDir.
@@ -56,6 +61,10 @@ func New(outputDir string, verbose bool) *Collector {
 		styles:    make(map[cdp.StyleSheetID]*StyleInfo),
 		outputDir: outputDir,
 		verbose:   verbose,
+		httpClient: &http.Client{
+			Timeout: 30 * time.Second,
+		},
+		sourcemapCache: make(map[string]string),
 	}
 }
 
@@ -286,8 +295,8 @@ func (c *Collector) writeSourceMap(origin, sourceURL, sourceMapURL, compiledSour
 	return wrote, firstErr
 }
 
-// fetchSourceMap fetches sourcemap content. Handles inline data URIs;
-// external URL sourcemaps are not yet supported.
+// fetchSourceMap fetches sourcemap content. Handles inline data URIs
+// and external URLs (resolved against the source script URL).
 func (c *Collector) fetchSourceMap(sourceURL, sourceMapURL string) (content, relPath string, err error) {
 	if strings.HasPrefix(sourceMapURL, "data:") {
 		data, err := decodeDataURI(sourceMapURL)
@@ -298,7 +307,42 @@ func (c *Collector) fetchSourceMap(sourceURL, sourceMapURL string) (content, rel
 	}
 	absURL := resolveURL(sourceURL, sourceMapURL)
 	_, relPath = splitURL(absURL)
-	return "", relPath, fmt.Errorf("external sourcemap fetch not implemented: %s", absURL)
+
+	// Check cache.
+	c.mu.Lock()
+	if cached, ok := c.sourcemapCache[absURL]; ok {
+		c.mu.Unlock()
+		return cached, relPath, nil
+	}
+	c.mu.Unlock()
+
+	// Fetch via HTTP.
+	resp, err := c.httpClient.Get(absURL)
+	if err != nil {
+		return "", relPath, fmt.Errorf("fetch sourcemap %s: %w", absURL, err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", relPath, fmt.Errorf("fetch sourcemap %s: %s", absURL, resp.Status)
+	}
+
+	// Limit read to 50MB to avoid unbounded memory use.
+	const maxSize = 50 << 20
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxSize))
+	if err != nil {
+		return "", relPath, fmt.Errorf("read sourcemap %s: %w", absURL, err)
+	}
+
+	data := string(body)
+	c.mu.Lock()
+	c.sourcemapCache[absURL] = data
+	c.mu.Unlock()
+
+	if c.verbose {
+		log.Printf("sources: fetched sourcemap %s (%d bytes)", absURL, len(body))
+	}
+	return data, relPath, nil
 }
 
 // resolveSourceMap extracts original source files from a sourcemap's

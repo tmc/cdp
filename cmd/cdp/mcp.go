@@ -59,6 +59,7 @@ func (s *mcpSession) contextOutputDir() string {
 }
 
 // pushContext pushes a named context and updates the output directory.
+// If coverage is active, takes a start snapshot automatically.
 // Returns the new output directory path.
 func (s *mcpSession) pushContext(name string) string {
 	s.mu.Lock()
@@ -72,23 +73,80 @@ func (s *mcpSession) pushContext(name string) string {
 	if s.recorder != nil {
 		s.recorder.SetOutputDir(dir)
 	}
+	if s.coverageCollector != nil && s.coverageCollector.Running() {
+		snapName := name + "-start"
+		if _, err := s.coverageCollector.TakeSnapshot(snapName); err != nil {
+			log.Printf("coverage: auto-snapshot %s: %v", snapName, err)
+		}
+	}
 	return dir
 }
 
 // popContext pops the current context and updates the output directory.
+// If coverage is active, takes an end snapshot, computes a delta, and
+// writes lcov files to the output directory.
 // Returns the new output directory path and an error if the stack is empty.
 func (s *mcpSession) popContext() (string, error) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	if len(s.contextStack) == 0 {
+		s.mu.Unlock()
 		return "", fmt.Errorf("no context to pop")
 	}
+	name := s.contextStack[len(s.contextStack)-1]
+	contextDir := s.contextOutputDir()
 	s.contextStack = s.contextStack[:len(s.contextStack)-1]
 	dir := s.contextOutputDir()
 	if s.recorder != nil {
 		s.recorder.SetOutputDir(dir)
 	}
+	cc := s.coverageCollector
+	s.mu.Unlock()
+
+	if cc != nil && cc.Running() {
+		snapName := name + "-end"
+		endSnap, err := cc.TakeSnapshot(snapName)
+		if err != nil {
+			log.Printf("coverage: auto-snapshot %s: %v", snapName, err)
+		} else {
+			s.writeCoverageLcov(contextDir, name, endSnap)
+		}
+	}
 	return dir, nil
+}
+
+// writeCoverageLcov writes delta and cumulative lcov files for a context pop.
+func (s *mcpSession) writeCoverageLcov(contextDir, name string, endSnap *coverage.Snapshot) {
+	covDir := filepath.Join(contextDir, "coverage")
+	if err := os.MkdirAll(covDir, 0755); err != nil {
+		log.Printf("coverage: create dir: %v", err)
+		return
+	}
+
+	// Find the matching start snapshot.
+	snapshots := s.coverageCollector.Snapshots()
+	startName := name + "-start"
+	var startSnap *coverage.Snapshot
+	for _, snap := range snapshots {
+		if snap.Name == startName {
+			startSnap = snap
+		}
+	}
+
+	if startSnap != nil {
+		delta := s.coverageCollector.ComputeDelta(startSnap, endSnap)
+		lcov := coverage.DeltaToLcov(delta)
+		path := filepath.Join(covDir, name+"-delta.lcov")
+		if err := os.WriteFile(path, []byte(lcov), 0644); err != nil {
+			log.Printf("coverage: write delta lcov: %v", err)
+		}
+	}
+
+	// Write cumulative lcov from the end snapshot.
+	cumLcov := coverage.SnapshotToLcov(endSnap)
+	cumPath := filepath.Join(covDir, "cumulative.lcov")
+	if err := os.WriteFile(cumPath, []byte(cumLcov), 0644); err != nil {
+		log.Printf("coverage: write cumulative lcov: %v", err)
+	}
 }
 
 // contextPath returns a display string for the current context stack.

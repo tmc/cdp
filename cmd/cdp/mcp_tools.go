@@ -26,6 +26,8 @@ func registerMCPTools(server *mcp.Server, session *mcpSession) {
 	registerHARTools(server, session)
 	registerCookieTools(server, session)
 	registerSourceTools(server, session)
+	registerSourceBrowsingTools(server, session)
+	registerCoverageTools(server, session)
 }
 
 // --- Navigation tools ---
