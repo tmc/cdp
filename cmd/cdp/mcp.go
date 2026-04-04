@@ -34,6 +34,7 @@ type mcpSession struct {
 	intercepts        *interceptor
 	traces            *traceCollector
 	domSnapshots      *domSnapshotStore
+	syntheticMaps     *syntheticMapStore
 	activeFrameID     cdp.FrameID
 	outputDir         string
 	contextStack      []string

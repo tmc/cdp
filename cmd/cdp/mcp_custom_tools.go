@@ -39,6 +39,8 @@ var builtinToolNames = map[string]bool{
 	"start_trace": true, "stop_trace": true,
 	"save_state": true, "load_state": true,
 	"snapshot_dom": true, "dom_diff": true, "list_dom_snapshots": true,
+	"analyze_bundle": true, "generate_sourcemap": true, "serve_sourcemap": true,
+	"list_sourcemaps": true, "refine_sourcemap": true,
 	"list_tabs": true, "switch_tab": true, "new_tab": true,
 	"push_context": true, "pop_context": true,
 	"get_har_entries": true, "get_cookies": true, "set_cookie": true,
