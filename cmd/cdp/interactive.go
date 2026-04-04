@@ -434,11 +434,13 @@ func (im *InteractiveMode) Run() error {
 
 	scanner := bufio.NewScanner(os.Stdin)
 
-	// captureSourcesOnExit fetches and writes sources before the browser closes.
+	// captureSourcesOnExit stops the background fetcher, does a final sweep,
+	// and writes any remaining sources to disk.
 	captureSourcesOnExit := func() {
 		if im.sourceCollector == nil {
 			return
 		}
+		im.sourceCollector.Close() // drain background goroutine
 		if err := chromedp.Run(im.ctx, chromedp.ActionFunc(func(ctx context.Context) error {
 			return im.sourceCollector.CaptureAll(ctx)
 		})); err != nil && im.verbose {

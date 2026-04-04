@@ -2910,6 +2910,7 @@ func main() {
 			} else {
 				chromedp.ListenTarget(browserCtx, sc.HandleEvent)
 				defer func() {
+					sc.Close() // drain background goroutine
 					if err := chromedp.Run(browserCtx, chromedp.ActionFunc(func(ctx context.Context) error {
 						return sc.CaptureAll(ctx)
 					})); err != nil && verbose {

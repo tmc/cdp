@@ -259,6 +259,7 @@ func runMCP(cfg mcpConfig) error {
 	defer browserCancel()
 	if sourceCollector != nil {
 		defer func() {
+			sourceCollector.Close() // drain background goroutine
 			if err := sourceCollector.CaptureAll(browserCtx); err != nil && cfg.Verbose {
 				log.Printf("warning: source capture errors: %v", err)
 			}

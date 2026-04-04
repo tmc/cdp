@@ -42,25 +42,40 @@ type StyleInfo struct {
 	Source       string
 }
 
+// fetchItem is sent to the background goroutine for incremental capture.
+type fetchItem struct {
+	scriptID    cdp.ScriptID
+	styleSheetID cdp.StyleSheetID
+	url         string
+	sourceMapURL string
+	isStyle     bool
+}
+
 // Collector captures JavaScript and CSS sources from a browser session.
 type Collector struct {
-	mu            sync.Mutex
-	scripts       map[cdp.ScriptID]*ScriptInfo
-	styles        map[cdp.StyleSheetID]*StyleInfo
-	outputDir     string
-	verbose       bool
-	scrubber      *scrub.Scrubber
-	httpClient    *http.Client
+	mu             sync.Mutex
+	scripts        map[cdp.ScriptID]*ScriptInfo
+	styles         map[cdp.StyleSheetID]*StyleInfo
+	written        map[string]bool // URLs already written to disk
+	outputDir      string
+	verbose        bool
+	scrubber       *scrub.Scrubber
+	httpClient     *http.Client
 	sourcemapCache map[string]string // URL -> content
+	ctx            context.Context   // browser context for CDP calls
+	fetchCh        chan fetchItem    // channel for incremental capture
+	done           chan struct{}     // closed when background goroutine exits
+	incremental    bool             // whether incremental mode is active
 }
 
 // New creates a source collector that writes to outputDir.
 func New(outputDir string, verbose bool) *Collector {
 	return &Collector{
-		scripts:   make(map[cdp.ScriptID]*ScriptInfo),
-		styles:    make(map[cdp.StyleSheetID]*StyleInfo),
-		outputDir: outputDir,
-		verbose:   verbose,
+		scripts:        make(map[cdp.ScriptID]*ScriptInfo),
+		styles:         make(map[cdp.StyleSheetID]*StyleInfo),
+		written:        make(map[string]bool),
+		outputDir:      outputDir,
+		verbose:        verbose,
 		httpClient: &http.Client{
 			Timeout: 30 * time.Second,
 		},
@@ -69,7 +84,8 @@ func New(outputDir string, verbose bool) *Collector {
 }
 
 // Enable activates the Debugger and CSS domains so the browser emits
-// scriptParsed and styleSheetAdded events.
+// scriptParsed and styleSheetAdded events. It also starts a background
+// goroutine for incremental source capture (fetch + write as events arrive).
 func (c *Collector) Enable(ctx context.Context) error {
 	if _, err := debugger.Enable().Do(ctx); err != nil {
 		return fmt.Errorf("enable debugger: %w", err)
@@ -77,7 +93,114 @@ func (c *Collector) Enable(ctx context.Context) error {
 	if err := css.Enable().Do(ctx); err != nil {
 		return fmt.Errorf("enable css: %w", err)
 	}
+	c.ctx = ctx
+	c.fetchCh = make(chan fetchItem, 256)
+	c.done = make(chan struct{})
+	c.incremental = true
+	go c.backgroundFetcher()
 	return nil
+}
+
+// Close stops the background fetcher goroutine. Safe to call multiple times.
+func (c *Collector) Close() {
+	c.mu.Lock()
+	if c.incremental && c.fetchCh != nil {
+		close(c.fetchCh)
+		c.incremental = false
+	}
+	c.mu.Unlock()
+	if c.done != nil {
+		<-c.done
+	}
+}
+
+// backgroundFetcher reads from fetchCh, fetches sources, and writes to disk.
+func (c *Collector) backgroundFetcher() {
+	defer close(c.done)
+	for item := range c.fetchCh {
+		if skipURL(item.url) {
+			continue
+		}
+		if item.isStyle {
+			c.fetchAndWriteStyle(item)
+		} else {
+			c.fetchAndWriteScript(item)
+		}
+	}
+}
+
+func (c *Collector) fetchAndWriteScript(item fetchItem) {
+	src, _, err := debugger.GetScriptSource(item.scriptID).Do(c.ctx)
+	if err != nil {
+		if c.verbose {
+			log.Printf("sources: incremental get script %s: %v", item.url, err)
+		}
+		return
+	}
+
+	c.mu.Lock()
+	if s, ok := c.scripts[item.scriptID]; ok {
+		s.Source = src
+	}
+	c.mu.Unlock()
+
+	c.writeSourceEntry(item.url, src, item.sourceMapURL)
+}
+
+func (c *Collector) fetchAndWriteStyle(item fetchItem) {
+	text, err := css.GetStyleSheetText(item.styleSheetID).Do(c.ctx)
+	if err != nil {
+		if c.verbose {
+			log.Printf("sources: incremental get stylesheet %s: %v", item.url, err)
+		}
+		return
+	}
+
+	c.mu.Lock()
+	if s, ok := c.styles[item.styleSheetID]; ok {
+		s.Source = text
+	}
+	c.mu.Unlock()
+
+	c.writeSourceEntry(item.url, text, item.sourceMapURL)
+}
+
+// writeSourceEntry writes a single source file to disk (with scrubbing and sourcemaps).
+func (c *Collector) writeSourceEntry(sourceURL, source, sourceMapURL string) {
+	if source == "" {
+		return
+	}
+	origin, relPath := splitURL(sourceURL)
+	if origin == "" {
+		return
+	}
+
+	c.mu.Lock()
+	if c.written[sourceURL] {
+		c.mu.Unlock()
+		return
+	}
+	c.written[sourceURL] = true
+	c.mu.Unlock()
+
+	src := source
+	if c.scrubber != nil && c.scrubber.Enabled() {
+		src, _ = c.scrubber.ScrubText(src)
+	}
+	if err := writeFile(filepath.Join(c.outputDir, origin, "_compiled", relPath), src); err != nil {
+		if c.verbose {
+			log.Printf("sources: write %s: %v", sourceURL, err)
+		}
+		return
+	}
+	if c.verbose {
+		log.Printf("sources: wrote %s (%d bytes)", sourceURL, len(src))
+	}
+	if sourceMapURL != "" {
+		if _, err := c.writeSourceMap(origin, sourceURL, sourceMapURL, src); err != nil && c.verbose {
+			log.Printf("sources: sourcemap for %s: %v", sourceURL, err)
+		}
+	}
 }
 
 // HandleEvent should be registered via chromedp.ListenTarget to receive CDP events.
@@ -93,7 +216,19 @@ func (c *Collector) HandleEvent(ev interface{}) {
 			Length:       ev.Length,
 			Hash:         ev.Hash,
 		}
+		incr := c.incremental
 		c.mu.Unlock()
+		if incr {
+			select {
+			case c.fetchCh <- fetchItem{
+				scriptID:     ev.ScriptID,
+				url:          ev.URL,
+				sourceMapURL: ev.SourceMapURL,
+			}:
+			default:
+				// Channel full, will be picked up by CaptureAll.
+			}
+		}
 	case *css.EventStyleSheetAdded:
 		h := ev.Header
 		c.mu.Lock()
@@ -102,7 +237,19 @@ func (c *Collector) HandleEvent(ev interface{}) {
 			URL:          h.SourceURL,
 			SourceMapURL: h.SourceMapURL,
 		}
+		incr := c.incremental
 		c.mu.Unlock()
+		if incr {
+			select {
+			case c.fetchCh <- fetchItem{
+				styleSheetID: h.StyleSheetID,
+				url:          h.SourceURL,
+				sourceMapURL: h.SourceMapURL,
+				isStyle:      true,
+			}:
+			default:
+			}
+		}
 	}
 }
 
@@ -186,6 +333,9 @@ func (c *Collector) WriteToDisk() error {
 		if skipURL(e.url) || e.source == "" {
 			continue
 		}
+		if c.written[e.url] {
+			continue // already written incrementally
+		}
 		origin, relPath := splitURL(e.url)
 		if origin == "" {
 			continue
@@ -197,6 +347,7 @@ func (c *Collector) WriteToDisk() error {
 			totalRedactions += n
 		}
 		record(writeFile(filepath.Join(c.outputDir, origin, "_compiled", relPath), src))
+		c.written[e.url] = true
 		wrote++
 		if e.sourceMapURL != "" {
 			n, err := c.writeSourceMap(origin, e.url, e.sourceMapURL, src)
