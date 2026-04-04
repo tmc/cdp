@@ -1076,7 +1076,9 @@ func (m *AllTabsMonitor) Stop() {
 }
 
 func main() {
-	macgo.Start(nil)
+	macgo.Start(&macgo.Config{
+		Permissions: []macgo.Permission{macgo.Microphone, macgo.Camera},
+	})
 	// Handle subcommands before flag parsing
 	if len(os.Args) > 1 {
 		switch os.Args[1] {
