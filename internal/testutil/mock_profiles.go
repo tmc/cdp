@@ -3,6 +3,7 @@ package testutil
 import (
 	"fmt"
 	"log"
+	"os"
 )
 
 // MockProfileManager provides a test implementation of profile management
@@ -12,11 +13,15 @@ type MockProfileManager struct {
 	WorkDirPath string // Export this field for test access
 }
 
-// NewMockProfileManager creates a new mock profile manager
+// NewMockProfileManager creates a new mock profile manager with a unique temp dir.
 func NewMockProfileManager() *MockProfileManager {
+	dir, err := os.MkdirTemp("", "mock-chrome-profile-*")
+	if err != nil {
+		dir = "/tmp/mock-chrome-profile"
+	}
 	return &MockProfileManager{
 		Profiles:    []string{"Test Profile 1", "Test Profile 2"},
-		WorkDirPath: "/tmp/mock-chrome-profile",
+		WorkDirPath: dir,
 	}
 }
 

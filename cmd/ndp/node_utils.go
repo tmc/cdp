@@ -40,9 +40,14 @@ func parseInspectorArgs(args []string) InspectorConfig {
 }
 
 func parseHostPort(s string) (string, string) {
-	if strings.Contains(s, ":") {
-		parts := strings.Split(s, ":")
-		return parts[0], parts[1]
+	// Handle IPv6 addresses like "::1:9240" — the port is the last segment.
+	if idx := strings.LastIndex(s, ":"); idx >= 0 {
+		host := s[:idx]
+		port := s[idx+1:]
+		if host == "" {
+			host = "127.0.0.1"
+		}
+		return host, port
 	}
 	return "127.0.0.1", s
 }
@@ -73,35 +78,20 @@ func detectNodeScript(args []string) string {
 		}
 
 		if strings.HasPrefix(arg, "-") {
-			// Skip flags that take arguments
-			if arg == "--inspect" || arg == "--inspect-brk" {
-				// check if next is port number
-				// This is a naive check similar to parseInspectorArgs logic
-				// But we'll rely on skipping known single-arg flags or assumptions
-				// For the test cases, we just need to identify the script.
-			}
-			// Assume standard flags don't take args unless known?
-			// In node, most single dash flags don't take args except -e, -r
-			if arg == "-r" || arg == "--require" || arg == "--loader" || arg == "-e" || arg == "--eval" {
+			// Skip flags that take a following argument.
+			switch arg {
+			case "--inspect", "--inspect-brk":
+				skipNext = true // next arg may be a port number
+			case "-r", "--require", "--loader", "-e", "--eval":
 				skipNext = true
 			}
 			continue
 		}
 
-		// If previous was --inspect/brk and this is a number, skip it
+		// Skip bare numeric args (port numbers consumed by --inspect/--inspect-brk).
 		if isNumeric(arg) {
-			// This is ambiguous without context of which flag preceded it,
-			// but for simple detection we can try heuristics or just assume first non-numeric non-flag is script
-			// unless it was consumed by a flag using skipNext.
-			// But wait, the loop structure implies we iterate sequentially.
-			// If we didn't set skipNext, we assume it's NOT a value for a flag.
-			// However `parseInspectorArgs` consumes next arg if numeric.
-			// Let's refine:
+			continue
 		}
-
-		// If we are here, it's not a flag name, and not consumed by a flag we know takes an arg.
-		// However, --inspect 9229 consumes 9229.
-		// But in this simple loop we didn't track the *previous* flag.
 
 		return arg
 	}

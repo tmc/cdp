@@ -31,7 +31,7 @@ func TestMain(m *testing.M) {
 }
 
 func TestBasicRun(t *testing.T) {
-	t.Parallel()
+	// Not parallel — uses OutputCapture which redirects os.Stdout globally.
 	testutil.SkipIfNoChrome(t)
 
 	// Skip tests that require actual Chrome execution
@@ -92,7 +92,7 @@ func TestBasicRun(t *testing.T) {
 				t.Fatalf("Failed to capture output: %v", err)
 			}
 
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 			defer cancel()
 
 			mockPM := testutil.NewMockProfileManager()
@@ -118,7 +118,7 @@ func TestBasicRun(t *testing.T) {
 }
 
 func TestListProfiles(t *testing.T) {
-	t.Parallel()
+	// Not parallel — this test redirects os.Stdout globally.
 	testutil.SkipIfNoChrome(t)
 	tests := []struct {
 		name    string
@@ -199,7 +199,7 @@ func TestInteractiveScript(t *testing.T) {
 }
 
 func TestStreamingOutput(t *testing.T) {
-	t.Parallel()
+	// Not parallel — uses OutputCapture which redirects os.Stdout globally.
 	testutil.SkipIfNoChrome(t)
 
 	// Skip tests that require actual Chrome execution

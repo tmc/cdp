@@ -216,12 +216,14 @@ func registerObservationTools(server *mcp.Server, s *mcpSession) {
 
 type ClickInput struct {
 	Selector string `json:"selector"`
+	Timeout  int    `json:"timeout,omitempty"`
 }
 
 type TypeTextInput struct {
 	Selector string `json:"selector"`
 	Text     string `json:"text"`
 	Submit   bool   `json:"submit,omitempty"`
+	Timeout  int    `json:"timeout,omitempty"`
 }
 
 type WaitForInput struct {
@@ -229,12 +231,25 @@ type WaitForInput struct {
 	Timeout  int    `json:"timeout,omitempty"`
 }
 
+// defaultInteractionTimeout is the default timeout for interaction tools.
+const defaultInteractionTimeout = 30 * time.Second
+
+// interactionCtx creates a context with a timeout for interaction tools.
+func interactionCtx(actx context.Context, timeoutSec int) (context.Context, context.CancelFunc) {
+	timeout := defaultInteractionTimeout
+	if timeoutSec > 0 {
+		timeout = time.Duration(timeoutSec) * time.Second
+	}
+	return context.WithTimeout(actx, timeout)
+}
+
 func registerInteractionTools(server *mcp.Server, s *mcpSession) {
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "click",
 		Description: "Click an element by CSS selector or @ref (e.g. @1 from page_snapshot)",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input ClickInput) (*mcp.CallToolResult, any, error) {
-		actx := s.activeCtx()
+		actx, cancel := interactionCtx(s.activeCtx(), input.Timeout)
+		defer cancel()
 		backendID, err := resolveRef(s.refs, input.Selector)
 		if err != nil {
 			return nil, nil, fmt.Errorf("click: %w", err)
@@ -265,7 +280,8 @@ func registerInteractionTools(server *mcp.Server, s *mcpSession) {
 		if input.Submit {
 			text += "\n"
 		}
-		actx := s.activeCtx()
+		actx, cancel := interactionCtx(s.activeCtx(), input.Timeout)
+		defer cancel()
 		backendID, err := resolveRef(s.refs, input.Selector)
 		if err != nil {
 			return nil, nil, fmt.Errorf("type_text: %w", err)
@@ -292,12 +308,8 @@ func registerInteractionTools(server *mcp.Server, s *mcpSession) {
 		Name:        "wait_for",
 		Description: "Wait for an element to be visible by CSS selector or @ref",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input WaitForInput) (*mcp.CallToolResult, any, error) {
-		actx := s.activeCtx()
-		if input.Timeout > 0 {
-			var cancel context.CancelFunc
-			actx, cancel = context.WithTimeout(actx, time.Duration(input.Timeout)*time.Second)
-			defer cancel()
-		}
+		actx, cancel := interactionCtx(s.activeCtx(), input.Timeout)
+		defer cancel()
 		// For @refs, check that the element exists (it was visible at snapshot time).
 		backendID, err := resolveRef(s.refs, input.Selector)
 		if err != nil {

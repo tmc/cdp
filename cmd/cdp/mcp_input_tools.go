@@ -17,14 +17,17 @@ import (
 type PressKeyInput struct {
 	Key       string `json:"key"`
 	Modifiers string `json:"modifiers,omitempty"`
+	Timeout   int    `json:"timeout,omitempty"`
 }
 
 type HoverInput struct {
 	Selector string `json:"selector"`
+	Timeout  int    `json:"timeout,omitempty"`
 }
 
 type FocusInput struct {
 	Selector string `json:"selector"`
+	Timeout  int    `json:"timeout,omitempty"`
 }
 
 // keyDefinitions maps common key names to their CDP key properties.
@@ -66,7 +69,8 @@ func registerInputTools(server *mcp.Server, s *mcpSession) {
 		Name:        "press_key",
 		Description: "Press a keyboard key. Supports: Enter, Tab, Escape, Backspace, Delete, Space, ArrowUp/Down/Left/Right, Home, End, PageUp/PageDown, F1-F12, or any single character. Modifiers: ctrl, alt, shift, meta (comma-separated).",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input PressKeyInput) (*mcp.CallToolResult, any, error) {
-		actx := s.activeCtx()
+		actx, cancel := interactionCtx(s.activeCtx(), input.Timeout)
+		defer cancel()
 		if err := chromedp.Run(actx, chromedp.ActionFunc(func(ctx context.Context) error {
 			return pressKey(ctx, input.Key, input.Modifiers)
 		})); err != nil {
@@ -81,7 +85,8 @@ func registerInputTools(server *mcp.Server, s *mcpSession) {
 		Name:        "hover",
 		Description: "Hover over an element by CSS selector or @ref. Triggers mouseover events.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, inp HoverInput) (*mcp.CallToolResult, any, error) {
-		actx := s.activeCtx()
+		actx, cancel := interactionCtx(s.activeCtx(), inp.Timeout)
+		defer cancel()
 		backendID, err := resolveRef(s.refs, inp.Selector)
 		if err != nil {
 			return nil, nil, fmt.Errorf("hover: %w", err)
@@ -107,7 +112,8 @@ func registerInputTools(server *mcp.Server, s *mcpSession) {
 		Name:        "focus",
 		Description: "Focus an element by CSS selector or @ref",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, inp FocusInput) (*mcp.CallToolResult, any, error) {
-		actx := s.activeCtx()
+		actx, cancel := interactionCtx(s.activeCtx(), inp.Timeout)
+		defer cancel()
 		backendID, err := resolveRef(s.refs, inp.Selector)
 		if err != nil {
 			return nil, nil, fmt.Errorf("focus: %w", err)

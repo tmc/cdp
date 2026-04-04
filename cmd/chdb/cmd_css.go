@@ -70,7 +70,7 @@ func runCSS(ctx context.Context, tabID string) error {
 		}
 
 		// Get computed style
-		computedStyles, err = css.GetComputedStyleForNode(nodeID).Do(ctx)
+		computedStyles, _, err = css.GetComputedStyleForNode(nodeID).Do(ctx)
 		if err != nil {
 			return fmt.Errorf("failed to get computed styles: %w", err)
 		}

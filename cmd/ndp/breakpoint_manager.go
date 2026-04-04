@@ -9,9 +9,10 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/chromedp/chromedp"
+	"github.com/chromedp/cdproto/cdp"
 	"github.com/chromedp/cdproto/debugger"
 	"github.com/chromedp/cdproto/runtime"
+	"github.com/chromedp/chromedp"
 	"github.com/pkg/errors"
 )
 
@@ -34,7 +35,7 @@ type Breakpoint struct {
 	HitCount     int            `json:"hit_count"`    // Number of times hit
 	LogMessage   string         `json:"log_message"`  // For log points
 	Enabled      bool           `json:"enabled"`
-	ScriptID     runtime.ScriptID `json:"script_id,omitempty"`
+	ScriptID     cdp.ScriptID `json:"script_id,omitempty"`
 	LineNumber   int            `json:"line_number"`
 	ColumnNumber int            `json:"column_number"`
 	Resolved     bool           `json:"resolved"`

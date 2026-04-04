@@ -198,7 +198,7 @@ func (nc *NetworkController) SetThrottling(ctx context.Context, profile string) 
 		// Disable throttling
 		err := chromedp.Run(nc.debugger.chromeCtx,
 			chromedp.ActionFunc(func(ctx context.Context) error {
-				return network.EmulateNetworkConditions(false, 0, 0, 0).Do(ctx)
+				return network.OverrideNetworkState(false, 0, 0, 0).Do(ctx)
 			}),
 		)
 		if err == nil {
@@ -212,7 +212,7 @@ func (nc *NetworkController) SetThrottling(ctx context.Context, profile string) 
 	err := chromedp.Run(nc.debugger.chromeCtx,
 		chromedp.ActionFunc(func(ctx context.Context) error {
 			offline := (downloadThroughput == 0)
-			return network.EmulateNetworkConditions(
+			return network.OverrideNetworkState(
 				offline,
 				latency,
 				downloadThroughput,

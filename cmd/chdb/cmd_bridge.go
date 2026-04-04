@@ -673,7 +673,7 @@ function launchAuto() {
 </div>
 </body>
 </html>
-`, port, devtoolsURL, port)
+`, port, devtoolsURL)
 	w.Write([]byte(html))
 }
 

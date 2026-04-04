@@ -88,14 +88,16 @@ func runNetworkMonitor(ctx context.Context, tabID string) error {
 
 		if networkThrottle == "offline" || latency > 0 {
 			log.Printf("Applying throttle: %s", networkThrottle)
-			actions = append(actions, network.EmulateNetworkConditions(offline, latency, downloadThroughput, uploadThroughput))
+			actions = append(actions, network.OverrideNetworkState(offline, latency, downloadThroughput, uploadThroughput))
 		}
 	}
 
 	// Apply Blocking
 	if networkBlock != "" {
 		log.Printf("Blocking URLs matching: %s", networkBlock)
-		actions = append(actions, network.SetBlockedURLs([]string{networkBlock}))
+		actions = append(actions, network.SetBlockedURLs().WithURLPatterns([]*network.BlockPattern{
+			{URLPattern: networkBlock, Block: true},
+		}))
 	}
 
 	if len(actions) > 0 {
