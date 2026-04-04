@@ -100,15 +100,12 @@ func TestSourcemapPipeline_EndToEnd(t *testing.T) {
 	browserCtx, browserCancel := chromedp.NewContext(allocCtx)
 	defer browserCancel()
 
-	// The coverage collector needs the inner CDP target context (the one
-	// chromedp passes to ActionFunc callbacks). The outer browserCtx from
-	// chromedp.NewContext doesn't have the protocol executor attached.
+	// coverage.Start now wraps CDP calls in chromedp.Run internally,
+	// so we can pass the outer browserCtx directly.
 	cov := coverage.New(true)
 
 	t.Log("starting coverage and navigating...")
-	if err := chromedp.Run(browserCtx, chromedp.ActionFunc(func(ctx context.Context) error {
-		return cov.Start(ctx)
-	})); err != nil {
+	if err := cov.Start(browserCtx); err != nil {
 		t.Fatalf("start coverage: %v", err)
 	}
 

@@ -14,6 +14,7 @@ import (
 	"github.com/chromedp/cdproto/css"
 	"github.com/chromedp/cdproto/debugger"
 	"github.com/chromedp/cdproto/profiler"
+	"github.com/chromedp/chromedp"
 )
 
 // Collector gathers code coverage from an active browser context.
@@ -98,7 +99,8 @@ func New(verbose bool) *Collector {
 }
 
 // Start enables profiling and begins coverage collection on the given
-// chromedp browser context.
+// chromedp browser context. The context must be a chromedp context (from
+// chromedp.NewContext or passed through chromedp.Run).
 func (c *Collector) Start(ctx context.Context) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -107,23 +109,33 @@ func (c *Collector) Start(ctx context.Context) error {
 		return fmt.Errorf("coverage collection already running")
 	}
 
-	if err := profiler.Enable().Do(ctx); err != nil {
-		return fmt.Errorf("enable profiler: %w", err)
-	}
-	if _, err := debugger.Enable().Do(ctx); err != nil {
-		return fmt.Errorf("enable debugger: %w", err)
-	}
-	if _, err := profiler.StartPreciseCoverage().WithCallCount(true).WithDetailed(true).Do(ctx); err != nil {
-		return fmt.Errorf("start precise coverage: %w", err)
-	}
-	if err := css.Enable().Do(ctx); err != nil {
-		return fmt.Errorf("enable css: %w", err)
-	}
-	if err := css.StartRuleUsageTracking().Do(ctx); err != nil {
-		return fmt.Errorf("start css rule tracking: %w", err)
+	// Wrap CDP domain calls in chromedp.Run to obtain the page-level
+	// executor context. Direct .Do(ctx) fails when ctx is the outer
+	// chromedp context rather than the inner target context.
+	var innerCtx context.Context
+	if err := chromedp.Run(ctx, chromedp.ActionFunc(func(ctx context.Context) error {
+		innerCtx = ctx
+		if err := profiler.Enable().Do(ctx); err != nil {
+			return fmt.Errorf("enable profiler: %w", err)
+		}
+		if _, err := debugger.Enable().Do(ctx); err != nil {
+			return fmt.Errorf("enable debugger: %w", err)
+		}
+		if _, err := profiler.StartPreciseCoverage().WithCallCount(true).WithDetailed(true).Do(ctx); err != nil {
+			return fmt.Errorf("start precise coverage: %w", err)
+		}
+		if err := css.Enable().Do(ctx); err != nil {
+			return fmt.Errorf("enable css: %w", err)
+		}
+		if err := css.StartRuleUsageTracking().Do(ctx); err != nil {
+			return fmt.Errorf("start css rule tracking: %w", err)
+		}
+		return nil
+	})); err != nil {
+		return err
 	}
 
-	c.ctx = ctx
+	c.ctx = innerCtx
 	c.running = true
 	c.snapshots = nil
 	return nil
