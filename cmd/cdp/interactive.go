@@ -5,33 +5,38 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
+	"github.com/chromedp/cdproto/target"
+	"github.com/chromedp/chromedp"
 )
 
 // InteractiveMode represents an interactive CDP session
 type InteractiveMode struct {
-	ctx      context.Context
-	cancel   context.CancelFunc
-	cfg      fullCaptureConfig
-	registry *CommandRegistry
-	help     *HelpSystem
-	history  []string
-	verbose  bool
+	browserCtx context.Context // browser-level context for creating/listing tabs
+	ctx        context.Context // active tab context for executing commands
+	cancel     context.CancelFunc
+	cfg        fullCaptureConfig
+	registry   *CommandRegistry
+	help       *HelpSystem
+	history    []string
+	verbose    bool
 }
 
 // NewInteractiveMode creates a new interactive session
 func NewInteractiveMode(ctx context.Context, cancel context.CancelFunc, cfg fullCaptureConfig) *InteractiveMode {
 	registry := NewCommandRegistry()
 	return &InteractiveMode{
-		ctx:      ctx,
-		cancel:   cancel,
-		cfg:      cfg,
-		registry: registry,
-		help:     NewHelpSystem(registry),
-		history:  make([]string, 0),
-		verbose:  cfg.Verbose,
+		browserCtx: ctx,
+		ctx:        ctx,
+		cancel:     cancel,
+		cfg:        cfg,
+		registry:   registry,
+		help:       NewHelpSystem(registry),
+		history:    make([]string, 0),
+		verbose:    cfg.Verbose,
 	}
 }
 
@@ -158,6 +163,26 @@ func (im *InteractiveMode) handleSpecialCommand(line string) bool {
 		}
 		return true
 
+	case "tabs", "list-tabs", "lt":
+		im.listTabs()
+		return true
+
+	case "newtab", "nt":
+		url := "about:blank"
+		if len(args) > 0 {
+			url = args[0]
+		}
+		im.newTab(url)
+		return true
+
+	case "tab", "t":
+		if len(args) == 0 {
+			fmt.Println("Usage: tab <index|id>")
+			return true
+		}
+		im.switchTab(args[0])
+		return true
+
 	default:
 		return false
 	}
@@ -173,10 +198,114 @@ func (im *InteractiveMode) reconnect() error {
 	if err != nil {
 		return fmt.Errorf("reconnect failed: %w", err)
 	}
+	im.browserCtx = ctx
 	im.ctx = ctx
 	im.cancel = cancel
 	fmt.Println("Reconnected.")
 	return nil
+}
+
+// listTabs lists all open browser tabs.
+func (im *InteractiveMode) listTabs() {
+	targets, err := chromedp.Targets(im.browserCtx)
+	if err != nil {
+		fmt.Printf("Error listing tabs: %v\n", err)
+		return
+	}
+
+	// Get the active target ID for marking.
+	activeTarget := chromedp.FromContext(im.ctx).Target
+	var activeID string
+	if activeTarget != nil {
+		activeID = string(activeTarget.TargetID)
+	}
+
+	fmt.Println("Open tabs:")
+	idx := 0
+	for _, t := range targets {
+		if t.Type != "page" {
+			continue
+		}
+		marker := "  "
+		if string(t.TargetID) == activeID {
+			marker = "* "
+		}
+		title := t.Title
+		if title == "" {
+			title = "(untitled)"
+		}
+		fmt.Printf("  %s[%d] %s — %s\n", marker, idx, title, t.URL)
+		idx++
+	}
+	if idx == 0 {
+		fmt.Println("  (no tabs)")
+	}
+}
+
+// newTab creates a new browser tab and switches to it.
+func (im *InteractiveMode) newTab(url string) {
+	tabCtx, _ := chromedp.NewContext(im.browserCtx)
+	if err := chromedp.Run(tabCtx, chromedp.Navigate(url)); err != nil {
+		fmt.Printf("Error creating tab: %v\n", err)
+		return
+	}
+	im.ctx = tabCtx
+	fmt.Printf("New tab: %s\n", url)
+}
+
+// switchTab switches the active context to an existing tab by index or target ID.
+func (im *InteractiveMode) switchTab(selector string) {
+	targets, err := chromedp.Targets(im.browserCtx)
+	if err != nil {
+		fmt.Printf("Error listing tabs: %v\n", err)
+		return
+	}
+
+	// Filter to page targets only.
+	var pages []*target.Info
+	for _, t := range targets {
+		if t.Type == "page" {
+			pages = append(pages, t)
+		}
+	}
+
+	// Try as numeric index first.
+	var targetInfo *target.Info
+	if idx, err := strconv.Atoi(selector); err == nil {
+		if idx >= 0 && idx < len(pages) {
+			targetInfo = pages[idx]
+		} else {
+			fmt.Printf("Tab index %d out of range (0-%d)\n", idx, len(pages)-1)
+			return
+		}
+	} else {
+		// Try as target ID prefix.
+		for _, t := range pages {
+			if strings.HasPrefix(string(t.TargetID), selector) {
+				targetInfo = t
+				break
+			}
+		}
+	}
+
+	if targetInfo == nil {
+		fmt.Printf("No tab matching '%s'\n", selector)
+		return
+	}
+
+	tabCtx, _ := chromedp.NewContext(im.browserCtx, chromedp.WithTargetID(targetInfo.TargetID))
+	// Run a no-op to attach to the target.
+	if err := chromedp.Run(tabCtx); err != nil {
+		fmt.Printf("Error switching to tab: %v\n", err)
+		return
+	}
+	im.ctx = tabCtx
+
+	title := targetInfo.Title
+	if title == "" {
+		title = "(untitled)"
+	}
+	fmt.Printf("Switched to: %s — %s\n", title, targetInfo.URL)
 }
 
 // isDisconnected reports whether an error indicates the browser connection is lost.
