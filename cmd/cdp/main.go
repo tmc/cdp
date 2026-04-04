@@ -2902,12 +2902,17 @@ func main() {
 				sourcesDir = "sources"
 			}
 			sc := sources.New(sourcesDir, verbose)
-			if err := sc.Enable(browserCtx); err != nil {
+			// Use ActionFunc to get a page-level context for debugger.Enable.
+			if err := chromedp.Run(browserCtx, chromedp.ActionFunc(func(ctx context.Context) error {
+				return sc.Enable(ctx)
+			})); err != nil {
 				log.Printf("Warning: failed to enable source capture: %v", err)
 			} else {
 				chromedp.ListenTarget(browserCtx, sc.HandleEvent)
 				defer func() {
-					if err := sc.CaptureAll(browserCtx); err != nil && verbose {
+					if err := chromedp.Run(browserCtx, chromedp.ActionFunc(func(ctx context.Context) error {
+						return sc.CaptureAll(ctx)
+					})); err != nil && verbose {
 						log.Printf("Warning: source capture errors: %v", err)
 					}
 					if err := sc.WriteToDisk(); err != nil {
