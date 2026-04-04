@@ -86,6 +86,12 @@ type AnalyzeBundleInput struct {
 	ActionLabel  string `json:"action_label,omitempty"`
 }
 
+type SetBundleStructureInput struct {
+	BundleURL    string          `json:"bundle_url"`
+	SnapshotName string          `json:"snapshot_name,omitempty"`
+	Structure    json.RawMessage `json:"structure"`
+}
+
 type GenerateSourcemapInput struct {
 	BundleURL string `json:"bundle_url"`
 }
@@ -102,15 +108,20 @@ type RefineSourcemapInput struct {
 
 func registerSourcemapTools(server *mcp.Server, s *mcpSession) {
 	mcp.AddTool(server, &mcp.Tool{
-		Name:        "analyze_bundle",
-		Description: "Analyze a JavaScript bundle using coverage data to infer its original source structure. Uses the connected LLM via MCP sampling to analyze executed code chunks. Provide a coverage snapshot name to analyze specific coverage, or omit for latest.",
+		Name: "analyze_bundle",
+		Description: `Extract executed code chunks from a JavaScript bundle using coverage data.
+
+Returns the chunks formatted for analysis. After reviewing the output, call
+set_bundle_structure with the inferred file structure to generate a sourcemap.
+
+The output includes a JSON schema showing the expected format for set_bundle_structure.`,
+		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input AnalyzeBundleInput) (*mcp.CallToolResult, any, error) {
 		if input.BundleURL == "" {
 			return nil, nil, fmt.Errorf("analyze_bundle: bundle_url is required")
 		}
 
-		// Get coverage data for this bundle.
-		chunks, bundleSource, err := extractBundleChunks(s, input.BundleURL, input.SnapshotName)
+		chunks, _, err := extractBundleChunks(s, input.BundleURL, input.SnapshotName)
 		if err != nil {
 			return nil, nil, fmt.Errorf("analyze_bundle: %w", err)
 		}
@@ -120,13 +131,49 @@ func registerSourcemapTools(server *mcp.Server, s *mcpSession) {
 			}, nil, nil
 		}
 
-		// Use MCP sampling to ask the connected LLM to analyze.
-		result, err := sampleBundleAnalysis(ctx, req.Session, input.BundleURL, chunks, input.ActionLabel)
-		if err != nil {
-			return nil, nil, fmt.Errorf("analyze_bundle: sampling: %w", err)
+		// Return chunks as a prompt the agent can analyze directly.
+		prompt := buildAnalysisPrompt(input.BundleURL, chunks, input.ActionLabel)
+
+		var b strings.Builder
+		fmt.Fprintf(&b, "Bundle: %s\nExecuted chunks: %d\n\n", input.BundleURL, len(chunks))
+		b.WriteString(prompt)
+		b.WriteString("\n\nAfter analyzing the chunks above, call set_bundle_structure with:\n")
+		b.WriteString(`  {"bundle_url": "` + input.BundleURL + `", "structure": <your JSON response>}`)
+		b.WriteString("\n")
+
+		return &mcp.CallToolResult{
+			Content: []mcp.Content{&mcp.TextContent{Text: b.String()}},
+		}, nil, nil
+	})
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name: "set_bundle_structure",
+		Description: `Accept inferred source file structure for a bundle and generate a synthetic sourcemap.
+
+Call analyze_bundle first to get the code chunks, then pass your analysis here.
+The structure field should be JSON matching: {"files": [...], "summary": "..."}
+where each file has: path, description, start_line, end_line, start_offset, end_offset,
+functions (optional), framework (optional), module (optional).`,
+	}, func(ctx context.Context, req *mcp.CallToolRequest, input SetBundleStructureInput) (*mcp.CallToolResult, any, error) {
+		if input.BundleURL == "" {
+			return nil, nil, fmt.Errorf("set_bundle_structure: bundle_url is required")
 		}
 
-		// Store the analysis.
+		var result inferredResult
+		if err := json.Unmarshal(input.Structure, &result); err != nil {
+			return nil, nil, fmt.Errorf("set_bundle_structure: invalid structure JSON: %w", err)
+		}
+		if len(result.Files) == 0 {
+			return nil, nil, fmt.Errorf("set_bundle_structure: structure must contain at least one file")
+		}
+
+		// Get the bundle source for sourcemap generation.
+		_, bundleSource, err := extractBundleChunks(s, input.BundleURL, input.SnapshotName)
+		if err != nil {
+			return nil, nil, fmt.Errorf("set_bundle_structure: %w", err)
+		}
+
+		// Generate the sourcemap.
 		if s.syntheticMaps == nil {
 			s.syntheticMaps = newSyntheticMapStore()
 		}
@@ -134,29 +181,41 @@ func registerSourcemapTools(server *mcp.Server, s *mcpSession) {
 		if sm == nil {
 			sm = &syntheticMap{BundleURL: input.BundleURL}
 		}
-		sm.Sources = result
+		sm.Sources = &result
 
-		// Generate the sourcemap from the inferred structure.
-		mapJSON, err := generateMapFromInferred(bundleSource, result)
+		mapJSON, err := generateMapFromInferred(bundleSource, &result)
 		if err != nil {
-			return nil, nil, fmt.Errorf("analyze_bundle: generate map: %w", err)
+			return nil, nil, fmt.Errorf("set_bundle_structure: generate map: %w", err)
 		}
 		sm.MapJSON = mapJSON
+
+		// Hot-update the intercept rule if already serving.
+		if sm.Serving && sm.InterceptID != "" && s.intercepts != nil {
+			s.intercepts.mu.Lock()
+			for i := range s.intercepts.rules {
+				if s.intercepts.rules[i].ID == sm.InterceptID {
+					s.intercepts.rules[i].Body = string(mapJSON)
+					break
+				}
+			}
+			s.intercepts.mu.Unlock()
+		}
+
 		s.syntheticMaps.set(input.BundleURL, sm)
 
-		// Format response.
 		var b strings.Builder
-		fmt.Fprintf(&b, "Analyzed %s: %d inferred source files\n", input.BundleURL, len(result.Files))
+		fmt.Fprintf(&b, "Sourcemap generated for %s: %d source files, %d bytes\n", input.BundleURL, len(result.Files), len(mapJSON))
 		if result.Summary != "" {
 			fmt.Fprintf(&b, "Summary: %s\n", result.Summary)
 		}
 		for _, f := range result.Files {
 			fmt.Fprintf(&b, "  %s (lines %d-%d): %s\n", f.Path, f.StartLine, f.EndLine, f.Description)
-			for _, fn := range f.Functions {
-				fmt.Fprintf(&b, "    %s (lines %d-%d): %s\n", fn.Name, fn.StartLine, fn.EndLine, fn.Description)
-			}
 		}
-		fmt.Fprintf(&b, "\nSourcemap generated (%d bytes). Use serve_sourcemap to activate.\n", len(mapJSON))
+		if sm.Serving {
+			fmt.Fprintf(&b, "\nSourcemap hot-updated (serving via rule %s).\n", sm.InterceptID)
+		} else {
+			fmt.Fprintf(&b, "\nUse serve_sourcemap to activate, or generate_sourcemap to get the raw JSON.\n")
+		}
 
 		return &mcp.CallToolResult{
 			Content: []mcp.Content{&mcp.TextContent{Text: b.String()}},
@@ -285,14 +344,19 @@ func registerSourcemapTools(server *mcp.Server, s *mcpSession) {
 	})
 
 	mcp.AddTool(server, &mcp.Tool{
-		Name:        "refine_sourcemap",
-		Description: "Re-analyze a bundle with additional coverage data (e.g. after more actions) and update the served sourcemap.",
+		Name: "refine_sourcemap",
+		Description: `Extract new coverage chunks for a bundle after additional user actions.
+
+Returns the updated chunks for re-analysis. Call set_bundle_structure with the
+refined file structure to update the sourcemap. If the sourcemap is being served,
+the intercept rule will be hot-updated automatically.`,
+		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input RefineSourcemapInput) (*mcp.CallToolResult, any, error) {
 		if input.BundleURL == "" {
 			return nil, nil, fmt.Errorf("refine_sourcemap: bundle_url is required")
 		}
 
-		chunks, bundleSource, err := extractBundleChunks(s, input.BundleURL, input.SnapshotName)
+		chunks, _, err := extractBundleChunks(s, input.BundleURL, input.SnapshotName)
 		if err != nil {
 			return nil, nil, fmt.Errorf("refine_sourcemap: %w", err)
 		}
@@ -302,42 +366,28 @@ func registerSourcemapTools(server *mcp.Server, s *mcpSession) {
 			}, nil, nil
 		}
 
-		result, err := sampleBundleAnalysis(ctx, req.Session, input.BundleURL, chunks, input.ActionLabel)
-		if err != nil {
-			return nil, nil, fmt.Errorf("refine_sourcemap: sampling: %w", err)
-		}
-
-		if s.syntheticMaps == nil {
-			s.syntheticMaps = newSyntheticMapStore()
-		}
-		sm := s.syntheticMaps.get(input.BundleURL)
-		if sm == nil {
-			sm = &syntheticMap{BundleURL: input.BundleURL}
-		}
-		sm.Sources = result
-
-		mapJSON, err := generateMapFromInferred(bundleSource, result)
-		if err != nil {
-			return nil, nil, fmt.Errorf("refine_sourcemap: generate map: %w", err)
-		}
-		sm.MapJSON = mapJSON
-
-		// If serving, update the intercept rule body.
-		if sm.Serving && sm.InterceptID != "" && s.intercepts != nil {
-			s.intercepts.mu.Lock()
-			for i := range s.intercepts.rules {
-				if s.intercepts.rules[i].ID == sm.InterceptID {
-					s.intercepts.rules[i].Body = string(mapJSON)
-					break
+		// Show what changed since last analysis.
+		var b strings.Builder
+		fmt.Fprintf(&b, "Refined coverage for %s: %d chunks\n", input.BundleURL, len(chunks))
+		if s.syntheticMaps != nil {
+			if existing := s.syntheticMaps.get(input.BundleURL); existing != nil && existing.Sources != nil {
+				fmt.Fprintf(&b, "Previous analysis had %d files. ", len(existing.Sources.Files))
+				if existing.Serving {
+					fmt.Fprintf(&b, "Currently serving (rule %s). ", existing.InterceptID)
 				}
+				b.WriteString("\n")
 			}
-			s.intercepts.mu.Unlock()
 		}
+		b.WriteString("\n")
 
-		s.syntheticMaps.set(input.BundleURL, sm)
+		// Return the analysis prompt for the agent.
+		prompt := buildAnalysisPrompt(input.BundleURL, chunks, input.ActionLabel)
+		b.WriteString(prompt)
+		b.WriteString("\n\nAfter analyzing, call set_bundle_structure to update the sourcemap.\n")
+		b.WriteString("If the sourcemap is being served, it will be hot-updated automatically.\n")
 
 		return &mcp.CallToolResult{
-			Content: []mcp.Content{&mcp.TextContent{Text: fmt.Sprintf("refined sourcemap for %s: %d files, %d bytes\n%s", input.BundleURL, len(result.Files), len(mapJSON), result.Summary)}},
+			Content: []mcp.Content{&mcp.TextContent{Text: b.String()}},
 		}, nil, nil
 	})
 }
@@ -387,48 +437,6 @@ func extractBundleChunks(s *mcpSession, bundleURL, snapshotName string) ([]sourc
 	return chunks, scriptCov.Source, nil
 }
 
-
-// sampleBundleAnalysis uses MCP sampling to ask the connected LLM to analyze code chunks.
-func sampleBundleAnalysis(ctx context.Context, session *mcp.ServerSession, bundleURL string, chunks []sourcemap.CodeChunk, actionLabel string) (*inferredResult, error) {
-	if session == nil {
-		return nil, fmt.Errorf("no MCP session — sampling requires a connected client")
-	}
-
-	prompt := buildAnalysisPrompt(bundleURL, chunks, actionLabel)
-
-	result, err := session.CreateMessage(ctx, &mcp.CreateMessageParams{
-		Messages: []*mcp.SamplingMessage{
-			{
-				Content: &mcp.TextContent{Text: prompt},
-				Role:    "user",
-			},
-		},
-		SystemPrompt: "You are a JavaScript bundle analyzer. Respond with valid JSON only, no markdown fences.",
-		MaxTokens:    8192,
-		Temperature:  0.2,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("create message: %w", err)
-	}
-
-	// Extract text from the result.
-	text := ""
-	if tc, ok := result.Content.(*mcp.TextContent); ok {
-		text = tc.Text
-	}
-	if text == "" {
-		return nil, fmt.Errorf("empty response from LLM")
-	}
-
-	// Strip markdown fences if present.
-	text = stripCodeFences(text)
-
-	var inferred inferredResult
-	if err := json.Unmarshal([]byte(text), &inferred); err != nil {
-		return nil, fmt.Errorf("parse LLM response: %w\nraw: %.500s", err, text)
-	}
-	return &inferred, nil
-}
 
 func buildAnalysisPrompt(bundleURL string, chunks []sourcemap.CodeChunk, actionLabel string) string {
 	var b strings.Builder
