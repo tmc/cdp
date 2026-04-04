@@ -3104,6 +3104,10 @@ func main() {
 							contextStack = contextStack[:len(contextStack)-1]
 							continue
 						}
+						// Redirect recorder output to the new context directory
+						if enhancedRecorder != nil {
+							enhancedRecorder.SetOutputDir(dir)
+						}
 					}
 					fmt.Printf("Pushed context: %s\n", name)
 					fmt.Printf("Output directory: %s\n", dir)
@@ -3121,6 +3125,10 @@ func main() {
 					dir := outputDir
 					if len(contextStack) > 0 {
 						dir = filepath.Join(outputDir, filepath.Join(contextStack...))
+					}
+					// Redirect recorder output back
+					if enhancedRecorder != nil && outputDir != "" {
+						enhancedRecorder.SetOutputDir(dir)
 					}
 					fmt.Printf("Popped context: %s\n", popped)
 					fmt.Printf("Output directory: %s\n", dir)
