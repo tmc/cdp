@@ -103,6 +103,28 @@ func WithOutputDir(dir string) Option {
 	}
 }
 
+// SetOutputDir changes the output directory, closing any open domain writers.
+// New writes will go to files in the new directory.
+func (r *Recorder) SetOutputDir(dir string) {
+	r.Lock()
+	defer r.Unlock()
+	for hostname, f := range r.domainWriters {
+		f.Close()
+		delete(r.domainWriters, hostname)
+	}
+	r.outputDir = dir
+}
+
+// CloseDomainWriters closes all open domain file handles.
+func (r *Recorder) CloseDomainWriters() {
+	r.Lock()
+	defer r.Unlock()
+	for hostname, f := range r.domainWriters {
+		f.Close()
+		delete(r.domainWriters, hostname)
+	}
+}
+
 func New(opts ...Option) (*Recorder, error) {
 	r := &Recorder{
 		requests:      make(map[network.RequestID]*network.Request),
@@ -322,8 +344,16 @@ func (r *Recorder) writeToDomainFile(entry *har.Entry, data []byte) error {
 
 	// Note: lock is already held by caller (HandleNetworkEvent -> streamEntry)
 	writer, ok := r.domainWriters[hostname]
+	if ok {
+		// Check if the file was removed; if so, reopen it.
+		if _, statErr := writer.Stat(); statErr != nil {
+			writer.Close()
+			delete(r.domainWriters, hostname)
+			ok = false
+		}
+	}
 	if !ok {
-		// Ensure output directory exists
+		// Ensure output directory exists.
 		if err := os.MkdirAll(r.outputDir, 0755); err != nil {
 			return err
 		}
