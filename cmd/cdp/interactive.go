@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -15,14 +16,22 @@ import (
 
 // InteractiveMode represents an interactive CDP session
 type InteractiveMode struct {
-	browserCtx context.Context // browser-level context for creating/listing tabs
-	ctx        context.Context // active tab context for executing commands
-	cancel     context.CancelFunc
-	cfg        fullCaptureConfig
-	registry   *CommandRegistry
-	help       *HelpSystem
-	history    []string
-	verbose    bool
+	browserCtx   context.Context // browser-level context for creating/listing tabs
+	ctx          context.Context // active tab context for executing commands
+	cancel       context.CancelFunc
+	cfg          fullCaptureConfig
+	registry     *CommandRegistry
+	help         *HelpSystem
+	history      []string
+	verbose      bool
+	baseOutputDir string                    // root output dir from --output-dir
+	contextStack  []string                  // stack of context names for push/pop
+	recorder      recorderWithOutputDir     // optional recorder for output dir switching
+}
+
+// recorderWithOutputDir is the subset of recorder.Recorder needed for context switching.
+type recorderWithOutputDir interface {
+	SetOutputDir(dir string)
 }
 
 // NewInteractiveMode creates a new interactive session
@@ -38,6 +47,12 @@ func NewInteractiveMode(ctx context.Context, cancel context.CancelFunc, cfg full
 		history:    make([]string, 0),
 		verbose:    cfg.Verbose,
 	}
+}
+
+// SetRecorder sets the recorder for output dir switching with push/pop context.
+func (im *InteractiveMode) SetRecorder(rec recorderWithOutputDir, baseOutputDir string) {
+	im.recorder = rec
+	im.baseOutputDir = baseOutputDir
 }
 
 // Run starts the interactive session
@@ -183,6 +198,22 @@ func (im *InteractiveMode) handleSpecialCommand(line string) bool {
 		im.switchTab(args[0])
 		return true
 
+	case "push-context", "push":
+		if len(args) == 0 {
+			fmt.Println("Usage: push-context <name>")
+			return true
+		}
+		im.pushContext(args[0])
+		return true
+
+	case "pop-context", "pop":
+		im.popContext()
+		return true
+
+	case "context":
+		im.showContext()
+		return true
+
 	default:
 		return false
 	}
@@ -306,6 +337,65 @@ func (im *InteractiveMode) switchTab(selector string) {
 		title = "(untitled)"
 	}
 	fmt.Printf("Switched to: %s — %s\n", title, targetInfo.URL)
+}
+
+// contextOutputDir returns the output directory for the current context stack.
+func (im *InteractiveMode) contextOutputDir() string {
+	dir := im.baseOutputDir
+	for _, name := range im.contextStack {
+		dir = filepath.Join(dir, name)
+	}
+	return dir
+}
+
+// pushContext pushes a named context, directing HAR/HARL writes to a subdirectory.
+// Writes also continue to the root output directory (tee behavior).
+func (im *InteractiveMode) pushContext(name string) {
+	if im.baseOutputDir == "" {
+		fmt.Println("No --output-dir configured; push-context has no effect.")
+		return
+	}
+	if im.recorder == nil {
+		fmt.Println("No recorder configured; push-context has no effect.")
+		return
+	}
+	im.contextStack = append(im.contextStack, name)
+	dir := im.contextOutputDir()
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		fmt.Printf("Error creating context dir: %v\n", err)
+		return
+	}
+	im.recorder.SetOutputDir(dir)
+	fmt.Printf("Context: %s (writing to %s)\n", strings.Join(im.contextStack, "/"), dir)
+}
+
+// popContext pops the current context, returning to the parent directory.
+func (im *InteractiveMode) popContext() {
+	if len(im.contextStack) == 0 {
+		fmt.Println("No context to pop.")
+		return
+	}
+	im.contextStack = im.contextStack[:len(im.contextStack)-1]
+	dir := im.contextOutputDir()
+	im.recorder.SetOutputDir(dir)
+	if len(im.contextStack) == 0 {
+		fmt.Printf("Context: (root) — %s\n", dir)
+	} else {
+		fmt.Printf("Context: %s — %s\n", strings.Join(im.contextStack, "/"), dir)
+	}
+}
+
+// showContext shows the current context stack and output directory.
+func (im *InteractiveMode) showContext() {
+	if im.baseOutputDir == "" {
+		fmt.Println("No --output-dir configured.")
+		return
+	}
+	if len(im.contextStack) == 0 {
+		fmt.Printf("Context: (root) — %s\n", im.baseOutputDir)
+	} else {
+		fmt.Printf("Context: %s — %s\n", strings.Join(im.contextStack, "/"), im.contextOutputDir())
+	}
 }
 
 // isDisconnected reports whether an error indicates the browser connection is lost.
