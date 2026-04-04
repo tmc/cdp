@@ -1376,6 +1376,7 @@ func main() {
 			UseProfile:      useProfile,
 			CookieDomains:   cookieDomains,
 			DebugPort:       debugPort,
+			OutputDir:       outputDir,
 		})
 		return
 	}
@@ -3812,14 +3813,14 @@ func handleEnhancedMode(command string, interactive bool, cfg fullCaptureConfig)
 	if command == "" {
 		if interactive {
 			// Set up Chrome context for interactive mode
-			chromeCtx, chromeCancel, err := setupChromeForEnhanced(context.Background(), cfg)
+			chromeCtx, chromeCancel, launched, err := setupChromeForEnhanced(context.Background(), cfg)
 			if err != nil {
 				exitWithError(ExitBrowserError, ErrorTypeBrowser, "Failed to setup Chrome: %v", err)
 			}
 			defer chromeCancel()
 
 			// Start interactive mode with reconnection support
-			im := NewInteractiveMode(chromeCtx, chromeCancel, cfg)
+			im := NewInteractiveMode(chromeCtx, chromeCancel, launched, cfg)
 			if err := im.Run(); err != nil {
 				exitWithError(ExitGeneralError, ErrorTypeGeneral, "Interactive mode error: %v", err)
 			}
@@ -3863,7 +3864,7 @@ func handleEnhancedMode(command string, interactive bool, cfg fullCaptureConfig)
 	}
 
 	// Execute single command that requires browser
-	chromeCtx, chromeCancel, err := setupChromeForEnhanced(context.Background(), cfg)
+	chromeCtx, chromeCancel, _, err := setupChromeForEnhanced(context.Background(), cfg)
 	if err != nil {
 		exitWithError(ExitBrowserError, ErrorTypeBrowser, "Failed to setup Chrome: %v", err)
 	}
@@ -3916,6 +3917,7 @@ type fullCaptureConfig struct {
 	UseProfile      string
 	CookieDomains   string
 	DebugPort       int
+	OutputDir       string
 }
 
 // resolveDebugPort checks if the desired port is available. If it's in use
@@ -3958,7 +3960,10 @@ func resolveDebugPort(ctx context.Context, port int, verbose bool) int {
 // setupChromeForEnhanced sets up Chrome context for enhanced commands.
 // It discovers available browsers, optionally connects to a running instance
 // with a debug port, or launches a new non-headless browser.
-func setupChromeForEnhanced(ctx context.Context, cfg fullCaptureConfig) (context.Context, context.CancelFunc, error) {
+// setupChromeForEnhanced returns (ctx, cancel, launched, error).
+// launched is true if we started a new browser process (and should kill it on exit),
+// false if we connected to an existing one.
+func setupChromeForEnhanced(ctx context.Context, cfg fullCaptureConfig) (context.Context, context.CancelFunc, bool, error) {
 	verbose := cfg.Verbose
 	selectedPath := cfg.ChromePath
 	debugPort := cfg.DebugPort
@@ -4010,7 +4015,7 @@ func setupChromeForEnhanced(ctx context.Context, cfg fullCaptureConfig) (context
 				browserCancel()
 				allocCancel()
 			}
-			return browserCtx, cancel, nil
+			return browserCtx, cancel, false, nil
 		}
 	}
 
@@ -4022,10 +4027,10 @@ func setupChromeForEnhanced(ctx context.Context, cfg fullCaptureConfig) (context
 			chromeprofiles.WithVerbose(verbose),
 		)
 		if err != nil {
-			return nil, nil, errors.Wrap(err, "failed to create profile manager")
+			return nil, nil, false, errors.Wrap(err, "failed to create profile manager")
 		}
 		if err := pm.SetupWorkdir(); err != nil {
-			return nil, nil, errors.Wrap(err, "failed to setup profile working directory")
+			return nil, nil, false, errors.Wrap(err, "failed to setup profile working directory")
 		}
 
 		var cookieDomains []string
@@ -4038,12 +4043,12 @@ func setupChromeForEnhanced(ctx context.Context, cfg fullCaptureConfig) (context
 		if sessionDetector.NeedsBraveSessionIsolation(ctx, selectedPath, true) {
 			if err := pm.BraveSessionIsolation(cfg.UseProfile, cookieDomains); err != nil {
 				pm.Cleanup()
-				return nil, nil, errors.Wrapf(err, "failed to create Brave isolated profile '%s'", cfg.UseProfile)
+				return nil, nil, false, errors.Wrapf(err, "failed to create Brave isolated profile '%s'", cfg.UseProfile)
 			}
 		} else {
 			if err := pm.CopyProfile(cfg.UseProfile, cookieDomains); err != nil {
 				pm.Cleanup()
-				return nil, nil, errors.Wrapf(err, "failed to copy profile '%s'", cfg.UseProfile)
+				return nil, nil, false, errors.Wrapf(err, "failed to copy profile '%s'", cfg.UseProfile)
 			}
 		}
 
@@ -4105,7 +4110,7 @@ func setupChromeForEnhanced(ctx context.Context, cfg fullCaptureConfig) (context
 		if profileCleanup != nil {
 			profileCleanup()
 		}
-		return nil, nil, errors.Wrap(err, "failed to start browser")
+		return nil, nil, false, errors.Wrap(err, "failed to start browser")
 	}
 
 	if verbose {
@@ -4119,7 +4124,7 @@ func setupChromeForEnhanced(ctx context.Context, cfg fullCaptureConfig) (context
 			profileCleanup()
 		}
 	}
-	return browserCtx, cancel, nil
+	return browserCtx, cancel, true, nil
 }
 
 // buildExtractionScript builds a JavaScript extraction script based on mode

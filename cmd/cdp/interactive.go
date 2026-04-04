@@ -19,6 +19,7 @@ type InteractiveMode struct {
 	browserCtx   context.Context // browser-level context for creating/listing tabs
 	ctx          context.Context // active tab context for executing commands
 	cancel       context.CancelFunc
+	launched     bool // true if we launched the browser (should close on exit)
 	cfg          fullCaptureConfig
 	registry     *CommandRegistry
 	help         *HelpSystem
@@ -35,17 +36,19 @@ type recorderWithOutputDir interface {
 }
 
 // NewInteractiveMode creates a new interactive session
-func NewInteractiveMode(ctx context.Context, cancel context.CancelFunc, cfg fullCaptureConfig) *InteractiveMode {
+func NewInteractiveMode(ctx context.Context, cancel context.CancelFunc, launched bool, cfg fullCaptureConfig) *InteractiveMode {
 	registry := NewCommandRegistry()
 	return &InteractiveMode{
-		browserCtx: ctx,
-		ctx:        ctx,
-		cancel:     cancel,
-		cfg:        cfg,
-		registry:   registry,
-		help:       NewHelpSystem(registry),
-		history:    make([]string, 0),
-		verbose:    cfg.Verbose,
+		browserCtx:    ctx,
+		ctx:           ctx,
+		cancel:        cancel,
+		launched:      launched,
+		cfg:           cfg,
+		registry:      registry,
+		help:          NewHelpSystem(registry),
+		history:       make([]string, 0),
+		verbose:       cfg.Verbose,
+		baseOutputDir: cfg.OutputDir,
 	}
 }
 
@@ -83,6 +86,10 @@ func (im *InteractiveMode) Run() error {
 
 		// Check for exit
 		if line == "exit" || line == "quit" || line == "q" {
+			if im.launched && im.cancel != nil {
+				im.cancel()
+				fmt.Println("Browser closed.")
+			}
 			fmt.Println("Goodbye!")
 			break
 		}
@@ -91,6 +98,11 @@ func (im *InteractiveMode) Run() error {
 		if err := im.executeCommand(line); err != nil {
 			fmt.Printf("Error: %v\n", err)
 		}
+	}
+
+	// Close the browser on exit (EOF, Ctrl-D) if we launched it.
+	if im.launched && im.cancel != nil {
+		im.cancel()
 	}
 
 	if err := scanner.Err(); err != nil {
@@ -225,13 +237,14 @@ func (im *InteractiveMode) reconnect() error {
 	if im.cancel != nil {
 		im.cancel()
 	}
-	ctx, cancel, err := setupChromeForEnhanced(context.Background(), im.cfg)
+	ctx, cancel, launched, err := setupChromeForEnhanced(context.Background(), im.cfg)
 	if err != nil {
 		return fmt.Errorf("reconnect failed: %w", err)
 	}
 	im.browserCtx = ctx
 	im.ctx = ctx
 	im.cancel = cancel
+	im.launched = launched
 	fmt.Println("Reconnected.")
 	return nil
 }
@@ -349,14 +362,9 @@ func (im *InteractiveMode) contextOutputDir() string {
 }
 
 // pushContext pushes a named context, directing HAR/HARL writes to a subdirectory.
-// Writes also continue to the root output directory (tee behavior).
 func (im *InteractiveMode) pushContext(name string) {
 	if im.baseOutputDir == "" {
 		fmt.Println("No --output-dir configured; push-context has no effect.")
-		return
-	}
-	if im.recorder == nil {
-		fmt.Println("No recorder configured; push-context has no effect.")
 		return
 	}
 	im.contextStack = append(im.contextStack, name)
@@ -365,8 +373,10 @@ func (im *InteractiveMode) pushContext(name string) {
 		fmt.Printf("Error creating context dir: %v\n", err)
 		return
 	}
-	im.recorder.SetOutputDir(dir)
-	fmt.Printf("Context: %s (writing to %s)\n", strings.Join(im.contextStack, "/"), dir)
+	if im.recorder != nil {
+		im.recorder.SetOutputDir(dir)
+	}
+	fmt.Printf("Context: %s — %s\n", strings.Join(im.contextStack, "/"), dir)
 }
 
 // popContext pops the current context, returning to the parent directory.
@@ -377,7 +387,9 @@ func (im *InteractiveMode) popContext() {
 	}
 	im.contextStack = im.contextStack[:len(im.contextStack)-1]
 	dir := im.contextOutputDir()
-	im.recorder.SetOutputDir(dir)
+	if im.recorder != nil {
+		im.recorder.SetOutputDir(dir)
+	}
 	if len(im.contextStack) == 0 {
 		fmt.Printf("Context: (root) — %s\n", dir)
 	} else {
