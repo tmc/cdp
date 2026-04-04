@@ -36,6 +36,7 @@ import (
 	"github.com/tmc/misc/chrome-to-har/internal/chromeprofiles"
 	"github.com/tmc/misc/chrome-to-har/internal/htmltomd"
 	harrecorder "github.com/tmc/misc/chrome-to-har/internal/recorder"
+	"github.com/tmc/misc/chrome-to-har/internal/sources"
 )
 
 // stringSlice implements flag.Value for multiple string values
@@ -1164,6 +1165,9 @@ func main() {
 		// MCP server mode
 		mcpMode  bool
 		toolsDir string
+
+		// Source capture
+		saveSources bool
 	)
 
 	flag.StringVar(&url, "url", "about:blank", "URL to navigate to on start")
@@ -1241,17 +1245,21 @@ func main() {
 	flag.BoolVar(&mcpMode, "mcp", false, "Run as MCP server (stdio transport)")
 	flag.StringVar(&toolsDir, "tools-dir", "", "Directory of .cdp tool definitions for MCP and shell")
 
+	// Source capture
+	flag.BoolVar(&saveSources, "save-sources", false, "Capture all JS/CSS sources (including sourcemapped originals) and write to disk")
+
 	flag.Parse()
 
 	// MCP server mode — run as MCP server and exit
 	if mcpMode {
 		mcpCfg := mcpConfig{
-			Headless:  headless,
-			Verbose:   verbose,
-			OutputDir: outputDir,
-			URL:       url,
-			DebugPort: debugPort,
-			ToolsDir:  toolsDir,
+			Headless:    headless,
+			Verbose:     verbose,
+			OutputDir:   outputDir,
+			URL:         url,
+			DebugPort:   debugPort,
+			ToolsDir:    toolsDir,
+			SaveSources: saveSources,
 		}
 		if err := runMCP(mcpCfg); err != nil {
 			exitWithError(ExitGeneralError, ErrorTypeGeneral, "MCP server: %v", err)
@@ -1404,6 +1412,7 @@ func main() {
 			DebugPort:       debugPort,
 			OutputDir:       outputDir,
 			ToolsDir:        toolsDir,
+			SaveSources:     saveSources,
 		})
 		return
 	}
@@ -2871,6 +2880,28 @@ func main() {
 		}
 		defer browserCancel()
 
+		// Set up source capture if requested.
+		if saveSources {
+			sourcesDir := filepath.Join(outputDir, "sources")
+			if outputDir == "" {
+				sourcesDir = "sources"
+			}
+			sc := sources.New(sourcesDir, verbose)
+			if err := sc.Enable(browserCtx); err != nil {
+				log.Printf("Warning: failed to enable source capture: %v", err)
+			} else {
+				chromedp.ListenTarget(browserCtx, sc.HandleEvent)
+				defer func() {
+					if err := sc.CaptureAll(browserCtx); err != nil && verbose {
+						log.Printf("Warning: source capture errors: %v", err)
+					}
+					if err := sc.WriteToDisk(); err != nil {
+						log.Printf("Warning: failed to write sources: %v", err)
+					}
+				}()
+			}
+		}
+
 		// Start console monitoring if requested
 		if monitorConsole {
 			startConsoleMonitor(browserCtx, verbose, consoleStacks)
@@ -4029,6 +4060,30 @@ func handleEnhancedMode(command string, interactive bool, cfg fullCaptureConfig)
 
 			// Start interactive mode with reconnection support
 			im := NewInteractiveMode(chromeCtx, chromeCancel, launched, cfg, cfg.ToolsDir)
+
+			// Wire source collector if --save-sources is enabled.
+			if cfg.SaveSources {
+				sourcesDir := filepath.Join(cfg.OutputDir, "sources")
+				if cfg.OutputDir == "" {
+					sourcesDir = "sources"
+				}
+				sc := sources.New(sourcesDir, cfg.Verbose)
+				if err := sc.Enable(chromeCtx); err != nil {
+					log.Printf("Warning: failed to enable source capture: %v", err)
+				} else {
+					chromedp.ListenTarget(chromeCtx, sc.HandleEvent)
+					im.SetSourceCollector(sc)
+					defer func() {
+						if err := sc.CaptureAll(chromeCtx); err != nil && cfg.Verbose {
+							log.Printf("Warning: source capture errors: %v", err)
+						}
+						if err := sc.WriteToDisk(); err != nil {
+							log.Printf("Warning: failed to write sources: %v", err)
+						}
+					}()
+				}
+			}
+
 			if err := im.Run(); err != nil {
 				exitWithError(ExitGeneralError, ErrorTypeGeneral, "Interactive mode error: %v", err)
 			}
@@ -4127,6 +4182,7 @@ type fullCaptureConfig struct {
 	DebugPort       int
 	OutputDir       string
 	ToolsDir        string
+	SaveSources     bool
 }
 
 // resolveDebugPort checks if the desired port is available. If it's in use

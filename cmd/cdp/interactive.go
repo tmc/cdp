@@ -4,14 +4,19 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/chromedp/cdproto/target"
 	"github.com/chromedp/chromedp"
+	"github.com/tmc/misc/chrome-to-har/internal/coverage"
+	"github.com/tmc/misc/chrome-to-har/internal/sources"
+	"github.com/tmc/misc/chrome-to-har/internal/tooldef"
 )
 
 // InteractiveMode represents an interactive CDP session
@@ -25,9 +30,12 @@ type InteractiveMode struct {
 	help         *HelpSystem
 	history      []string
 	verbose      bool
-	baseOutputDir string                    // root output dir from --output-dir
-	contextStack  []string                  // stack of context names for push/pop
-	recorder      recorderWithOutputDir     // optional recorder for output dir switching
+	baseOutputDir     string                    // root output dir from --output-dir
+	contextStack      []string                  // stack of context names for push/pop
+	recorder          recorderWithOutputDir     // optional recorder for output dir switching
+	toolsDir          string                    // directory for .cdp tool definitions
+	sourceCollector   *sources.Collector
+	coverageCollector *coverage.Collector
 }
 
 // recorderWithOutputDir is the subset of recorder.Recorder needed for context switching.
@@ -35,10 +43,11 @@ type recorderWithOutputDir interface {
 	SetOutputDir(dir string)
 }
 
-// NewInteractiveMode creates a new interactive session
-func NewInteractiveMode(ctx context.Context, cancel context.CancelFunc, launched bool, cfg fullCaptureConfig) *InteractiveMode {
+// NewInteractiveMode creates a new interactive session.
+// If toolsDir is non-empty, .cdp tool definitions are loaded from it.
+func NewInteractiveMode(ctx context.Context, cancel context.CancelFunc, launched bool, cfg fullCaptureConfig, toolsDir string) *InteractiveMode {
 	registry := NewCommandRegistry()
-	return &InteractiveMode{
+	im := &InteractiveMode{
 		browserCtx:    ctx,
 		ctx:           ctx,
 		cancel:        cancel,
@@ -49,13 +58,297 @@ func NewInteractiveMode(ctx context.Context, cancel context.CancelFunc, launched
 		history:       make([]string, 0),
 		verbose:       cfg.Verbose,
 		baseOutputDir: cfg.OutputDir,
+		toolsDir:      toolsDir,
 	}
+	im.registerDefineCommand()
+	im.registerCoverageCommands()
+	if toolsDir != "" {
+		im.loadTools(toolsDir)
+	}
+	return im
 }
 
 // SetRecorder sets the recorder for output dir switching with push/pop context.
 func (im *InteractiveMode) SetRecorder(rec recorderWithOutputDir, baseOutputDir string) {
 	im.recorder = rec
 	im.baseOutputDir = baseOutputDir
+}
+
+// SetSourceCollector sets the source collector for source browsing commands.
+func (im *InteractiveMode) SetSourceCollector(sc *sources.Collector) {
+	im.sourceCollector = sc
+	im.registerSourceCommands()
+}
+
+// registerSourceCommands adds source browsing commands to the registry.
+func (im *InteractiveMode) registerSourceCommands() {
+	im.registry.RegisterCommand(&Command{
+		Name:        "sources",
+		Category:    "Sources",
+		Description: "List captured JavaScript and CSS sources",
+		Usage:       "sources [js|css]",
+		Examples:    []string{"sources", "sources js", "sources css"},
+		Aliases:     []string{"list-sources"},
+		Handler: func(ctx context.Context, args []string) error {
+			if im.sourceCollector == nil {
+				return fmt.Errorf("source capture not enabled (use --save-sources)")
+			}
+			typeFilter := ""
+			if len(args) > 0 {
+				typeFilter = args[0]
+			}
+			if typeFilter == "" || typeFilter == "js" {
+				scripts := im.sourceCollector.Scripts()
+				if len(scripts) > 0 {
+					fmt.Printf("JavaScript sources (%d):\n", len(scripts))
+					for _, sc := range scripts {
+						sm := ""
+						if sc.SourceMapURL != "" {
+							sm = " [sourcemap]"
+						}
+						fmt.Printf("  %6d bytes  %s%s\n", len(sc.Source), sc.URL, sm)
+					}
+				}
+			}
+			if typeFilter == "" || typeFilter == "css" {
+				styles := im.sourceCollector.Styles()
+				if len(styles) > 0 {
+					fmt.Printf("CSS sources (%d):\n", len(styles))
+					for _, st := range styles {
+						sm := ""
+						if st.SourceMapURL != "" {
+							sm = " [sourcemap]"
+						}
+						fmt.Printf("  %6d bytes  %s%s\n", len(st.Source), st.URL, sm)
+					}
+				}
+			}
+			return nil
+		},
+	})
+
+	im.registry.RegisterCommand(&Command{
+		Name:        "read-source",
+		Category:    "Sources",
+		Description: "Read a captured source file by URL",
+		Usage:       "read-source <url> [start-end]",
+		Examples:    []string{"read-source https://example.com/app.js", "read-source https://example.com/app.js 10-20"},
+		Handler: func(ctx context.Context, args []string) error {
+			if im.sourceCollector == nil {
+				return fmt.Errorf("source capture not enabled (use --save-sources)")
+			}
+			if len(args) < 1 {
+				return fmt.Errorf("URL required")
+			}
+			src, err := findSourceInCollector(im.sourceCollector, args[0])
+			if err != nil {
+				return err
+			}
+			if len(args) > 1 {
+				text, err := extractLines(src, args[1])
+				if err != nil {
+					return err
+				}
+				fmt.Print(text)
+			} else {
+				fmt.Println(src)
+			}
+			return nil
+		},
+	})
+
+	im.registry.RegisterCommand(&Command{
+		Name:        "search-source",
+		Category:    "Sources",
+		Description: "Search across captured sources for a pattern",
+		Usage:       "search-source <pattern>",
+		Examples:    []string{"search-source apiKey", "search-source 'fetch.*api'"},
+		Aliases:     []string{"grep-source"},
+		Handler: func(ctx context.Context, args []string) error {
+			if im.sourceCollector == nil {
+				return fmt.Errorf("source capture not enabled (use --save-sources)")
+			}
+			if len(args) < 1 {
+				return fmt.Errorf("pattern required")
+			}
+			pattern := strings.Join(args, " ")
+			re, reErr := regexp.Compile(pattern)
+			match := func(line string) bool {
+				if reErr == nil {
+					return re.MatchString(line)
+				}
+				return strings.Contains(line, pattern)
+			}
+
+			type srcItem struct {
+				url, source string
+			}
+			var items []srcItem
+			for _, sc := range im.sourceCollector.Scripts() {
+				if sc.Source != "" {
+					items = append(items, srcItem{sc.URL, sc.Source})
+				}
+			}
+			for _, st := range im.sourceCollector.Styles() {
+				if st.Source != "" {
+					items = append(items, srcItem{st.URL, st.Source})
+				}
+			}
+
+			found := 0
+			for _, item := range items {
+				lines := strings.Split(item.source, "\n")
+				for i, line := range lines {
+					if !match(line) {
+						continue
+					}
+					fmt.Printf("%s:%d: %s\n", item.url, i+1, strings.TrimSpace(line))
+					found++
+					if found >= 50 {
+						fmt.Println("(truncated at 50 matches)")
+						return nil
+					}
+				}
+			}
+			if found == 0 {
+				fmt.Println("No matches.")
+			} else {
+				fmt.Printf("%d match(es)\n", found)
+			}
+			return nil
+		},
+	})
+}
+
+// registerCoverageCommands adds coverage commands to the registry.
+// Called during NewInteractiveMode.
+func (im *InteractiveMode) registerCoverageCommands() {
+	im.registry.RegisterCommand(&Command{
+		Name:        "coverage",
+		Category:    "Coverage",
+		Description: "Manage code coverage collection",
+		Usage:       "coverage <start|snapshot|delta|stop> [name]",
+		Examples: []string{
+			"coverage start",
+			"coverage snapshot before-login",
+			"coverage snapshot after-login",
+			"coverage delta",
+			"coverage stop",
+		},
+		Handler: func(ctx context.Context, args []string) error {
+			if len(args) == 0 {
+				return fmt.Errorf("subcommand required: start, snapshot, delta, stop")
+			}
+			switch args[0] {
+			case "start":
+				return im.coverageStart(ctx)
+			case "snapshot":
+				name := ""
+				if len(args) > 1 {
+					name = args[1]
+				}
+				return im.coverageSnapshot(name)
+			case "delta":
+				return im.coverageDelta()
+			case "stop":
+				return im.coverageStop()
+			default:
+				return fmt.Errorf("unknown subcommand %q: use start, snapshot, delta, stop", args[0])
+			}
+		},
+	})
+}
+
+func (im *InteractiveMode) coverageStart(ctx context.Context) error {
+	if im.coverageCollector != nil {
+		return fmt.Errorf("coverage already running")
+	}
+	c := coverage.New(im.verbose)
+	if err := c.Start(ctx); err != nil {
+		return fmt.Errorf("start coverage: %w", err)
+	}
+	im.coverageCollector = c
+	fmt.Println("Coverage collection started.")
+	return nil
+}
+
+func (im *InteractiveMode) coverageSnapshot(name string) error {
+	if im.coverageCollector == nil {
+		return fmt.Errorf("coverage not running (use: coverage start)")
+	}
+	snap, err := im.coverageCollector.TakeSnapshot(name)
+	if err != nil {
+		return fmt.Errorf("take snapshot: %w", err)
+	}
+	summary := snap.Summary()
+	fmt.Printf("Snapshot %q: %d files\n", snap.Name, len(summary))
+	for url, fs := range summary {
+		fmt.Printf("  %5.1f%%  %4d/%4d lines  %s\n", fs.CoveragePercent, fs.CoveredLines, fs.TotalLines, url)
+	}
+	return nil
+}
+
+func (im *InteractiveMode) coverageDelta() error {
+	if im.coverageCollector == nil {
+		return fmt.Errorf("coverage not running (use: coverage start)")
+	}
+	snapshots := im.coverageCollector.Snapshots()
+	if len(snapshots) < 2 {
+		return fmt.Errorf("need at least 2 snapshots for delta")
+	}
+	before := snapshots[len(snapshots)-2]
+	after := snapshots[len(snapshots)-1]
+	delta := im.coverageCollector.ComputeDelta(before, after)
+	fmt.Printf("Coverage delta: %s → %s\n\n", before.Name, after.Name)
+	any := false
+	for url, sd := range delta.Scripts {
+		if len(sd.NewlyCovered) == 0 {
+			continue
+		}
+		any = true
+		pctDelta := 0.0
+		if sd.TotalLines > 0 {
+			pctDelta = float64(sd.CoveredAfter-sd.CoveredBefore) / float64(sd.TotalLines) * 100
+		}
+		fmt.Printf("%s  (+%.1f%%, %d new lines)\n", url, pctDelta, len(sd.NewlyCovered))
+	}
+	if !any {
+		fmt.Println("No new coverage between snapshots.")
+	}
+	return nil
+}
+
+func (im *InteractiveMode) coverageStop() error {
+	if im.coverageCollector == nil {
+		return fmt.Errorf("coverage not running")
+	}
+	if err := im.coverageCollector.Stop(); err != nil {
+		return fmt.Errorf("stop coverage: %w", err)
+	}
+	im.coverageCollector = nil
+	fmt.Println("Coverage collection stopped.")
+	return nil
+}
+
+// findSourceInCollector looks up a source by URL across scripts and styles.
+func findSourceInCollector(sc *sources.Collector, u string) (string, error) {
+	for _, s := range sc.Scripts() {
+		if s.URL == u {
+			if s.Source == "" {
+				return "", fmt.Errorf("source not yet captured for %s", u)
+			}
+			return s.Source, nil
+		}
+	}
+	for _, s := range sc.Styles() {
+		if s.URL == u {
+			if s.Source == "" {
+				return "", fmt.Errorf("source not yet captured for %s", u)
+			}
+			return s.Source, nil
+		}
+	}
+	return "", fmt.Errorf("no source found for URL %s", u)
 }
 
 // Run starts the interactive session
@@ -601,4 +894,128 @@ func (im *InteractiveMode) SaveSession(filename string) error {
 // LoadSession loads and executes a saved session
 func (im *InteractiveMode) LoadSession(filename string) error {
 	return im.ExecuteScript(filename)
+}
+
+// loadTools loads .cdp tool definitions from dir and registers them as commands.
+func (im *InteractiveMode) loadTools(dir string) {
+	defs, err := tooldef.LoadDir(dir)
+	if err != nil {
+		log.Printf("warning: loading tools from %s: %v", dir, err)
+		return
+	}
+	for _, def := range defs {
+		im.registerToolCommand(def)
+	}
+	if len(defs) > 0 && im.verbose {
+		log.Printf("[tools] loaded %d tool(s) from %s", len(defs), dir)
+	}
+}
+
+// registerToolCommand registers a ToolDef as a shell command.
+func (im *InteractiveMode) registerToolCommand(def *tooldef.ToolDef) {
+	d := def // capture for closure
+	usage := d.Name
+	for _, inp := range d.Inputs {
+		if inp.Optional {
+			usage += " [" + inp.Name + "]"
+		} else {
+			usage += " <" + inp.Name + ">"
+		}
+	}
+	im.registry.RegisterCommand(&Command{
+		Name:        d.Name,
+		Category:    "Tools",
+		Description: d.Description,
+		Usage:       usage,
+		Handler: func(ctx context.Context, args []string) error {
+			env := make(map[string]string)
+			for i, inp := range d.Inputs {
+				if i < len(args) {
+					env[inp.Name] = args[i]
+				}
+			}
+			_, err := executeToolLines(ctx, d.Script, env, func(c context.Context, line string) error {
+				return im.executeCommand(line)
+			})
+			return err
+		},
+	})
+	if im.verbose {
+		log.Printf("[tools] registered: %s", d.Name)
+	}
+}
+
+// registerDefineCommand adds the "define" command for creating tools interactively.
+func (im *InteractiveMode) registerDefineCommand() {
+	im.registry.RegisterCommand(&Command{
+		Name:        "define",
+		Category:    "Tools",
+		Description: "Define a new tool from a one-liner script",
+		Usage:       `define <name> "<description>" -- <script lines separated by ;>`,
+		Examples: []string{
+			`define check_login "Verify user is logged in" -- goto $url; wait #dashboard; title`,
+		},
+		Handler: func(ctx context.Context, args []string) error {
+			return im.handleDefine(args)
+		},
+	})
+}
+
+// handleDefine implements the define command.
+//
+//	define <name> "<description>" -- <script;lines;separated;by;semicolons>
+func (im *InteractiveMode) handleDefine(args []string) error {
+	if len(args) < 4 {
+		return fmt.Errorf("usage: define <name> \"<description>\" -- <script>")
+	}
+
+	name := args[0]
+
+	// Find "--" separator.
+	sepIdx := -1
+	for i, a := range args {
+		if a == "--" {
+			sepIdx = i
+			break
+		}
+	}
+	if sepIdx < 2 {
+		return fmt.Errorf("usage: define <name> \"<description>\" -- <script>")
+	}
+
+	description := strings.Join(args[1:sepIdx], " ")
+	// Strip surrounding quotes if present.
+	description = strings.Trim(description, `"`)
+
+	scriptParts := args[sepIdx+1:]
+	if len(scriptParts) == 0 {
+		return fmt.Errorf("empty script body")
+	}
+	scriptBody := strings.Join(scriptParts, " ")
+	// Semicolons separate lines.
+	scriptBody = strings.ReplaceAll(scriptBody, ";", "\n")
+
+	def := &tooldef.ToolDef{
+		Name:        name,
+		Description: description,
+		Script:      strings.TrimSpace(scriptBody),
+	}
+
+	// Write to toolsDir if configured.
+	if im.toolsDir != "" {
+		path := filepath.Join(im.toolsDir, name+".cdp")
+		if err := os.MkdirAll(im.toolsDir, 0755); err != nil {
+			return fmt.Errorf("creating tools dir: %w", err)
+		}
+		if err := os.WriteFile(path, tooldef.Generate(def), 0644); err != nil {
+			return fmt.Errorf("writing tool file: %w", err)
+		}
+		def.SourcePath = path
+		fmt.Printf("Saved to %s\n", path)
+	}
+
+	// Register immediately.
+	im.registerToolCommand(def)
+	fmt.Printf("Tool '%s' defined and registered.\n", name)
+	return nil
 }
