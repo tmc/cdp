@@ -33,6 +33,12 @@ func registerMCPTools(server *mcp.Server, session *mcpSession) {
 	registerElementQueryTools(server, session)
 	registerConsoleTools(server, session)
 	registerInputTools(server, session)
+	registerFrameTools(server, session)
+	registerScrollTool(server, session)
+	registerDialogTools(server, session)
+	registerFileTools(server, session)
+	registerStorageTools(server, session)
+	registerEmulationTools(server, session)
 }
 
 // --- Navigation tools ---

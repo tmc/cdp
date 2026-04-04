@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/chromedp/cdproto/cdp"
 	"github.com/chromedp/chromedp"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/tmc/misc/chrome-to-har/internal/coverage"
@@ -29,6 +30,8 @@ type mcpSession struct {
 	coverageCollector *coverage.Collector
 	refs              *refRegistry
 	console           *consoleCollector
+	dialogs           *dialogCollector
+	activeFrameID     cdp.FrameID
 	outputDir         string
 	contextStack      []string
 }
@@ -278,6 +281,7 @@ func runMCP(cfg mcpConfig) error {
 		recorder:        rec,
 		refs:            newRefRegistry(),
 		console:         enableConsoleCapture(browserCtx),
+		dialogs:         enableDialogCapture(browserCtx),
 		outputDir:       cfg.OutputDir,
 		sourceCollector: sourceCollector,
 	}
