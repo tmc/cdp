@@ -290,6 +290,14 @@ func (r *Recorder) HandleFetchEvent(ctx context.Context) func(interface{}) {
 			return
 		}
 
+		// Snapshot context-dependent state before the goroutine runs,
+		// since push/pop-context may change outputDir while we wait
+		// for the response body.
+		r.Lock()
+		snapshotDir := r.outputDir
+		snapshotTag := r.currentTag
+		r.Unlock()
+
 		// Response stage — capture body then continue.
 		go func() {
 			var body []byte
@@ -327,8 +335,8 @@ func (r *Recorder) HandleFetchEvent(ctx context.Context) func(interface{}) {
 			// Store the request if not already known from Network events.
 			if _, exists := r.requests[netID]; !exists {
 				r.requests[netID] = e.Request
-				if r.currentTag != "" {
-					r.requestTags[netID] = r.currentTag
+				if snapshotTag != "" {
+					r.requestTags[netID] = snapshotTag
 				}
 				if e.Request.HasPostData && len(e.Request.PostDataEntries) > 0 {
 					var b strings.Builder
@@ -371,7 +379,12 @@ func (r *Recorder) HandleFetchEvent(ctx context.Context) func(interface{}) {
 				resp := r.responses[netID]
 				if resp != nil {
 					entry := r.buildStreamEntry(netID, resp, body)
+					// Use the snapshotted outputDir so the entry goes to
+					// the correct push-context subdirectory.
+					savedDir := r.outputDir
+					r.outputDir = snapshotDir
 					r.streamEntry(entry)
+					r.outputDir = savedDir
 				}
 			}
 
