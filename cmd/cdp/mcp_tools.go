@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/chromedp/cdproto/dom"
 	"github.com/chromedp/cdproto/har"
 	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/cdproto/target"
@@ -28,6 +29,10 @@ func registerMCPTools(server *mcp.Server, session *mcpSession) {
 	registerSourceTools(server, session)
 	registerSourceBrowsingTools(server, session)
 	registerCoverageTools(server, session)
+	registerFindElementTool(server, session)
+	registerElementQueryTools(server, session)
+	registerConsoleTools(server, session)
+	registerInputTools(server, session)
 }
 
 // --- Navigation tools ---
@@ -181,39 +186,10 @@ func registerObservationTools(server *mcp.Server, s *mcpSession) {
 
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "page_snapshot",
-		Description: "Get an accessibility tree snapshot of the page",
+		Description: "Get an accessibility tree snapshot of the page. Interactive elements are annotated with @ref numbers (e.g. @1, @2) that can be used with click, type_text, and other interaction tools instead of CSS selectors.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input struct{}) (*mcp.CallToolResult, any, error) {
-		var result string
-		js := `(function() {
-	function walk(node, depth) {
-		var indent = '  '.repeat(depth);
-		var role = node.getAttribute ? (node.getAttribute('role') || node.tagName.toLowerCase()) : '';
-		var name = node.getAttribute ? (node.getAttribute('aria-label') || node.getAttribute('alt') || node.getAttribute('title') || '') : '';
-		var text = '';
-		if (node.nodeType === 3) {
-			var t = node.textContent.trim();
-			if (t) return indent + JSON.stringify(t) + '\n';
-			return '';
-		}
-		if (!node.tagName) return '';
-		var line = indent + role;
-		if (name) line += ' ' + JSON.stringify(name);
-		var value = '';
-		if (node.tagName === 'INPUT' || node.tagName === 'TEXTAREA' || node.tagName === 'SELECT') {
-			value = node.value || '';
-			if (value) line += ' value=' + JSON.stringify(value);
-		}
-		if (node.href) line += ' href=' + JSON.stringify(node.href);
-		line += '\n';
-		var children = node.childNodes;
-		for (var i = 0; i < children.length; i++) {
-			line += walk(children[i], depth + 1);
-		}
-		return line;
-	}
-	return walk(document.body, 0);
-})()`
-		if err := chromedp.Run(s.activeCtx(), chromedp.Evaluate(js, &result)); err != nil {
+		result, err := buildAXSnapshot(s.activeCtx(), s.refs)
+		if err != nil {
 			return nil, nil, fmt.Errorf("page_snapshot: %w", err)
 		}
 		return &mcp.CallToolResult{
@@ -244,10 +220,23 @@ type WaitForInput struct {
 func registerInteractionTools(server *mcp.Server, s *mcpSession) {
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "click",
-		Description: "Click an element by CSS selector",
+		Description: "Click an element by CSS selector or @ref (e.g. @1 from page_snapshot)",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input ClickInput) (*mcp.CallToolResult, any, error) {
-		if err := chromedp.Run(s.activeCtx(), chromedp.Click(input.Selector, chromedp.ByQuery)); err != nil {
+		actx := s.activeCtx()
+		backendID, err := resolveRef(s.refs, input.Selector)
+		if err != nil {
 			return nil, nil, fmt.Errorf("click: %w", err)
+		}
+		if backendID != 0 {
+			if err := chromedp.Run(actx, chromedp.ActionFunc(func(ctx context.Context) error {
+				return clickByBackendNodeID(ctx, backendID)
+			})); err != nil {
+				return nil, nil, fmt.Errorf("click: %w", err)
+			}
+		} else {
+			if err := chromedp.Run(actx, chromedp.Click(input.Selector, chromedp.ByQuery)); err != nil {
+				return nil, nil, fmt.Errorf("click: %w", err)
+			}
 		}
 		return &mcp.CallToolResult{
 			Content: []mcp.Content{
@@ -258,14 +247,27 @@ func registerInteractionTools(server *mcp.Server, s *mcpSession) {
 
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "type_text",
-		Description: "Type text into an element by CSS selector",
+		Description: "Type text into an element by CSS selector or @ref (e.g. @1 from page_snapshot)",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input TypeTextInput) (*mcp.CallToolResult, any, error) {
 		text := input.Text
 		if input.Submit {
 			text += "\n"
 		}
-		if err := chromedp.Run(s.activeCtx(), chromedp.SendKeys(input.Selector, text, chromedp.ByQuery)); err != nil {
+		actx := s.activeCtx()
+		backendID, err := resolveRef(s.refs, input.Selector)
+		if err != nil {
 			return nil, nil, fmt.Errorf("type_text: %w", err)
+		}
+		if backendID != 0 {
+			if err := chromedp.Run(actx, chromedp.ActionFunc(func(ctx context.Context) error {
+				return typeByBackendNodeID(ctx, backendID, text)
+			})); err != nil {
+				return nil, nil, fmt.Errorf("type_text: %w", err)
+			}
+		} else {
+			if err := chromedp.Run(actx, chromedp.SendKeys(input.Selector, text, chromedp.ByQuery)); err != nil {
+				return nil, nil, fmt.Errorf("type_text: %w", err)
+			}
 		}
 		return &mcp.CallToolResult{
 			Content: []mcp.Content{
@@ -276,7 +278,7 @@ func registerInteractionTools(server *mcp.Server, s *mcpSession) {
 
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "wait_for",
-		Description: "Wait for an element to be visible by CSS selector",
+		Description: "Wait for an element to be visible by CSS selector or @ref",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input WaitForInput) (*mcp.CallToolResult, any, error) {
 		actx := s.activeCtx()
 		if input.Timeout > 0 {
@@ -284,8 +286,23 @@ func registerInteractionTools(server *mcp.Server, s *mcpSession) {
 			actx, cancel = context.WithTimeout(actx, time.Duration(input.Timeout)*time.Second)
 			defer cancel()
 		}
-		if err := chromedp.Run(actx, chromedp.WaitVisible(input.Selector, chromedp.ByQuery)); err != nil {
+		// For @refs, check that the element exists (it was visible at snapshot time).
+		backendID, err := resolveRef(s.refs, input.Selector)
+		if err != nil {
 			return nil, nil, fmt.Errorf("wait_for: %w", err)
+		}
+		if backendID != 0 {
+			// Verify the node still exists by describing it.
+			if err := chromedp.Run(actx, chromedp.ActionFunc(func(ctx context.Context) error {
+				_, err := dom.DescribeNode().WithBackendNodeID(backendID).Do(ctx)
+				return err
+			})); err != nil {
+				return nil, nil, fmt.Errorf("wait_for: ref element no longer exists: %w", err)
+			}
+		} else {
+			if err := chromedp.Run(actx, chromedp.WaitVisible(input.Selector, chromedp.ByQuery)); err != nil {
+				return nil, nil, fmt.Errorf("wait_for: %w", err)
+			}
 		}
 		return &mcp.CallToolResult{
 			Content: []mcp.Content{

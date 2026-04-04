@@ -27,6 +27,8 @@ type mcpSession struct {
 	recorder          *harrecorder.Recorder
 	sourceCollector   *sources.Collector
 	coverageCollector *coverage.Collector
+	refs              *refRegistry
+	console           *consoleCollector
 	outputDir         string
 	contextStack      []string
 }
@@ -274,6 +276,8 @@ func runMCP(cfg mcpConfig) error {
 		ctx:             browserCtx,
 		cancel:          browserCancel,
 		recorder:        rec,
+		refs:            newRefRegistry(),
+		console:         enableConsoleCapture(browserCtx),
 		outputDir:       cfg.OutputDir,
 		sourceCollector: sourceCollector,
 	}
