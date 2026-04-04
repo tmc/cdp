@@ -20,6 +20,7 @@ import (
 	"github.com/chromedp/cdproto/cdp"
 	"github.com/chromedp/cdproto/css"
 	"github.com/chromedp/cdproto/debugger"
+	"github.com/chromedp/chromedp"
 	"github.com/tmc/misc/chrome-to-har/internal/scrub"
 )
 
@@ -87,13 +88,20 @@ func New(outputDir string, verbose bool) *Collector {
 // scriptParsed and styleSheetAdded events. It also starts a background
 // goroutine for incremental source capture (fetch + write as events arrive).
 func (c *Collector) Enable(ctx context.Context) error {
-	if _, err := debugger.Enable().Do(ctx); err != nil {
-		return fmt.Errorf("enable debugger: %w", err)
+	var innerCtx context.Context
+	if err := chromedp.Run(ctx, chromedp.ActionFunc(func(ctx context.Context) error {
+		innerCtx = ctx
+		if _, err := debugger.Enable().Do(ctx); err != nil {
+			return fmt.Errorf("enable debugger: %w", err)
+		}
+		if err := css.Enable().Do(ctx); err != nil {
+			return fmt.Errorf("enable css: %w", err)
+		}
+		return nil
+	})); err != nil {
+		return err
 	}
-	if err := css.Enable().Do(ctx); err != nil {
-		return fmt.Errorf("enable css: %w", err)
-	}
-	c.ctx = ctx
+	c.ctx = innerCtx
 	c.fetchCh = make(chan fetchItem, 256)
 	c.done = make(chan struct{})
 	c.incremental = true
@@ -267,40 +275,42 @@ func (c *Collector) CaptureAll(ctx context.Context) error {
 	c.mu.Unlock()
 
 	var firstErr error
-	for _, s := range scripts {
-		if skipURL(s.URL) {
-			continue
-		}
-		src, _, err := debugger.GetScriptSource(s.ScriptID).Do(ctx)
-		if err != nil {
-			if c.verbose {
-				log.Printf("sources: get script %s (%s): %v", s.ScriptID, s.URL, err)
+	return chromedp.Run(ctx, chromedp.ActionFunc(func(ctx context.Context) error {
+		for _, s := range scripts {
+			if skipURL(s.URL) {
+				continue
 			}
-			if firstErr == nil {
-				firstErr = fmt.Errorf("get script source %s: %w", s.URL, err)
+			src, _, err := debugger.GetScriptSource(s.ScriptID).Do(ctx)
+			if err != nil {
+				if c.verbose {
+					log.Printf("sources: get script %s (%s): %v", s.ScriptID, s.URL, err)
+				}
+				if firstErr == nil {
+					firstErr = fmt.Errorf("get script source %s: %w", s.URL, err)
+				}
+				continue
 			}
-			continue
+			s.Source = src
 		}
-		s.Source = src
-	}
 
-	for _, s := range styles {
-		if skipURL(s.URL) {
-			continue
-		}
-		text, err := css.GetStyleSheetText(s.StyleSheetID).Do(ctx)
-		if err != nil {
-			if c.verbose {
-				log.Printf("sources: get stylesheet %s (%s): %v", s.StyleSheetID, s.URL, err)
+		for _, s := range styles {
+			if skipURL(s.URL) {
+				continue
 			}
-			if firstErr == nil {
-				firstErr = fmt.Errorf("get stylesheet source %s: %w", s.URL, err)
+			text, err := css.GetStyleSheetText(s.StyleSheetID).Do(ctx)
+			if err != nil {
+				if c.verbose {
+					log.Printf("sources: get stylesheet %s (%s): %v", s.StyleSheetID, s.URL, err)
+				}
+				if firstErr == nil {
+					firstErr = fmt.Errorf("get stylesheet source %s: %w", s.URL, err)
+				}
+				continue
 			}
-			continue
+			s.Source = text
 		}
-		s.Source = text
-	}
-	return firstErr
+		return firstErr
+	}))
 }
 
 // WriteToDisk writes all captured sources to the output directory.
