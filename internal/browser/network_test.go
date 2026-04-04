@@ -10,7 +10,6 @@ import (
 
 // TestNetworkRoute tests request routing and interception
 func TestNetworkRoute(t *testing.T) {
-	t.Parallel()
 	ts := newTestServer()
 	defer ts.Close()
 
@@ -62,7 +61,6 @@ func TestNetworkRoute(t *testing.T) {
 
 // TestNetworkAbort tests request abortion
 func TestNetworkAbort(t *testing.T) {
-	t.Parallel()
 	ts := newTestServer()
 	defer ts.Close()
 
@@ -113,7 +111,6 @@ func TestNetworkAbort(t *testing.T) {
 
 // TestNetworkFulfill tests custom response fulfillment
 func TestNetworkFulfill(t *testing.T) {
-	t.Parallel()
 	ts := newTestServer()
 	defer ts.Close()
 
@@ -172,7 +169,6 @@ func TestNetworkFulfill(t *testing.T) {
 
 // TestNetworkModifyRequest tests request modification
 func TestNetworkModifyRequest(t *testing.T) {
-	t.Parallel()
 	ts := newTestServer()
 	defer ts.Close()
 
@@ -211,7 +207,6 @@ func TestNetworkModifyRequest(t *testing.T) {
 
 // TestNetworkWaitForRequest tests waiting for specific requests
 func TestNetworkWaitForRequest(t *testing.T) {
-	t.Parallel()
 	ts := newTestServer()
 	defer ts.Close()
 
@@ -261,7 +256,6 @@ func TestNetworkWaitForRequest(t *testing.T) {
 
 // TestNetworkWaitForResponse tests waiting for specific responses
 func TestNetworkWaitForResponse(t *testing.T) {
-	t.Parallel()
 	ts := newTestServer()
 	defer ts.Close()
 
@@ -311,7 +305,6 @@ func TestNetworkWaitForResponse(t *testing.T) {
 
 // TestNetworkMultipleRoutes tests multiple route handlers
 func TestNetworkMultipleRoutes(t *testing.T) {
-	t.Parallel()
 	ts := newTestServer()
 	defer ts.Close()
 
@@ -369,7 +362,6 @@ func TestNetworkMultipleRoutes(t *testing.T) {
 
 // TestNetworkPostData tests intercepting POST requests
 func TestNetworkPostData(t *testing.T) {
-	t.Parallel()
 	ts := newTestServer()
 	defer ts.Close()
 

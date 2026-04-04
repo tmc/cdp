@@ -10,7 +10,6 @@ import (
 
 // TestElementQuery tests element querying
 func TestElementQuery(t *testing.T) {
-	t.Parallel()
 	ts := newTestServer()
 	defer ts.Close()
 
@@ -61,7 +60,6 @@ func TestElementQuery(t *testing.T) {
 
 // TestElementQueryAll tests querying multiple elements
 func TestElementQueryAll(t *testing.T) {
-	t.Parallel()
 	ts := newTestServer()
 	defer ts.Close()
 
@@ -105,7 +103,6 @@ func TestElementQueryAll(t *testing.T) {
 
 // TestElementInteractions tests element interaction methods
 func TestElementInteractions(t *testing.T) {
-	t.Parallel()
 	ts := newTestServer()
 	defer ts.Close()
 
@@ -180,7 +177,6 @@ func TestElementInteractions(t *testing.T) {
 
 // TestElementAttributes tests attribute manipulation
 func TestElementAttributes(t *testing.T) {
-	t.Parallel()
 	ts := newTestServer()
 	defer ts.Close()
 
@@ -239,7 +235,6 @@ func TestElementAttributes(t *testing.T) {
 
 // TestElementFocus tests element focus functionality
 func TestElementFocus(t *testing.T) {
-	t.Parallel()
 	ts := newTestServer()
 	defer ts.Close()
 
@@ -281,7 +276,6 @@ func TestElementFocus(t *testing.T) {
 
 // TestElementScreenshot tests element screenshot
 func TestElementScreenshot(t *testing.T) {
-	t.Parallel()
 	ts := newTestServer()
 	defer ts.Close()
 
@@ -323,7 +317,6 @@ func TestElementScreenshot(t *testing.T) {
 
 // TestElementWaitForChild tests waiting for child elements
 func TestElementWaitForChild(t *testing.T) {
-	t.Parallel()
 	ts := newTestServer()
 	defer ts.Close()
 
@@ -372,7 +365,6 @@ func TestElementWaitForChild(t *testing.T) {
 
 // TestElementHover tests element hover
 func TestElementHover(t *testing.T) {
-	t.Parallel()
 	b, cleanup := createTestBrowser(t)
 	defer cleanup()
 
@@ -431,7 +423,6 @@ func TestElementHover(t *testing.T) {
 
 // TestElementScrollIntoView tests scrolling element into view
 func TestElementScrollIntoView(t *testing.T) {
-	t.Parallel()
 	b, cleanup := createTestBrowser(t)
 	defer cleanup()
 

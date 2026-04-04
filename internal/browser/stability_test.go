@@ -12,7 +12,6 @@ import (
 )
 
 func TestStabilityDetector(t *testing.T) {
-	t.Parallel()
 	testutil.SkipIfNoChrome(t)
 
 	// Create a test server with dynamic content
@@ -419,7 +418,6 @@ func TestStabilityDetector(t *testing.T) {
 }
 
 func TestStabilityConfigValidation(t *testing.T) {
-	t.Parallel()
 	testutil.SkipIfNoChrome(t)
 	t.Run("NilConfig", func(t *testing.T) {
 		page := &Page{}
@@ -451,7 +449,6 @@ func TestStabilityConfigValidation(t *testing.T) {
 }
 
 func TestStabilityDetectorLifecycle(t *testing.T) {
-	t.Parallel()
 
 	testutil.SkipIfNoChrome(t)
 	// Create browser context

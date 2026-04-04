@@ -5,7 +5,6 @@ import (
 )
 
 func TestDetectContentType(t *testing.T) {
-	t.Parallel()
 	testCases := []struct {
 		name     string
 		data     string

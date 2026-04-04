@@ -132,7 +132,6 @@ func basicAuth(username, password string) string {
 }
 
 func TestProxyConnection(t *testing.T) {
-	t.Parallel()
 	// Skip if running in short mode
 	if testing.Short() {
 		t.Skip("Skipping proxy test in short mode")
@@ -184,7 +183,6 @@ func TestProxyConnection(t *testing.T) {
 }
 
 func TestProxyAuthentication(t *testing.T) {
-	t.Parallel()
 	// Skip if running in short mode
 	if testing.Short() {
 		t.Skip("Skipping proxy auth test in short mode")
@@ -254,7 +252,6 @@ func TestProxyAuthentication(t *testing.T) {
 }
 
 func TestProxyBypassList(t *testing.T) {
-	t.Parallel()
 	// Skip if running in short mode
 	if testing.Short() {
 		t.Skip("Skipping proxy bypass test in short mode")
@@ -308,7 +305,6 @@ func TestProxyBypassList(t *testing.T) {
 }
 
 func TestSOCKS5Proxy(t *testing.T) {
-	t.Parallel()
 	// Skip if running in short mode
 	if testing.Short() {
 		t.Skip("Skipping SOCKS5 proxy test in short mode")
@@ -331,7 +327,6 @@ func TestSOCKS5Proxy(t *testing.T) {
 }
 
 func TestProxyWithHTTPS(t *testing.T) {
-	t.Parallel()
 	// Skip if running in short mode
 	if testing.Short() {
 		t.Skip("Skipping HTTPS proxy test in short mode")

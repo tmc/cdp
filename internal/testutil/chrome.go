@@ -271,6 +271,10 @@ func SkipIfNoChrome(t *testing.T) {
 		t.Skip("Skipping browser test in short mode")
 	}
 
+	if os.Getenv("SKIP_BROWSER_TESTS") != "" {
+		t.Skip("Skipping browser test (SKIP_BROWSER_TESTS is set)")
+	}
+
 	// Skip if in CI environment
 	if os.Getenv("CI") != "" {
 		t.Skip("Skipping browser tests in CI environment")

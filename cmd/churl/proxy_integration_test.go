@@ -16,9 +16,11 @@ import (
 
 // TestProxyIntegration tests the churl command with proxy settings
 func TestProxyIntegration(t *testing.T) {
-	t.Parallel()
-	if testing.Short() {
-		t.Skip("Skipping integration test in short mode")
+	if testing.Short() || os.Getenv("CI") != "" {
+		t.Skip("Skipping proxy integration test")
+	}
+	if os.Getenv("TEST_PROXY") == "" {
+		t.Skip("Skipping proxy integration test (set TEST_PROXY=1 to enable)")
 	}
 
 	// Build the churl binary

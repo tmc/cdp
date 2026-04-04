@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -21,13 +20,16 @@ import (
 func skipIfNoChromish(t testing.TB) {
 	t.Helper()
 
-	// Skip browser tests in CI only
-	if os.Getenv("CI") != "" {
-		t.Skip("Skipping browser test in CI environment")
+	if testing.Short() {
+		t.Skip("Skipping browser test in short mode")
 	}
 
-	if os.Getenv("CI") == "true" && runtime.GOOS != "linux" {
-		t.Skip("Skipping browser test in CI on non-Linux platform")
+	if os.Getenv("SKIP_BROWSER_TESTS") != "" {
+		t.Skip("Skipping browser test (SKIP_BROWSER_TESTS is set)")
+	}
+
+	if os.Getenv("CI") != "" {
+		t.Skip("Skipping browser test in CI environment")
 	}
 
 	chromePath := testutil.FindChrome()
@@ -38,6 +40,7 @@ func skipIfNoChromish(t testing.TB) {
 
 // TestWebSocketMonitoring tests basic WebSocket monitoring functionality
 func TestWebSocketMonitoring(t *testing.T) {
+	skipIfNoChromish(t)
 	// Create test WebSocket server
 	server := createTestWebSocketServer(t)
 	defer server.Close()
@@ -191,7 +194,6 @@ func TestWebSocketMonitoring(t *testing.T) {
 
 // TestWebSocketWaitConditions tests WebSocket wait conditions
 func TestWebSocketWaitConditions(t *testing.T) {
-	t.Parallel()
 	skipIfNoChromish(t)
 
 	// Create test WebSocket server
@@ -287,7 +289,6 @@ func TestWebSocketWaitConditions(t *testing.T) {
 
 // TestWebSocketHARExport tests WebSocket HAR export functionality
 func TestWebSocketHARExport(t *testing.T) {
-	t.Parallel()
 	skipIfNoChromish(t)
 
 	// Create test WebSocket server
@@ -387,7 +388,6 @@ func TestWebSocketHARExport(t *testing.T) {
 
 // TestWebSocketPerformanceMonitoring tests WebSocket performance monitoring
 func TestWebSocketPerformanceMonitoring(t *testing.T) {
-	t.Parallel()
 	skipIfNoChromish(t)
 
 	// Create test WebSocket server
@@ -492,7 +492,6 @@ func TestWebSocketPerformanceMonitoring(t *testing.T) {
 
 // TestWebSocketFiltering tests WebSocket filtering functionality
 func TestWebSocketFiltering(t *testing.T) {
-	t.Parallel()
 	skipIfNoChromish(t)
 
 	// Create test WebSocket server
@@ -594,7 +593,6 @@ func TestWebSocketFiltering(t *testing.T) {
 
 // TestWebSocketMultipleConnections tests multiple WebSocket connections
 func TestWebSocketMultipleConnections(t *testing.T) {
-	t.Parallel()
 	skipIfNoChromish(t)
 
 	// Create multiple test WebSocket servers

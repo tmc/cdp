@@ -18,7 +18,6 @@ import (
 
 // TestBrowserFullWorkflow tests complete browser lifecycle
 func TestBrowserFullWorkflow(t *testing.T) {
-	t.Parallel()
 	skipIfNoChromish(t)
 
 	ts := newTestServer()
@@ -95,7 +94,6 @@ func TestBrowserFullWorkflow(t *testing.T) {
 
 // TestPageCompleteWorkflow tests complete page interaction workflow
 func TestPageCompleteWorkflow(t *testing.T) {
-	t.Parallel()
 	skipIfNoChromish(t)
 
 	ts := newTestServer()
@@ -198,7 +196,6 @@ func TestPageCompleteWorkflow(t *testing.T) {
 
 // TestNetworkInterceptionWorkflow tests complete network interception
 func TestNetworkInterceptionWorkflow(t *testing.T) {
-	t.Parallel()
 	skipIfNoChromish(t)
 
 	ts := newTestServer()
@@ -264,7 +261,6 @@ func TestNetworkInterceptionWorkflow(t *testing.T) {
 
 // TestScreenshotWorkflow tests screenshot functionality
 func TestScreenshotWorkflow(t *testing.T) {
-	t.Parallel()
 	skipIfNoChromish(t)
 
 	ts := newTestServer()
@@ -323,7 +319,6 @@ func TestScreenshotWorkflow(t *testing.T) {
 
 // TestRemoteConnectionWorkflow tests remote Chrome connection
 func TestRemoteConnectionWorkflow(t *testing.T) {
-	t.Parallel()
 	if testing.Short() {
 		t.Skip("Skipping remote connection test in short mode")
 	}
@@ -401,7 +396,6 @@ func TestRemoteConnectionWorkflow(t *testing.T) {
 
 // TestMultiPageConcurrency tests concurrent page operations
 func TestMultiPageConcurrency(t *testing.T) {
-	t.Parallel()
 	if testing.Short() {
 		t.Skip("Skipping concurrency test in short mode")
 	}
@@ -475,7 +469,6 @@ func TestMultiPageConcurrency(t *testing.T) {
 
 // TestFormInteractionWorkflow tests complete form interaction
 func TestFormInteractionWorkflow(t *testing.T) {
-	t.Parallel()
 	skipIfNoChromish(t)
 
 	ts := newTestServer()
@@ -548,7 +541,6 @@ func TestFormInteractionWorkflow(t *testing.T) {
 
 // TestErrorHandlingWorkflow tests error handling scenarios
 func TestErrorHandlingWorkflow(t *testing.T) {
-	t.Parallel()
 	skipIfNoChromish(t)
 
 	b, cleanup := createTestBrowser(t)
@@ -600,7 +592,6 @@ func TestErrorHandlingWorkflow(t *testing.T) {
 
 // TestViewportAndResponsiveDesign tests viewport manipulation
 func TestViewportAndResponsiveDesign(t *testing.T) {
-	t.Parallel()
 	skipIfNoChromish(t)
 
 	b, cleanup := createTestBrowser(t)
@@ -703,7 +694,6 @@ func TestViewportAndResponsiveDesign(t *testing.T) {
 
 // TestStressScenarios tests browser under stress conditions
 func TestStressScenarios(t *testing.T) {
-	t.Parallel()
 	if testing.Short() {
 		t.Skip("Skipping stress test in short mode")
 	}

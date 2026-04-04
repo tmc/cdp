@@ -12,7 +12,6 @@ import (
 
 // TestPageBasicOperations tests basic page operations
 func TestPageBasicOperations(t *testing.T) {
-	t.Parallel()
 	ts := newTestServer()
 	defer ts.Close()
 
@@ -62,7 +61,6 @@ func TestPageBasicOperations(t *testing.T) {
 
 // TestPageInteractions tests page interaction methods
 func TestPageInteractions(t *testing.T) {
-	t.Parallel()
 	ts := newTestServer()
 	defer ts.Close()
 
@@ -114,7 +112,6 @@ func TestPageInteractions(t *testing.T) {
 
 // TestPageWaitForSelector tests waiting for elements
 func TestPageWaitForSelector(t *testing.T) {
-	t.Parallel()
 	ts := newTestServer()
 	defer ts.Close()
 
@@ -152,7 +149,6 @@ func TestPageWaitForSelector(t *testing.T) {
 
 // TestPageEvaluate tests JavaScript evaluation
 func TestPageEvaluate(t *testing.T) {
-	t.Parallel()
 	ts := newTestServer()
 	defer ts.Close()
 
@@ -199,7 +195,6 @@ func TestPageEvaluate(t *testing.T) {
 
 // TestPageScreenshot tests screenshot functionality
 func TestPageScreenshot(t *testing.T) {
-	t.Parallel()
 	ts := newTestServer()
 	defer ts.Close()
 
@@ -244,7 +239,6 @@ func TestPageScreenshot(t *testing.T) {
 
 // TestPageFormInteraction tests form interactions
 func TestPageFormInteraction(t *testing.T) {
-	t.Parallel()
 	ts := newTestServer()
 	defer ts.Close()
 
@@ -298,7 +292,6 @@ func TestPageFormInteraction(t *testing.T) {
 
 // TestPageViewport tests viewport manipulation
 func TestPageViewport(t *testing.T) {
-	t.Parallel()
 	ts := newTestServer()
 	defer ts.Close()
 
@@ -344,7 +337,6 @@ func TestPageViewport(t *testing.T) {
 
 // TestPageFocus tests element focus
 func TestPageFocus(t *testing.T) {
-	t.Parallel()
 	ts := newTestServer()
 	defer ts.Close()
 
@@ -381,7 +373,6 @@ func TestPageFocus(t *testing.T) {
 
 // TestPagePress tests key press functionality
 func TestPagePress(t *testing.T) {
-	t.Parallel()
 	ts := newTestServer()
 	defer ts.Close()
 
@@ -426,7 +417,6 @@ func TestPagePress(t *testing.T) {
 
 // TestPageWaitForFunction tests waiting for JavaScript conditions
 func TestPageWaitForFunction(t *testing.T) {
-	t.Parallel()
 	ts := newTestServer()
 	defer ts.Close()
 
@@ -473,7 +463,6 @@ func TestPageWaitForFunction(t *testing.T) {
 
 // TestPageMultipleTabs tests managing multiple pages/tabs
 func TestPageMultipleTabs(t *testing.T) {
-	t.Parallel()
 	ts := newTestServer()
 	defer ts.Close()
 
@@ -525,7 +514,6 @@ func TestPageMultipleTabs(t *testing.T) {
 
 // TestPageHover tests hover functionality
 func TestPageHover(t *testing.T) {
-	t.Parallel()
 	ts := newTestServer()
 	defer ts.Close()
 
