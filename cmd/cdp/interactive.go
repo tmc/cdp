@@ -357,6 +357,21 @@ func (im *InteractiveMode) Run() error {
 
 	scanner := bufio.NewScanner(os.Stdin)
 
+	// captureSourcesOnExit fetches and writes sources before the browser closes.
+	captureSourcesOnExit := func() {
+		if im.sourceCollector == nil {
+			return
+		}
+		if err := chromedp.Run(im.ctx, chromedp.ActionFunc(func(ctx context.Context) error {
+			return im.sourceCollector.CaptureAll(ctx)
+		})); err != nil && im.verbose {
+			log.Printf("Warning: source capture errors: %v", err)
+		}
+		if err := im.sourceCollector.WriteToDisk(); err != nil {
+			log.Printf("Warning: failed to write sources: %v", err)
+		}
+	}
+
 	for {
 		fmt.Print("cdp> ")
 
@@ -379,6 +394,7 @@ func (im *InteractiveMode) Run() error {
 
 		// Check for exit
 		if line == "exit" || line == "quit" || line == "q" {
+			captureSourcesOnExit()
 			if im.launched && im.cancel != nil {
 				im.cancel()
 				fmt.Println("Browser closed.")
@@ -392,6 +408,9 @@ func (im *InteractiveMode) Run() error {
 			fmt.Printf("Error: %v\n", err)
 		}
 	}
+
+	// Capture sources before closing browser.
+	captureSourcesOnExit()
 
 	// Close the browser on exit (EOF, Ctrl-D) if we launched it.
 	if im.launched && im.cancel != nil {

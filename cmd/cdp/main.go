@@ -36,6 +36,7 @@ import (
 	"github.com/tmc/misc/chrome-to-har/internal/chromeprofiles"
 	"github.com/tmc/misc/chrome-to-har/internal/htmltomd"
 	harrecorder "github.com/tmc/misc/chrome-to-har/internal/recorder"
+	"github.com/tmc/misc/chrome-to-har/internal/scrub"
 	"github.com/tmc/misc/chrome-to-har/internal/sources"
 )
 
@@ -1168,6 +1169,9 @@ func main() {
 
 		// Source capture
 		saveSources bool
+
+		// Secret scrubbing
+		noScrub bool
 	)
 
 	flag.StringVar(&url, "url", "about:blank", "URL to navigate to on start")
@@ -1247,6 +1251,7 @@ func main() {
 
 	// Source capture
 	flag.BoolVar(&saveSources, "save-sources", false, "Capture all JS/CSS sources (including sourcemapped originals) and write to disk")
+	flag.BoolVar(&noScrub, "no-scrub", false, "Disable secret redaction in HAR and source output")
 
 	flag.Parse()
 
@@ -1260,6 +1265,7 @@ func main() {
 			DebugPort:   debugPort,
 			ToolsDir:    toolsDir,
 			SaveSources: saveSources,
+			NoScrub:     noScrub,
 		}
 		if err := runMCP(mcpCfg); err != nil {
 			exitWithError(ExitGeneralError, ErrorTypeGeneral, "MCP server: %v", err)
@@ -1413,6 +1419,7 @@ func main() {
 			OutputDir:       outputDir,
 			ToolsDir:        toolsDir,
 			SaveSources:     saveSources,
+			NoScrub:         noScrub,
 		})
 		return
 	}
@@ -1713,11 +1720,15 @@ func main() {
 				if harMode == "enhanced" {
 					// Use enhanced recorder with full capture
 					var err error
-					enhancedRecorder, err = harrecorder.New(
+					recOpts := []harrecorder.Option{
 						harrecorder.WithVerbose(verbose),
 						harrecorder.WithStreaming(harlStream),
 						harrecorder.WithOutputDir(outputDir),
-					)
+					}
+					if !noScrub {
+						recOpts = append(recOpts, harrecorder.WithScrubber(scrub.New()))
+					}
+					enhancedRecorder, err = harrecorder.New(recOpts...)
 					if err != nil {
 						exitWithError(ExitGeneralError, ErrorTypeGeneral, "Failed to create enhanced recorder: %v", err)
 					}
@@ -2489,11 +2500,15 @@ func main() {
 				if harMode == "enhanced" {
 					// Use enhanced recorder with full capture
 					var err error
-					enhancedRecorder, err = harrecorder.New(
+					recOpts := []harrecorder.Option{
 						harrecorder.WithVerbose(verbose),
 						harrecorder.WithStreaming(harlStream),
 						harrecorder.WithOutputDir(outputDir),
-					)
+					}
+					if !noScrub {
+						recOpts = append(recOpts, harrecorder.WithScrubber(scrub.New()))
+					}
+					enhancedRecorder, err = harrecorder.New(recOpts...)
 					if err != nil {
 						exitWithError(ExitGeneralError, ErrorTypeGeneral, "Failed to create enhanced recorder: %v", err)
 					}
@@ -4056,32 +4071,42 @@ func handleEnhancedMode(command string, interactive bool, cfg fullCaptureConfig)
 			if err != nil {
 				exitWithError(ExitBrowserError, ErrorTypeBrowser, "Failed to setup Chrome: %v", err)
 			}
-			defer chromeCancel()
 
-			// Start interactive mode with reconnection support
-			im := NewInteractiveMode(chromeCtx, chromeCancel, launched, cfg, cfg.ToolsDir)
+			// Ensure we have a page target attached (needed for CDP domain commands
+			// like debugger.Enable used by source capture).
+			if err := chromedp.Run(chromeCtx, chromedp.Navigate("about:blank")); err != nil {
+				exitWithError(ExitBrowserError, ErrorTypeBrowser, "Failed to attach to browser: %v", err)
+			}
 
 			// Wire source collector if --save-sources is enabled.
+			// Must be set up before InteractiveMode so defers run in correct order
+			// (capture sources before cancelling browser context).
+			var sc *sources.Collector
 			if cfg.SaveSources {
 				sourcesDir := filepath.Join(cfg.OutputDir, "sources")
 				if cfg.OutputDir == "" {
 					sourcesDir = "sources"
 				}
-				sc := sources.New(sourcesDir, cfg.Verbose)
-				if err := sc.Enable(chromeCtx); err != nil {
+				sc = sources.New(sourcesDir, cfg.Verbose)
+				if !cfg.NoScrub {
+					sc.SetScrubber(scrub.New())
+				}
+				if err := chromedp.Run(chromeCtx, chromedp.ActionFunc(func(ctx context.Context) error {
+					return sc.Enable(ctx)
+				})); err != nil {
 					log.Printf("Warning: failed to enable source capture: %v", err)
+					sc = nil
 				} else {
 					chromedp.ListenTarget(chromeCtx, sc.HandleEvent)
-					im.SetSourceCollector(sc)
-					defer func() {
-						if err := sc.CaptureAll(chromeCtx); err != nil && cfg.Verbose {
-							log.Printf("Warning: source capture errors: %v", err)
-						}
-						if err := sc.WriteToDisk(); err != nil {
-							log.Printf("Warning: failed to write sources: %v", err)
-						}
-					}()
 				}
+			}
+
+			defer chromeCancel()
+
+			// Start interactive mode with reconnection support
+			im := NewInteractiveMode(chromeCtx, chromeCancel, launched, cfg, cfg.ToolsDir)
+			if sc != nil {
+				im.SetSourceCollector(sc)
 			}
 
 			if err := im.Run(); err != nil {
@@ -4183,6 +4208,7 @@ type fullCaptureConfig struct {
 	OutputDir       string
 	ToolsDir        string
 	SaveSources     bool
+	NoScrub         bool
 }
 
 // resolveDebugPort checks if the desired port is available. If it's in use

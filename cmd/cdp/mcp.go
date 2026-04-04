@@ -11,21 +11,24 @@ import (
 
 	"github.com/chromedp/chromedp"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/tmc/misc/chrome-to-har/internal/coverage"
 	harrecorder "github.com/tmc/misc/chrome-to-har/internal/recorder"
+	"github.com/tmc/misc/chrome-to-har/internal/scrub"
 	"github.com/tmc/misc/chrome-to-har/internal/sources"
 )
 
 // mcpSession holds browser state shared across MCP tool handlers.
 type mcpSession struct {
-	mu              sync.Mutex
-	browserCtx      context.Context    // browser-level context
-	ctx             context.Context    // active tab context
-	tabCancel       context.CancelFunc // cancels the current tab context (nil for initial tab)
-	cancel          context.CancelFunc // cancels the browser context
-	recorder        *harrecorder.Recorder
-	sourceCollector *sources.Collector
-	outputDir       string
-	contextStack    []string
+	mu                sync.Mutex
+	browserCtx        context.Context    // browser-level context
+	ctx               context.Context    // active tab context
+	tabCancel         context.CancelFunc // cancels the current tab context (nil for initial tab)
+	cancel            context.CancelFunc // cancels the browser context
+	recorder          *harrecorder.Recorder
+	sourceCollector   *sources.Collector
+	coverageCollector *coverage.Collector
+	outputDir         string
+	contextStack      []string
 }
 
 // activeCtx returns the current active tab context.
@@ -107,6 +110,7 @@ type mcpConfig struct {
 	DebugPort   int
 	ToolsDir    string
 	SaveSources bool
+	NoScrub     bool
 }
 
 // runMCP starts the MCP server with browser session tools on stdio.
@@ -127,7 +131,12 @@ func runMCP(cfg mcpConfig) error {
 	if err != nil {
 		return fmt.Errorf("setup browser: %w", err)
 	}
-	defer browserCancel()
+
+	// Set up secret scrubber (default on, --no-scrub to disable).
+	var scrubber *scrub.Scrubber
+	if !cfg.NoScrub {
+		scrubber = scrub.New()
+	}
 
 	// Optionally create a recorder for HAR capture.
 	var rec *harrecorder.Recorder
@@ -135,11 +144,15 @@ func runMCP(cfg mcpConfig) error {
 		if err := os.MkdirAll(cfg.OutputDir, 0755); err != nil {
 			return fmt.Errorf("create output dir: %w", err)
 		}
-		rec, err = harrecorder.New(
+		opts := []harrecorder.Option{
 			harrecorder.WithVerbose(cfg.Verbose),
 			harrecorder.WithStreaming(true),
 			harrecorder.WithOutputDir(cfg.OutputDir),
-		)
+		}
+		if scrubber != nil {
+			opts = append(opts, harrecorder.WithScrubber(scrubber))
+		}
+		rec, err = harrecorder.New(opts...)
 		if err != nil {
 			return fmt.Errorf("create recorder: %w", err)
 		}
@@ -153,6 +166,7 @@ func runMCP(cfg mcpConfig) error {
 	}
 
 	// Set up source capture if requested.
+	// Set up defers so source capture runs before browserCancel (LIFO).
 	var sourceCollector *sources.Collector
 	if cfg.SaveSources {
 		sourcesDir := filepath.Join(cfg.OutputDir, "sources")
@@ -160,20 +174,26 @@ func runMCP(cfg mcpConfig) error {
 			sourcesDir = "sources"
 		}
 		sourceCollector = sources.New(sourcesDir, cfg.Verbose)
+		if scrubber != nil {
+			sourceCollector.SetScrubber(scrubber)
+		}
 		if err := sourceCollector.Enable(browserCtx); err != nil {
 			log.Printf("warning: failed to enable source capture: %v", err)
 			sourceCollector = nil
 		} else {
 			chromedp.ListenTarget(browserCtx, sourceCollector.HandleEvent)
-			defer func() {
-				if err := sourceCollector.CaptureAll(browserCtx); err != nil && cfg.Verbose {
-					log.Printf("warning: source capture errors: %v", err)
-				}
-				if err := sourceCollector.WriteToDisk(); err != nil {
-					log.Printf("warning: failed to write sources: %v", err)
-				}
-			}()
 		}
+	}
+	defer browserCancel()
+	if sourceCollector != nil {
+		defer func() {
+			if err := sourceCollector.CaptureAll(browserCtx); err != nil && cfg.Verbose {
+				log.Printf("warning: source capture errors: %v", err)
+			}
+			if err := sourceCollector.WriteToDisk(); err != nil {
+				log.Printf("warning: failed to write sources: %v", err)
+			}
+		}()
 	}
 
 	session := &mcpSession{

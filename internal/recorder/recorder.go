@@ -20,6 +20,7 @@ import (
 	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/chromedp"
 	chromeErrors "github.com/tmc/misc/chrome-to-har/internal/errors"
+	"github.com/tmc/misc/chrome-to-har/internal/scrub"
 )
 
 type Annotation struct {
@@ -61,6 +62,9 @@ type Recorder struct {
 	// Tag tracking
 	currentTag string      // Currently active tag
 	tagRanges  []*TagRange // History of tag ranges
+
+	// Secret scrubbing
+	scrubber *scrub.Scrubber
 }
 
 type FilterOption struct {
@@ -103,6 +107,13 @@ func WithTemplate(template string) Option {
 func WithOutputDir(dir string) Option {
 	return func(r *Recorder) error {
 		r.outputDir = dir
+		return nil
+	}
+}
+
+func WithScrubber(s *scrub.Scrubber) Option {
+	return func(r *Recorder) error {
+		r.scrubber = s
 		return nil
 	}
 }
@@ -427,7 +438,7 @@ func (r *Recorder) buildStreamEntry(reqID network.RequestID, resp *network.Respo
 		content.Size = int64(len(body))
 		content.Text = string(body)
 	}
-	return &har.Entry{
+	entry := &har.Entry{
 		StartedDateTime: time.Now().Format(time.RFC3339),
 		Request:         harReq,
 		Response: &har.Response{
@@ -438,6 +449,57 @@ func (r *Recorder) buildStreamEntry(reqID network.RequestID, resp *network.Respo
 			Content:     content,
 		},
 	}
+	r.scrubEntry(entry)
+	return entry
+}
+
+// scrubEntry redacts secrets from a HAR entry in place.
+func (r *Recorder) scrubEntry(entry *har.Entry) {
+	if r.scrubber == nil || !r.scrubber.Enabled() {
+		return
+	}
+	if entry.Request != nil {
+		for i := range entry.Request.Headers {
+			entry.Request.Headers[i].Value = r.scrubber.ScrubHeaderValue(
+				entry.Request.Headers[i].Name, entry.Request.Headers[i].Value)
+		}
+		if entry.Request.URL != "" {
+			entry.Request.URL = scrubURL(r.scrubber, entry.Request.URL)
+		}
+	}
+	if entry.Response != nil {
+		for i := range entry.Response.Headers {
+			entry.Response.Headers[i].Value = r.scrubber.ScrubHeaderValue(
+				entry.Response.Headers[i].Name, entry.Response.Headers[i].Value)
+		}
+		if entry.Response.Content != nil && entry.Response.Content.Text != "" {
+			entry.Response.Content.Text, _ = r.scrubber.ScrubText(entry.Response.Content.Text)
+		}
+	}
+}
+
+// scrubURL redacts sensitive query parameter values in a URL.
+func scrubURL(s *scrub.Scrubber, rawURL string) string {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return rawURL
+	}
+	q := u.Query()
+	changed := false
+	for key, vals := range q {
+		for i, v := range vals {
+			scrubbed := s.ScrubQueryParam(key, v)
+			if scrubbed != v {
+				vals[i] = scrubbed
+				changed = true
+			}
+		}
+	}
+	if !changed {
+		return rawURL
+	}
+	u.RawQuery = q.Encode()
+	return u.String()
 }
 
 func (r *Recorder) streamEntry(entry *har.Entry) {
@@ -626,6 +688,7 @@ func (r *Recorder) HAR() (*har.HAR, error) {
 			entry.Comment = fmt.Sprintf("tag:%s", tag)
 		}
 
+		r.scrubEntry(entry)
 		h.Log.Entries = append(h.Log.Entries, entry)
 	}
 

@@ -17,6 +17,7 @@ import (
 	"github.com/chromedp/cdproto/cdp"
 	"github.com/chromedp/cdproto/css"
 	"github.com/chromedp/cdproto/debugger"
+	"github.com/tmc/misc/chrome-to-har/internal/scrub"
 )
 
 // ScriptInfo holds metadata and source for a parsed script.
@@ -45,6 +46,7 @@ type Collector struct {
 	styles    map[cdp.StyleSheetID]*StyleInfo
 	outputDir string
 	verbose   bool
+	scrubber  *scrub.Scrubber
 }
 
 // New creates a source collector that writes to outputDir.
@@ -170,6 +172,7 @@ func (c *Collector) WriteToDisk() error {
 			firstErr = err
 		}
 	}
+	var totalRedactions int
 	for _, e := range entries {
 		if skipURL(e.url) || e.source == "" {
 			continue
@@ -178,18 +181,32 @@ func (c *Collector) WriteToDisk() error {
 		if origin == "" {
 			continue
 		}
-		record(writeFile(filepath.Join(c.outputDir, origin, "_compiled", relPath), e.source))
+		src := e.source
+		if c.scrubber != nil && c.scrubber.Enabled() {
+			var n int
+			src, n = c.scrubber.ScrubText(src)
+			totalRedactions += n
+		}
+		record(writeFile(filepath.Join(c.outputDir, origin, "_compiled", relPath), src))
 		wrote++
 		if e.sourceMapURL != "" {
-			n, err := c.writeSourceMap(origin, e.url, e.sourceMapURL, e.source)
+			n, err := c.writeSourceMap(origin, e.url, e.sourceMapURL, src)
 			record(err)
 			wrote += n
 		}
+	}
+	if totalRedactions > 0 && c.verbose {
+		log.Printf("sources: scrubbed %d secret(s) across files", totalRedactions)
 	}
 	if c.verbose {
 		log.Printf("sources: wrote %d files to %s", wrote, c.outputDir)
 	}
 	return firstErr
+}
+
+// SetScrubber sets a scrubber for redacting secrets before writing to disk.
+func (c *Collector) SetScrubber(s *scrub.Scrubber) {
+	c.scrubber = s
 }
 
 // OutputDir returns the configured output directory.
