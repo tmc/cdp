@@ -9,6 +9,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	neturl "net/url"
 	"os"
@@ -314,15 +315,31 @@ func (nr *NetworkRecorder) SaveHAR(filename string) error {
 	return os.WriteFile(filename, data, 0644)
 }
 
-// checkRunningChrome checks if Chrome is running on a specific port
-func checkRunningChrome(port int) bool {
+// checkRunningChrome checks if Chrome is running on a specific port and returns browser info
+func checkRunningChrome(port int) (bool, string) {
 	client := &http.Client{Timeout: 2 * time.Second}
 	resp, err := client.Get(fmt.Sprintf("http://localhost:%d/json/version", port))
 	if err != nil {
-		return false
+		return false, ""
 	}
 	defer resp.Body.Close()
-	return resp.StatusCode == 200
+	if resp.StatusCode != 200 {
+		return false, ""
+	}
+
+	var info map[string]string
+	if err := json.NewDecoder(resp.Body).Decode(&info); err != nil {
+		return true, "Unknown"
+	}
+
+	browser := info["Browser"]
+	if strings.Contains(browser, "Brave") {
+		return true, "Brave"
+	}
+	if strings.Contains(browser, "Chrome") {
+		return true, "Chrome"
+	}
+	return true, browser
 }
 
 // getChromeTabs gets list of available tabs from Chrome
@@ -725,34 +742,7 @@ func selectBestBrowser(candidates []BrowserCandidate, verbose bool) *BrowserCand
 		return nil
 	}
 
-	// Preference order:
-	// 1. Running browsers with debug ports
-	// 2. Chrome Canary (latest features)
-	// 3. Chrome stable
-	// 4. Other Chromium-based browsers
-
-	// First, prefer running browsers with debug ports
-	for _, candidate := range candidates {
-		if candidate.IsRunning && candidate.DebugPort > 0 {
-			if verbose {
-				log.Printf("Selected running browser: %s (debug port: %d)", candidate.Name, candidate.DebugPort)
-			}
-			return &candidate
-		}
-	}
-
-	// Then prefer running browsers (but only if they have CDP support)
-	// Skip running browsers without debug ports - they can't be controlled via CDP
-	for _, candidate := range candidates {
-		if candidate.IsRunning && candidate.DebugPort > 0 {
-			if verbose {
-				log.Printf("Selected running browser: %s (debug port: %d)", candidate.Name, candidate.DebugPort)
-			}
-			return &candidate
-		}
-	}
-
-	// Browser preference order (non-running)
+	// Preference order
 	preferenceOrder := []string{
 		"Brave",
 		"Chrome Canary",
@@ -765,6 +755,29 @@ func selectBestBrowser(candidates []BrowserCandidate, verbose bool) *BrowserCand
 		"Opera",
 	}
 
+	// First, prefer running browsers with debug ports, following preference order
+	for _, preferred := range preferenceOrder {
+		for _, candidate := range candidates {
+			if candidate.IsRunning && candidate.DebugPort > 0 && candidate.Name == preferred {
+				if verbose {
+					log.Printf("Selected running browser: %s (debug port: %d)", candidate.Name, candidate.DebugPort)
+				}
+				return &candidate
+			}
+		}
+	}
+
+	// Then prefer any running browser with debug port
+	for _, candidate := range candidates {
+		if candidate.IsRunning && candidate.DebugPort > 0 {
+			if verbose {
+				log.Printf("Selected running browser: %s (debug port: %d)", candidate.Name, candidate.DebugPort)
+			}
+			return &candidate
+		}
+	}
+
+	// Then follow preference order for installed (non-running) browsers
 	for _, preferred := range preferenceOrder {
 		for _, candidate := range candidates {
 			if candidate.Name == preferred {
@@ -1096,7 +1109,8 @@ func main() {
 		interactive bool
 		background  bool
 		command     string
-		enhanced    bool
+		fullCapture    bool
+		showChromeFlags bool
 		outputDir   string // Directory to write domain-organized logs to
 
 		// Profile management features
@@ -1171,7 +1185,8 @@ func main() {
 	flag.BoolVar(&interactive, "interactive", false, "Keep browser open for interaction")
 	flag.BoolVar(&background, "background", false, "Launch browser in background without focusing window")
 	flag.StringVar(&command, "command", "", "Execute a single CDP command")
-	flag.BoolVar(&enhanced, "enhanced", false, "Use enhanced command mode with better commands")
+	flag.BoolVar(&fullCapture, "full-capture", false, "Interactive mode with full request/response body capture")
+	flag.BoolVar(&showChromeFlags, "show-chrome-flags", false, "Print the Chrome command-line flags used at launch")
 	flag.StringVar(&outputDir, "output-dir", "", "Directory to write domain-organized logs to (overrides --harl-file)")
 	flag.BoolVar(&monitorAllTabs, "monitor-all-tabs", false, "Monitor network traffic from all browser tabs")
 	flag.BoolVar(&monitorConsole, "console", false, "Monitor and display browser console messages (log, error, warn, exceptions)")
@@ -1217,6 +1232,11 @@ func main() {
 	flag.BoolVar(&cdpProxyObserveSelf, "cdp-proxy-observe-self", false, "Route cdp's own CDP traffic through the proxy (requires --cdp-proxy)")
 
 	flag.Parse()
+
+	// Handle positional arguments as a command if -command is not set
+	if command == "" && flag.NArg() > 0 {
+		command = strings.Join(flag.Args(), " ")
+	}
 
 	// Check if certain flags were explicitly set (even with empty value)
 	screenshotRequested := false
@@ -1348,8 +1368,15 @@ func main() {
 	}
 
 	// Handle enhanced command mode
-	if enhanced || command != "" {
-		handleEnhancedMode(command, enhanced, verbose, chromePath)
+	if fullCapture || command != "" {
+		handleEnhancedMode(command, fullCapture, fullCaptureConfig{
+			Verbose:         verbose,
+			ChromePath:      chromePath,
+			ShowChromeFlags: showChromeFlags,
+			UseProfile:      useProfile,
+			CookieDomains:   cookieDomains,
+			DebugPort:       debugPort,
+		})
 		return
 	}
 
@@ -1384,24 +1411,7 @@ func main() {
 		return
 	}
 
-	// Check for existing Chrome instances with debug ports first
-	// Skip this if headless mode is explicitly requested (want a new instance)
-	// Also skip if profile-dir is specified, as we want to use that specific profile directory
-	if remoteHost == "" && !headless && (connectExisting || (useProfile == "" && profileDir == "")) {
-		debugPorts := []int{9222, 9223, 9224, 9225}
-		for _, port := range debugPorts {
-			if checkRunningChrome(port) {
-				remoteHost = "localhost"
-				remotePort = port
-				if verbose {
-					log.Printf("Found running Chrome on port %d, connecting...", port)
-				}
-				break
-			}
-		}
-	}
-
-	// Auto-discover browser if not explicitly specified and no running Chrome found
+	// Auto-discover browser if not explicitly specified
 	var selectedBrowser *BrowserCandidate
 	if autoDiscover && chromePath == "" && remoteHost == "" {
 		candidates, err := discoverBrowsers(verbose)
@@ -1511,7 +1521,7 @@ func main() {
 		// Check for running Chrome instances first
 		debugPorts := []int{9222, 9223, 9224, 9225}
 		for _, port := range debugPorts {
-			if checkRunningChrome(port) {
+			if ok, _ := checkRunningChrome(port); ok {
 				tabs, err := getChromeTabs(port)
 				if err != nil {
 					log.Printf("Failed to get tabs on port %d: %v", port, err)
@@ -3794,7 +3804,7 @@ func isNonBrowserCommand(cmdName string) bool {
 }
 
 // handleEnhancedMode handles the new enhanced command mode
-func handleEnhancedMode(command string, interactive bool, verbose bool, chromePath string) {
+func handleEnhancedMode(command string, interactive bool, cfg fullCaptureConfig) {
 	registry := NewCommandRegistry()
 	help := NewHelpSystem(registry)
 
@@ -3802,18 +3812,14 @@ func handleEnhancedMode(command string, interactive bool, verbose bool, chromePa
 	if command == "" {
 		if interactive {
 			// Set up Chrome context for interactive mode
-			ctx, cancel := context.WithCancel(context.Background())
-			defer cancel()
-
-			// Try to connect to existing Chrome or launch new one
-			chromeCtx, chromeCancel, err := setupChromeForEnhanced(ctx, verbose, chromePath)
+			chromeCtx, chromeCancel, err := setupChromeForEnhanced(context.Background(), cfg)
 			if err != nil {
 				exitWithError(ExitBrowserError, ErrorTypeBrowser, "Failed to setup Chrome: %v", err)
 			}
 			defer chromeCancel()
 
 			// Start interactive mode
-			im := NewInteractiveMode(chromeCtx, verbose)
+			im := NewInteractiveMode(chromeCtx, cfg.Verbose)
 			if err := im.Run(); err != nil {
 				exitWithError(ExitGeneralError, ErrorTypeGeneral, "Interactive mode error: %v", err)
 			}
@@ -3857,11 +3863,7 @@ func handleEnhancedMode(command string, interactive bool, verbose bool, chromePa
 	}
 
 	// Execute single command that requires browser
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-	defer cancel()
-
-	// Set up Chrome context
-	chromeCtx, chromeCancel, err := setupChromeForEnhanced(ctx, verbose, chromePath)
+	chromeCtx, chromeCancel, err := setupChromeForEnhanced(context.Background(), cfg)
 	if err != nil {
 		exitWithError(ExitBrowserError, ErrorTypeBrowser, "Failed to setup Chrome: %v", err)
 	}
@@ -3886,7 +3888,7 @@ func handleEnhancedMode(command string, interactive bool, verbose bool, chromePa
 
 	// Execute command
 	if cmd, found := registry.GetCommand(cmdName); found {
-		if verbose {
+		if cfg.Verbose {
 			fmt.Printf("Executing: %s %v\n", cmdName, args)
 		}
 		if err := cmd.Handler(chromeCtx, args); err != nil {
@@ -3906,109 +3908,208 @@ func handleEnhancedMode(command string, interactive bool, verbose bool, chromePa
 	}
 }
 
-// setupChromeForEnhanced sets up Chrome context for enhanced commands
-func setupChromeForEnhanced(ctx context.Context, verbose bool, chromePath string) (context.Context, context.CancelFunc, error) {
-	// Check for existing Chrome instances first
-	debugPorts := []int{9222, 9223, 9224, 9225}
-	for _, port := range debugPorts {
-		if checkRunningChrome(port) {
+// fullCaptureConfig holds configuration for full-capture mode browser setup.
+type fullCaptureConfig struct {
+	Verbose         bool
+	ChromePath      string
+	ShowChromeFlags bool
+	UseProfile      string
+	CookieDomains   string
+	DebugPort       int
+}
+
+// resolveDebugPort checks if the desired port is available. If it's in use
+// by an existing Chrome DevTools endpoint, it returns that port (the caller
+// will connect to it via the remote path). If it's in use by something else,
+// it tries the next ports until it finds a free one.
+func resolveDebugPort(ctx context.Context, port int, verbose bool) int {
+	for attempt := 0; attempt < 10; attempt++ {
+		candidate := port + attempt
+		ln, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", candidate))
+		if err == nil {
+			// Port is free.
+			ln.Close()
+			if attempt > 0 && verbose {
+				log.Printf("Port %d in use, using %d instead", port, candidate)
+			}
+			return candidate
+		}
+		// Port is in use — check if it's a Chrome DevTools endpoint.
+		resp, err := http.Get(fmt.Sprintf("http://127.0.0.1:%d/json/version", candidate))
+		if err == nil {
+			resp.Body.Close()
 			if verbose {
-				log.Printf("Connecting to existing Chrome on port %d", port)
+				log.Printf("Port %d has an existing Chrome DevTools endpoint", candidate)
 			}
+			// Return original port; the caller's remote-connect logic will handle it.
+			return candidate
+		}
+		if verbose {
+			log.Printf("Port %d in use by non-Chrome process, trying %d", candidate, candidate+1)
+		}
+	}
+	// All ports exhausted; fall back to auto-assign.
+	if verbose {
+		log.Printf("Ports %d-%d all in use, falling back to auto-assign", port, port+9)
+	}
+	return 0
+}
 
-			remoteURL := fmt.Sprintf("ws://localhost:%d", port)
-			allocCtx, allocCancel := chromedp.NewRemoteAllocator(ctx, remoteURL)
+// setupChromeForEnhanced sets up Chrome context for enhanced commands.
+// It discovers available browsers, optionally connects to a running instance
+// with a debug port, or launches a new non-headless browser.
+func setupChromeForEnhanced(ctx context.Context, cfg fullCaptureConfig) (context.Context, context.CancelFunc, error) {
+	verbose := cfg.Verbose
+	selectedPath := cfg.ChromePath
+	debugPort := cfg.DebugPort
+	if debugPort == 0 {
+		debugPort = 9222
+	}
 
-			var opts []chromedp.ContextOption
-			opts = append(opts, chromedp.WithErrorf(filteredErrorf))
+	// Auto-discover browser — prefer connecting to a running instance with debug port.
+	var remoteHost string
+	var remotePort int
+	candidates, err := discoverBrowsers(verbose)
+	if err == nil && len(candidates) > 0 {
+		best := selectBestBrowser(candidates, verbose)
+		if best != nil {
+			if best.IsRunning && best.DebugPort > 0 {
+				remoteHost = "localhost"
+				remotePort = best.DebugPort
+			} else if best.Path != "" {
+				selectedPath = best.Path
+			}
+		}
+	}
+
+	// Connect to a running browser with a debug port if available.
+	if remoteHost != "" && remotePort > 0 {
+		remoteURL := fmt.Sprintf("ws://%s:%d", remoteHost, remotePort)
+		if verbose {
+			log.Printf("Connecting to running browser at %s", remoteURL)
+		}
+		allocCtx, allocCancel := chromedp.NewRemoteAllocator(ctx, remoteURL)
+		browserCtx, browserCancel := chromedp.NewContext(allocCtx,
+			chromedp.WithErrorf(filteredErrorf),
+		)
+
+		// Verify the connection works using the browser context directly.
+		// Do NOT use context.WithTimeout derived from a chromedp context,
+		// as cancelling such a derived context kills the browser target.
+		if err := chromedp.Run(browserCtx, chromedp.Navigate("about:blank")); err != nil {
+			browserCancel()
+			allocCancel()
 			if verbose {
-				opts = append(opts, chromedp.WithLogf(filteredLogf))
+				log.Printf("Remote connection failed: %v, launching new browser", err)
 			}
-
-			browserCtx, browserCancel := chromedp.NewContext(allocCtx, opts...)
-
-			// Test connection
-			testCtx, testCancel := context.WithTimeout(browserCtx, 5*time.Second)
-			if err := chromedp.Run(testCtx, chromedp.Evaluate("1+1", nil)); err != nil {
-				testCancel()
-				browserCancel()
-				allocCancel()
-				continue // Try next port
+		} else {
+			if verbose {
+				log.Printf("Connected to running browser on port %d", remotePort)
 			}
-			testCancel()
-
-			// Return combined cancel function
 			cancel := func() {
 				browserCancel()
 				allocCancel()
 			}
-
 			return browserCtx, cancel, nil
 		}
 	}
 
-	// Auto-discover browser if no running Chrome found
-	var selectedPath string = chromePath
-	if chromePath == "" {
-		candidates, err := discoverBrowsers(verbose)
-		if err == nil && len(candidates) > 0 {
-			best := selectBestBrowser(candidates, verbose)
-			if best.Path != "" {
-				selectedPath = best.Path
-				if verbose {
-					log.Printf("Auto-selected browser: %s at %s", best.Name, selectedPath)
-				}
+	// Set up profile if requested.
+	var profileCleanup func()
+	var userDataDir string
+	if cfg.UseProfile != "" {
+		pm, err := chromeprofiles.NewProfileManager(
+			chromeprofiles.WithVerbose(verbose),
+		)
+		if err != nil {
+			return nil, nil, errors.Wrap(err, "failed to create profile manager")
+		}
+		if err := pm.SetupWorkdir(); err != nil {
+			return nil, nil, errors.Wrap(err, "failed to setup profile working directory")
+		}
+
+		var cookieDomains []string
+		if cfg.CookieDomains != "" {
+			cookieDomains = splitAndTrim(cfg.CookieDomains, ",")
+		}
+
+		// Check for Brave session isolation needs.
+		sessionDetector := browser.NewSessionDetector(verbose)
+		if sessionDetector.NeedsBraveSessionIsolation(ctx, selectedPath, true) {
+			if err := pm.BraveSessionIsolation(cfg.UseProfile, cookieDomains); err != nil {
+				pm.Cleanup()
+				return nil, nil, errors.Wrapf(err, "failed to create Brave isolated profile '%s'", cfg.UseProfile)
+			}
+		} else {
+			if err := pm.CopyProfile(cfg.UseProfile, cookieDomains); err != nil {
+				pm.Cleanup()
+				return nil, nil, errors.Wrapf(err, "failed to copy profile '%s'", cfg.UseProfile)
+			}
+		}
+
+		userDataDir = pm.WorkDir()
+		profileCleanup = func() { pm.Cleanup() }
+
+		if verbose {
+			if len(cookieDomains) > 0 {
+				log.Printf("Using profile '%s' with cookies filtered for domains: %v", cfg.UseProfile, cookieDomains)
+			} else {
+				log.Printf("Using profile '%s' with all cookies", cfg.UseProfile)
 			}
 		}
 	}
 
-	// Launch new Chrome instance
-	if verbose {
-		log.Println("Launching new Chrome instance...")
+	// Check if the debug port is already in use.
+	debugPort = resolveDebugPort(ctx, debugPort, verbose)
+
+	// Launch new browser instance, non-headless for interactive use.
+	opts := append(chromedp.DefaultExecAllocatorOptions[:],
+		chromedp.Flag("headless", false),
+		chromedp.Flag("remote-debugging-port", fmt.Sprintf("%d", debugPort)),
+	)
+	if selectedPath != "" {
+		opts = append(opts, chromedp.ExecPath(selectedPath))
+	}
+	if userDataDir != "" {
+		opts = append(opts, chromedp.UserDataDir(userDataDir))
 	}
 
-	opts := append(chromedp.DefaultExecAllocatorOptions[:],
-		chromedp.Flag("remote-debugging-port", "9222"),
-		chromedp.NoFirstRun,
-		chromedp.NoDefaultBrowserCheck,
-	)
+	if verbose {
+		log.Printf("Launching new browser (path=%s, port=%d)", selectedPath, debugPort)
+	}
 
-	// Override Chrome executable if we have a specific path
-	if selectedPath != "" {
-		opts = append(chromedp.DefaultExecAllocatorOptions[:],
-			chromedp.ExecPath(selectedPath),
-			chromedp.Flag("remote-debugging-port", "9222"),
-			chromedp.NoFirstRun,
-			chromedp.NoDefaultBrowserCheck,
-		)
+	if cfg.ShowChromeFlags {
+		opts = append(opts, chromedp.ModifyCmdFunc(func(cmd *exec.Cmd) {
+			fmt.Fprintf(os.Stderr, "Chrome flags: %s\n", strings.Join(cmd.Args[1:], " "))
+		}))
 	}
 
 	allocCtx, allocCancel := chromedp.NewExecAllocator(ctx, opts...)
+	browserCtx, browserCancel := chromedp.NewContext(allocCtx)
 
-	var browserOpts []chromedp.ContextOption
-	browserOpts = append(browserOpts, chromedp.WithErrorf(filteredErrorf))
-	if verbose {
-		browserOpts = append(browserOpts, chromedp.WithLogf(filteredLogf))
-	}
-
-	browserCtx, browserCancel := chromedp.NewContext(allocCtx, browserOpts...)
-
-	// Test that Chrome starts successfully
-	testCtx, testCancel := context.WithTimeout(browserCtx, 10*time.Second)
-	if err := chromedp.Run(testCtx, chromedp.Navigate("about:blank")); err != nil {
-		testCancel()
+	// Verify the browser starts by navigating to about:blank.
+	// Use browserCtx directly — do NOT wrap in context.WithTimeout,
+	// as cancelling a derived chromedp context kills the browser target.
+	if err := chromedp.Run(browserCtx, chromedp.Navigate("about:blank")); err != nil {
 		browserCancel()
 		allocCancel()
-		return nil, nil, errors.Wrap(err, "failed to start Chrome")
+		if profileCleanup != nil {
+			profileCleanup()
+		}
+		return nil, nil, errors.Wrap(err, "failed to start browser")
 	}
-	testCancel()
 
-	// Return combined cancel function
+	if verbose {
+		log.Println("Browser launched successfully")
+	}
+
 	cancel := func() {
 		browserCancel()
 		allocCancel()
+		if profileCleanup != nil {
+			profileCleanup()
+		}
 	}
-
 	return browserCtx, cancel, nil
 }
 
