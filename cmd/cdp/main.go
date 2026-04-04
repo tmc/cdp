@@ -24,6 +24,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/chromedp/cdproto/fetch"
 	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/cdproto/runtime"
 	"github.com/chromedp/cdproto/target"
@@ -1159,6 +1160,10 @@ func main() {
 
 		// Screenshot options
 		screenshotSelector string
+
+		// MCP server mode
+		mcpMode  bool
+		toolsDir string
 	)
 
 	flag.StringVar(&url, "url", "about:blank", "URL to navigate to on start")
@@ -1232,7 +1237,27 @@ func main() {
 	flag.BoolVar(&cdpProxyObserveSelf, "cdp-proxy-self", false, "When using cdp-proxy, also observe the browser driven by this command")
 	flag.BoolVar(&cdpProxyObserveSelf, "cdp-proxy-observe-self", false, "Route cdp's own CDP traffic through the proxy (requires --cdp-proxy)")
 
+	// MCP server mode
+	flag.BoolVar(&mcpMode, "mcp", false, "Run as MCP server (stdio transport)")
+	flag.StringVar(&toolsDir, "tools-dir", "", "Directory of .cdp tool definitions for MCP and shell")
+
 	flag.Parse()
+
+	// MCP server mode — run as MCP server and exit
+	if mcpMode {
+		mcpCfg := mcpConfig{
+			Headless:  headless,
+			Verbose:   verbose,
+			OutputDir: outputDir,
+			URL:       url,
+			DebugPort: debugPort,
+			ToolsDir:  toolsDir,
+		}
+		if err := runMCP(mcpCfg); err != nil {
+			exitWithError(ExitGeneralError, ErrorTypeGeneral, "MCP server: %v", err)
+		}
+		return
+	}
 
 	// Handle positional arguments as a command if -command is not set
 	if command == "" && flag.NArg() > 0 {
@@ -1378,6 +1403,7 @@ func main() {
 			CookieDomains:   cookieDomains,
 			DebugPort:       debugPort,
 			OutputDir:       outputDir,
+			ToolsDir:        toolsDir,
 		})
 		return
 	}
@@ -2520,6 +2546,23 @@ func main() {
 				}
 				if verbose {
 					log.Printf("Network event listeners attached successfully")
+				}
+
+				// Enable Fetch domain interception to capture gRPC-Web and
+				// other streaming fetch traffic that the Network domain misses.
+				if harMode == "enhanced" {
+					if err := chromedp.Run(browserCtx, fetch.Enable().WithPatterns([]*fetch.RequestPattern{
+						{URLPattern: "*", RequestStage: fetch.RequestStageResponse},
+					})); err != nil {
+						if verbose {
+							log.Printf("Warning: failed to enable Fetch domain: %v", err)
+						}
+					} else {
+						chromedp.ListenTarget(browserCtx, enhancedRecorder.HandleFetchEvent(browserCtx))
+						if verbose {
+							log.Printf("Fetch domain interception enabled for response body capture")
+						}
+					}
 				}
 
 				if harFile != "" {
@@ -3985,7 +4028,7 @@ func handleEnhancedMode(command string, interactive bool, cfg fullCaptureConfig)
 			defer chromeCancel()
 
 			// Start interactive mode with reconnection support
-			im := NewInteractiveMode(chromeCtx, chromeCancel, launched, cfg)
+			im := NewInteractiveMode(chromeCtx, chromeCancel, launched, cfg, cfg.ToolsDir)
 			if err := im.Run(); err != nil {
 				exitWithError(ExitGeneralError, ErrorTypeGeneral, "Interactive mode error: %v", err)
 			}
@@ -4083,6 +4126,7 @@ type fullCaptureConfig struct {
 	CookieDomains   string
 	DebugPort       int
 	OutputDir       string
+	ToolsDir        string
 }
 
 // resolveDebugPort checks if the desired port is available. If it's in use

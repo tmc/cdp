@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/chromedp/cdproto/dom"
+	"github.com/chromedp/cdproto/fetch"
 	"github.com/chromedp/cdproto/har"
 	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/chromedp"
@@ -53,6 +54,9 @@ type Recorder struct {
 	ctx           context.Context // Store context for async body fetching
 	outputDir     string
 	domainWriters map[string]*os.File
+
+	// Fetch domain interception
+	fetchBodies map[network.RequestID][]byte // Bodies captured via Fetch domain
 
 	// Tag tracking
 	currentTag string      // Currently active tag
@@ -134,6 +138,7 @@ func New(opts ...Option) (*Recorder, error) {
 		timings:       make(map[network.RequestID]*network.EventLoadingFinished),
 		requestTags:   make(map[network.RequestID]string),
 		annotations:   make([]*Annotation, 0),
+		fetchBodies:   make(map[network.RequestID][]byte),
 		domainWriters: make(map[string]*os.File),
 		tagRanges:     make([]*TagRange, 0),
 	}
@@ -196,13 +201,16 @@ func (r *Recorder) HandleNetworkEvent(ctx context.Context) func(interface{}) {
 		case *network.EventLoadingFinished:
 			r.timings[e.RequestID] = e
 
+			// Skip if body already captured via Fetch domain interception.
+			if _, ok := r.fetchBodies[e.RequestID]; ok {
+				break
+			}
+
 			// Fetch response bodies for both streaming and non-streaming modes.
 			// NOTE: GetResponseBody can fail with -32000 ("No resource with given
 			// identifier found") for redirects, cached responses, and service worker
 			// responses where Chrome evicts the body before we fetch it. This is a
-			// known CDP limitation. Future improvement: use Network.streamResourceContent
-			// or Fetch domain interception (Fetch.enable at RequestStageResponse) to
-			// guarantee body availability.
+			// known CDP limitation.
 			go func(reqID network.RequestID) {
 				r.Lock()
 				fetchCtx := r.ctx
@@ -249,6 +257,129 @@ func (r *Recorder) HandleNetworkEvent(ctx context.Context) func(interface{}) {
 				r.Unlock()
 			}(e.RequestID)
 		}
+	}
+}
+
+// HandleFetchEvent returns an event handler for Fetch domain events.
+// When Fetch.enable is called with RequestStageResponse patterns, Chrome
+// pauses each matching response and fires EventRequestPaused. This handler
+// captures the response body (guaranteed available while paused), records it,
+// and continues the response so the page receives it normally.
+//
+// This captures traffic that the Network domain may miss, such as gRPC-Web
+// streaming fetches and service-worker-intercepted requests.
+func (r *Recorder) HandleFetchEvent(ctx context.Context) func(interface{}) {
+	return func(ev interface{}) {
+		e, ok := ev.(*fetch.EventRequestPaused)
+		if !ok {
+			return
+		}
+
+		// Only handle responses (have a status code).
+		if e.ResponseStatusCode == 0 {
+			// Request stage — let it through.
+			go func() {
+				if err := chromedp.Run(ctx, chromedp.ActionFunc(func(c context.Context) error {
+					return fetch.ContinueRequest(e.RequestID).Do(c)
+				})); err != nil {
+					if r.verbose {
+						log.Printf("fetch: continue request %s: %v", e.RequestID, err)
+					}
+				}
+			}()
+			return
+		}
+
+		// Response stage — capture body then continue.
+		go func() {
+			var body []byte
+			err := chromedp.Run(ctx, chromedp.ActionFunc(func(c context.Context) error {
+				var fetchErr error
+				body, fetchErr = fetch.GetResponseBody(e.RequestID).Do(c)
+				return fetchErr
+			}))
+
+			// Always continue the response regardless of body fetch result.
+			if contErr := chromedp.Run(ctx, chromedp.ActionFunc(func(c context.Context) error {
+				return fetch.ContinueResponse(e.RequestID).Do(c)
+			})); contErr != nil {
+				if r.verbose {
+					log.Printf("fetch: continue response %s: %v", e.RequestID, contErr)
+				}
+			}
+
+			if err != nil {
+				if r.verbose {
+					log.Printf("fetch: get body %s: %v", e.RequestID, err)
+				}
+			}
+
+			// Map fetch request to network request ID if available.
+			netID := e.NetworkID
+			if netID == "" {
+				// Synthesize an ID for requests not seen by Network domain.
+				netID = network.RequestID("fetch:" + string(e.RequestID))
+			}
+
+			r.Lock()
+			defer r.Unlock()
+
+			// Store the request if not already known from Network events.
+			if _, exists := r.requests[netID]; !exists {
+				r.requests[netID] = e.Request
+				if r.currentTag != "" {
+					r.requestTags[netID] = r.currentTag
+				}
+				if e.Request.HasPostData && len(e.Request.PostDataEntries) > 0 {
+					var b strings.Builder
+					for _, entry := range e.Request.PostDataEntries {
+						if entry.Bytes != "" {
+							b.WriteString(entry.Bytes)
+						}
+					}
+					if b.Len() > 0 {
+						r.postData[netID] = b.String()
+					}
+				}
+			}
+
+			// Build a synthetic response from fetch headers.
+			if _, exists := r.responses[netID]; !exists {
+				hdrs := make(map[string]interface{}, len(e.ResponseHeaders))
+				mimeType := ""
+				for _, h := range e.ResponseHeaders {
+					hdrs[h.Name] = h.Value
+					if strings.EqualFold(h.Name, "content-type") {
+						mimeType = h.Value
+					}
+				}
+				r.responses[netID] = &network.Response{
+					URL:        e.Request.URL,
+					Status:     e.ResponseStatusCode,
+					StatusText: e.ResponseStatusText,
+					Headers:    network.Headers(hdrs),
+					MimeType:   mimeType,
+				}
+			}
+
+			if body != nil {
+				r.bodies[netID] = body
+				r.fetchBodies[netID] = body
+			}
+
+			if r.streaming {
+				resp := r.responses[netID]
+				if resp != nil {
+					entry := r.buildStreamEntry(netID, resp, body)
+					r.streamEntry(entry)
+				}
+			}
+
+			if r.verbose {
+				log.Printf("fetch: captured %s %s (%d bytes body)",
+					e.Request.Method, e.Request.URL, len(body))
+			}
+		}()
 	}
 }
 
