@@ -39,6 +39,11 @@ func registerMCPTools(server *mcp.Server, session *mcpSession) {
 	registerFileTools(server, session)
 	registerStorageTools(server, session)
 	registerEmulationTools(server, session)
+	registerInterceptTools(server, session)
+	registerPDFTools(server, session)
+	registerTraceTools(server, session)
+	registerStateTools(server, session)
+	registerDomDiffTools(server, session)
 }
 
 // --- Navigation tools ---

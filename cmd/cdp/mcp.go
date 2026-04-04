@@ -31,6 +31,9 @@ type mcpSession struct {
 	refs              *refRegistry
 	console           *consoleCollector
 	dialogs           *dialogCollector
+	intercepts        *interceptor
+	traces            *traceCollector
+	domSnapshots      *domSnapshotStore
 	activeFrameID     cdp.FrameID
 	outputDir         string
 	contextStack      []string
