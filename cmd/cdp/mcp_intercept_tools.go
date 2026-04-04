@@ -151,9 +151,16 @@ func (ic *interceptor) handleRequestPaused(ctx context.Context, ev *fetch.EventR
 
 	rule := ic.matchRule(ev.Request.URL, stage)
 	if rule == nil {
-		// No matching rule — continue the request unmodified.
-		if err := fetch.ContinueRequest(ev.RequestID).Do(ctx); err != nil {
-			log.Printf("intercept: continue request: %v", err)
+		// No matching rule — continue unmodified.
+		// Use ContinueResponse for response-stage, ContinueRequest for request-stage.
+		if stage == "response" {
+			if err := fetch.ContinueResponse(ev.RequestID).Do(ctx); err != nil {
+				log.Printf("intercept: continue response: %v", err)
+			}
+		} else {
+			if err := fetch.ContinueRequest(ev.RequestID).Do(ctx); err != nil {
+				log.Printf("intercept: continue request: %v", err)
+			}
 		}
 		return
 	}
@@ -245,11 +252,12 @@ type InterceptRequestInput struct {
 }
 
 type InterceptResponseInput struct {
-	URLPattern string            `json:"url_pattern"`
-	Action     string            `json:"action"`
-	StatusCode int64             `json:"status_code,omitempty"`
-	Headers    map[string]string `json:"headers,omitempty"`
-	Body       string            `json:"body,omitempty"`
+	URLPattern  string            `json:"url_pattern"`
+	Action      string            `json:"action"`
+	StatusCode  int64             `json:"status_code,omitempty"`
+	Headers     map[string]string `json:"headers,omitempty"`
+	Body        string            `json:"body,omitempty"`
+	ContentType string            `json:"content_type,omitempty"`
 }
 
 type RemoveInterceptInput struct {
@@ -301,12 +309,13 @@ func registerInterceptTools(server *mcp.Server, s *mcpSession) {
 		}
 
 		rule := interceptRule{
-			URLPattern: input.URLPattern,
-			Stage:      "response",
-			Action:     input.Action,
-			StatusCode: input.StatusCode,
-			Headers:    input.Headers,
-			Body:       input.Body,
+			URLPattern:  input.URLPattern,
+			Stage:       "response",
+			Action:      input.Action,
+			StatusCode:  input.StatusCode,
+			Headers:     input.Headers,
+			Body:        input.Body,
+			ContentType: input.ContentType,
 		}
 
 		if err := ensureInterceptEnabled(s); err != nil {
