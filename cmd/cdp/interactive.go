@@ -140,6 +140,24 @@ func (im *InteractiveMode) handleSpecialCommand(line string) bool {
 		fmt.Println("CDP Tool v1.0.0")
 		return true
 
+	case "refresh-profile", "rp":
+		if im.cfg.UseProfile == "" {
+			fmt.Println("No profile configured. Use --use-profile when launching.")
+			return true
+		}
+		fmt.Printf("Re-copying profile '%s' and reconnecting...\n", im.cfg.UseProfile)
+		if err := im.reconnect(); err != nil {
+			fmt.Printf("Error: %v\n", err)
+		}
+		return true
+
+	case "reconnect", "rc":
+		fmt.Println("Reconnecting to browser...")
+		if err := im.reconnect(); err != nil {
+			fmt.Printf("Error: %v\n", err)
+		}
+		return true
+
 	default:
 		return false
 	}

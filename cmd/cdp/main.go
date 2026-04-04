@@ -4062,11 +4062,20 @@ func setupChromeForEnhanced(ctx context.Context, cfg fullCaptureConfig) (context
 	// Check if the debug port is already in use.
 	debugPort = resolveDebugPort(ctx, debugPort, verbose)
 
-	// Launch new browser instance, non-headless for interactive use.
-	opts := append(chromedp.DefaultExecAllocatorOptions[:],
-		chromedp.Flag("headless", false),
+	// Launch new browser instance with minimal flags to avoid triggering
+	// automation detection. We skip chromedp.DefaultExecAllocatorOptions
+	// which includes --enable-automation, --disable-extensions, etc.
+	opts := []chromedp.ExecAllocatorOption{
+		chromedp.NoFirstRun,
+		chromedp.NoDefaultBrowserCheck,
 		chromedp.Flag("remote-debugging-port", fmt.Sprintf("%d", debugPort)),
-	)
+		// Keep a few stability flags that don't affect detection.
+		chromedp.Flag("disable-background-networking", true),
+		chromedp.Flag("disable-breakpad", true),
+		chromedp.Flag("disable-dev-shm-usage", true),
+		chromedp.Flag("disable-renderer-backgrounding", true),
+		chromedp.Flag("metrics-recording-only", true),
+	}
 	if selectedPath != "" {
 		opts = append(opts, chromedp.ExecPath(selectedPath))
 	}
