@@ -196,17 +196,19 @@ func (r *Recorder) HandleNetworkEvent(ctx context.Context) func(interface{}) {
 		case *network.EventLoadingFinished:
 			r.timings[e.RequestID] = e
 
-			// Always fetch response bodies (both streaming and non-streaming modes)
+			// Fetch response bodies for both streaming and non-streaming modes.
+			// NOTE: GetResponseBody can fail with -32000 ("No resource with given
+			// identifier found") for redirects, cached responses, and service worker
+			// responses where Chrome evicts the body before we fetch it. This is a
+			// known CDP limitation. Future improvement: use Network.streamResourceContent
+			// or Fetch domain interception (Fetch.enable at RequestStageResponse) to
+			// guarantee body availability.
 			go func(reqID network.RequestID) {
-				// Use stored context for fetching body
 				r.Lock()
 				fetchCtx := r.ctx
 				r.Unlock()
 
 				if fetchCtx == nil {
-					if r.verbose {
-						log.Printf("No context available for fetching response body")
-					}
 					return
 				}
 
@@ -217,10 +219,8 @@ func (r *Recorder) HandleNetworkEvent(ctx context.Context) func(interface{}) {
 					return fetchErr
 				}))
 				if err != nil {
-					if r.verbose {
-						log.Printf("Error getting response body for request %s: %v", reqID, err)
-					}
-					// Still stream the entry without body if we have the response
+					// Body unavailable — expected for redirects, cached, and
+					// service-worker responses. Stream entry without body.
 					if r.streaming {
 						r.Lock()
 						resp := r.responses[reqID]
