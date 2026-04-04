@@ -18,6 +18,7 @@ import (
 	"path/filepath"
 	"regexp"
 	goruntime "runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -2856,6 +2857,8 @@ func main() {
 		fmt.Println("Type 'exit' or press Ctrl+C to quit")
 
 		scanner := bufio.NewScanner(os.Stdin)
+		var contextStack []string
+		var shellHistory []string
 
 		// Create a channel to signal when scanner input is ready
 		inputChan := make(chan string)
@@ -3053,6 +3056,154 @@ func main() {
 						}
 						continue
 					}
+				}
+
+				// Track history
+				shellHistory = append(shellHistory, line)
+
+				// Handle history command
+				if cmd == "history" || cmd == "hist" {
+					for i, h := range shellHistory {
+						fmt.Printf("  %d  %s\n", i+1, h)
+					}
+					continue
+				}
+
+				// Handle context command - show current output directory context
+				if cmd == "context" {
+					if outputDir == "" {
+						fmt.Println("No --output-dir configured")
+					} else {
+						dir := outputDir
+						if len(contextStack) > 0 {
+							dir = filepath.Join(outputDir, filepath.Join(contextStack...))
+						}
+						fmt.Printf("Output directory: %s\n", dir)
+						if len(contextStack) > 0 {
+							fmt.Printf("Context stack: %s\n", strings.Join(contextStack, " > "))
+						}
+					}
+					continue
+				}
+
+				// Handle push-context command
+				if cmd == "push-context" || cmd == "push" {
+					if len(parts) < 2 {
+						fmt.Println("Usage: push-context <name>")
+						continue
+					}
+					if outputDir == "" {
+						fmt.Println("No --output-dir configured; context has no effect on output")
+					}
+					name := strings.TrimSpace(parts[1])
+					contextStack = append(contextStack, name)
+					dir := filepath.Join(outputDir, filepath.Join(contextStack...))
+					if outputDir != "" {
+						if err := os.MkdirAll(dir, 0755); err != nil {
+							fmt.Printf("Error creating context dir: %v\n", err)
+							contextStack = contextStack[:len(contextStack)-1]
+							continue
+						}
+					}
+					fmt.Printf("Pushed context: %s\n", name)
+					fmt.Printf("Output directory: %s\n", dir)
+					continue
+				}
+
+				// Handle pop-context command
+				if cmd == "pop-context" || cmd == "pop" {
+					if len(contextStack) == 0 {
+						fmt.Println("Context stack is empty")
+						continue
+					}
+					popped := contextStack[len(contextStack)-1]
+					contextStack = contextStack[:len(contextStack)-1]
+					dir := outputDir
+					if len(contextStack) > 0 {
+						dir = filepath.Join(outputDir, filepath.Join(contextStack...))
+					}
+					fmt.Printf("Popped context: %s\n", popped)
+					fmt.Printf("Output directory: %s\n", dir)
+					continue
+				}
+
+				// Handle tabs command - list browser tabs
+				if cmd == "tabs" || cmd == "lt" {
+					targets, err := chromedp.Targets(browserCtx)
+					if err != nil {
+						fmt.Printf("Error listing tabs: %v\n", err)
+						continue
+					}
+					for i, t := range targets {
+						if t.Type == "page" {
+							marker := " "
+							if t.TargetID == chromedp.FromContext(browserCtx).Target.TargetID {
+								marker = "*"
+							}
+							fmt.Printf("%s [%d] %s - %s\n", marker, i, t.Title, t.URL)
+						}
+					}
+					continue
+				}
+
+				// Handle newtab command
+				if cmd == "newtab" || cmd == "nt" {
+					url := "about:blank"
+					if len(parts) > 1 {
+						url = strings.TrimSpace(parts[1])
+					}
+					newCtx, _ := chromedp.NewContext(browserCtx)
+					if err := chromedp.Run(newCtx, chromedp.Navigate(url)); err != nil {
+						fmt.Printf("Error creating tab: %v\n", err)
+					} else {
+						browserCtx = newCtx
+						fmt.Printf("New tab: %s\n", url)
+					}
+					continue
+				}
+
+				// Handle tab switch command
+				if cmd == "tab" || cmd == "t" {
+					if len(parts) < 2 {
+						fmt.Println("Usage: tab <number|title-substring>")
+						continue
+					}
+					selector := strings.TrimSpace(parts[1])
+					targets, err := chromedp.Targets(browserCtx)
+					if err != nil {
+						fmt.Printf("Error listing tabs: %v\n", err)
+						continue
+					}
+					var pages []*target.Info
+					for _, t := range targets {
+						if t.Type == "page" {
+							pages = append(pages, t)
+						}
+					}
+					var found *target.Info
+					if idx, err := strconv.Atoi(selector); err == nil && idx >= 0 && idx < len(pages) {
+						found = pages[idx]
+					} else {
+						for _, p := range pages {
+							if strings.Contains(strings.ToLower(p.Title), strings.ToLower(selector)) ||
+								strings.Contains(strings.ToLower(p.URL), strings.ToLower(selector)) {
+								found = p
+								break
+							}
+						}
+					}
+					if found == nil {
+						fmt.Printf("No tab matching '%s'\n", selector)
+					} else {
+						newCtx, _ := chromedp.NewContext(browserCtx, chromedp.WithTargetID(found.TargetID))
+						if err := chromedp.Run(newCtx, chromedp.ActionFunc(func(ctx context.Context) error { return nil })); err != nil {
+							fmt.Printf("Error switching to tab: %v\n", err)
+						} else {
+							browserCtx = newCtx
+							fmt.Printf("Switched to: %s - %s\n", found.Title, found.URL)
+						}
+					}
+					continue
 				}
 
 				// Process command or alias
@@ -3704,7 +3855,18 @@ func printHelp() {
 	fmt.Println("  console           - Enable console monitoring (show console.log/error/warn)")
 	fmt.Println("  Use -console flag to enable from startup")
 
-	fmt.Println("\nCommands:")
+	fmt.Println("\nTab management:")
+	fmt.Println("  tabs / lt         - List open browser tabs")
+	fmt.Println("  newtab / nt [url] - Open a new tab (default: about:blank)")
+	fmt.Println("  tab / t <n|text>  - Switch to tab by index or title/URL substring")
+
+	fmt.Println("\nOutput context:")
+	fmt.Println("  context           - Show current output directory")
+
+	fmt.Println("\nFile commands:")
+	fmt.Println("  jsfile <path>     - Execute JavaScript from a file")
+
+	fmt.Println("\nSession commands:")
 	fmt.Println("  help              - Show this help")
 	fmt.Println("  help aliases      - List all alias commands")
 	fmt.Println("  help enhanced     - List enhanced commands (remote Chrome only)")

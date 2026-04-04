@@ -60,11 +60,31 @@ func (h *HelpSystem) showGeneralHelp() {
 		}
 	}
 
+	fmt.Println("\nTab Management:")
+	fmt.Println("────────────────")
+	fmt.Println("  tabs / lt            List open browser tabs")
+	fmt.Println("  newtab / nt [url]    Open a new tab (default: about:blank)")
+	fmt.Println("  tab / t <n|text>     Switch to tab by index or title/URL substring")
+
+	fmt.Println("\nOutput Context:")
+	fmt.Println("────────────────")
+	fmt.Println("  context              Show current output directory and context stack")
+	fmt.Println("  push-context <name>  Push a named context (writes to subdirectory)")
+	fmt.Println("  pop-context          Pop the current context")
+
+	fmt.Println("\nSession Management:")
+	fmt.Println("────────────────────")
+	fmt.Println("  reconnect / rc       Reconnect to browser if connection lost")
+	fmt.Println("  refresh-profile / rp Re-copy user profile and reconnect")
+	fmt.Println("  hup                  Detach from browser (leave it running)")
+
 	fmt.Println("\nSpecial Commands:")
 	fmt.Println("─────────────────")
 	fmt.Println("  help [command]       Show help for a specific command")
 	fmt.Println("  list                 List all available commands")
 	fmt.Println("  search <term>        Search for commands")
+	fmt.Println("  history              Show command history")
+	fmt.Println("  verbose              Toggle verbose mode")
 	fmt.Println("  exit/quit            Exit the program")
 
 	fmt.Println("\nExamples:")

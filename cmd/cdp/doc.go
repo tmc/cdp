@@ -1,123 +1,184 @@
 /*
 cdp: Interactive Chrome DevTools Protocol Command-Line Tool
 
-cdp launches a Google Chrome instance and provides an interactive command-line
-prompt (REPL) for executing raw Chrome DevTools Protocol (CDP) commands.
-This allows direct interaction with the browser's debugging and introspection APIs,
-facilitating tasks like programmatic debugging, automation, and exploring protocol
-capabilities.
+cdp connects to or launches a Chrome/Brave browser and provides an interactive
+command-line prompt (REPL) for executing Chrome DevTools Protocol (CDP) commands,
+capturing network traffic as HAR/HARL, and managing browser sessions.
 
 Usage:
 
 	cdp [flags]
 
-Flags:
+Connection Flags:
 
-	-headless
-	    Run Chrome in headless mode (without UI). Recommended for scripting
-	    or CI environments. Automatically enables --disable-gpu.
-	-profile <name>
-	    Load Chrome with the specified user profile directory name
-	    (e.g., "Default", "Profile 1"). This allows using existing
-	    extensions, cookies, and settings. If the profile is not found,
-	    a warning is logged, and Chrome launches without a specific profile.
-	-url <url>
-	    Navigate to the specified URL upon starting Chrome.
-	    (default: "about:blank")
+	-remote-host <host>
+	    Connect to remote Chrome at this host.
+	-remote-port <port>
+	    Remote Chrome debugging port. (default: 9222)
+	-remote-tab <id|url>
+	    Connect to a specific tab by ID or URL.
+	-tab <id>
+	    Target a specific tab ID.
+	-list-tabs
+	    List available tabs on remote Chrome and exit.
+	-list-browsers
+	    List all discovered browsers (running or installed) and exit.
+	-connect-existing
+	    Prefer connecting to existing Chrome sessions.
+
+Launch Flags:
+
 	-chrome-path <path>
-	    Explicit path to the Chrome executable. If empty, cdp attempts
-	    to find Chrome automatically.
+	    Explicit path to the Chrome/Brave executable.
+	-headless
+	    Run Chrome in headless mode (without UI).
 	-debug-port <port>
-	    Connect to an already running Chrome instance listening on the
-	    specified debugging port. If 0 (default), cdp launches a new
-	    Chrome instance on a random debugging port.
+	    Chrome debugging port. (default: 9222)
+	-url <url>
+	    Navigate to this URL on start. (default: "about:blank")
+	-window-position <x,y>
+	    Set window position (e.g., "100,100").
+	-window-size <w,h>
+	    Set window size (e.g., "1920,1080").
+	-new-window
+	    Force open in new window (vs reusing existing).
+	-chrome-flags <flags>
+	    Additional Chrome flags (space-separated).
+	-show-chrome-flags
+	    Print the Chrome command-line flags used at launch.
+
+Session & Profile Flags:
+
+	-full-capture
+	    Interactive mode with full request/response body capture.
+	-use-profile <name>
+	    Use Chrome profile with cookies and session data.
+	-profile-dir <dir>
+	    Custom profile directory (overrides default locations).
+	-cookie-domains <domains>
+	    Comma-separated list of domains to include cookies from.
+	-list-profiles
+	    List available Chrome profiles and exit.
+
+Capture Flags:
+
+	-har <file>
+	    Save HAR file to this path.
+	-har-mode <mode>
+	    HAR capture mode: enhanced (complete headers/bodies) or simple. (default: "enhanced")
+	-harl
+	    Stream HAR entries as NDJSON.
+	-harl-file <file>
+	    File to stream NDJSON to (use '-' for stdout). (default: "output.har.jsonl")
+	-output-dir <dir>
+	    Directory to write domain-organized logs to (overrides --harl-file).
+	-monitor-all-tabs
+	    Monitor network traffic from all browser tabs.
+
+Execution Flags:
+
+	-shell
+	    Start in interactive shell mode (auto if no --url or --js).
+	-interactive
+	    Keep browser open for interaction.
+	-command <cmd>
+	    Execute a single CDP command and exit.
+	-js <script>
+	    Execute JavaScript and exit (repeatable via -js flag).
+	-wait-ready
+	    Wait for page load and network idle before executing -js scripts.
+	-await
+	    Await Promise return values from -js scripts.
 	-timeout <seconds>
-	    Maximum time in seconds to wait for Chrome to launch and for
-	    individual CDP commands to complete. (default: 60)
+	    Max seconds to wait for commands. 0 for no timeout. (default: 60)
+	-screenshot <selector>
+	    Take a screenshot and exit (CSS selector or 'full' for full page).
+
+Display Flags:
+
 	-verbose
-	    Enable verbose logging, including browser console output and
-	    internal cdp tool messages.
+	    Enable verbose logging.
+	-console
+	    Monitor and display browser console messages.
+	-console-stacks
+	    Show full stack traces for console errors.
+	-format <format>
+	    Output format: text or json. (default: "text")
 
-Interactive Prompt:
+Interactive Shell Commands:
 
-Once connected, cdp presents a "cdp> " prompt. You can enter CDP commands
-or use predefined aliases.
+Once connected, cdp presents a "cdp> " prompt. Commands fall into several categories.
 
-Command Format:
+CDP Commands (Domain.method format):
 
-	Domain.method {JSON parameters}
+	Page.navigate {"url":"https://example.com"}
+	Runtime.evaluate {"expression":"document.title"}
+	DOM.getDocument {}
+	Network.getAllCookies {}
 
-Examples:
+Navigation Aliases:
 
-	# Evaluate JavaScript
-	cdp> Runtime.evaluate {"expression": "navigator.userAgent"}
+	goto <url>          Navigate to URL
+	reload              Reload the current page
+	title               Get page title
+	url                 Get current URL
+	html                Get page HTML
 
-	# Navigate the current page
-	cdp> Page.navigate {"url": "https://google.com"}
+Tab Management:
 
-	# Enable the debugger (also enabled by default)
-	cdp> Debugger.enable {}
+	tabs / lt           List open browser tabs
+	newtab / nt [url]   Open a new tab (default: about:blank)
+	tab / t <n|text>    Switch to tab by index or title/URL substring
 
-	# Set a breakpoint
-	cdp> Debugger.setBreakpoint {"location": {"scriptId": "123", "lineNumber": 42}}
+Output Context:
 
-Aliases:
+	context             Show current output directory and context stack
+	push-context <name> Push a named context (writes HAR to subdirectory)
+	pop-context         Pop the current context
 
-cdp provides aliases for common debugging and coverage tasks. Type 'help aliases'
-in the prompt for a full list.
+Screenshots:
 
-	# Debugger Aliases
-	pause         # Alias for Debugger.pause {}
-	resume | cont # Alias for Debugger.resume {}
-	step | stepinto # Alias for Debugger.stepInto {}
-	next | stepover # Alias for Debugger.stepOver {}
-	out | stepout  # Alias for Debugger.stepOut {}
+	screenshot                    Full-page screenshot saved to file
+	screenshot <selector>         Element screenshot (CSS selector)
+	screenshot <selector> <file>  Save element screenshot to specific file
+	screenshot --json             Full-page screenshot as base64 JSON
 
-	# JS Coverage Aliases (Profiler Domain)
-	covjs_enable  # Alias for Profiler.enable {}
-	covjs_start   # Start precise JS coverage collection
-	covjs_take    # Take a JS coverage delta report
-	covjs_stop    # Stop JS coverage collection
-	covjs_disable # Alias for Profiler.disable {}
+Source Extraction:
 
-	# CSS Coverage Aliases (CSS Domain)
-	covcss_enable  # Alias for CSS.enable {}
-	covcss_start   # Start CSS rule usage tracking
-	covcss_take    # Take a CSS coverage delta report
-	covcss_stop    # Stop CSS rule usage tracking (returns final delta)
-	covcss_disable # Alias for CSS.disable {}
+	sources                       List all JavaScript and CSS sources
+	sources --save <dir>          Save all inline sources to directory
+	sources --type js|css|inline  Filter by source type
+	sources --get <url>           Display specific source content
 
-Debugging Workflow Example:
+File Commands:
 
- 1. `cdp> Page.navigate {"url":"your_test_page.html"}`
- 2. Set breakpoints using `Debugger.setBreakpoint` or `Debugger.setBreakpointByUrl`.
- 3. Interact with the page (e.g., `Runtime.evaluate {"expression":"document.querySelector('button').click()"}`).
- 4. When paused (indicated by `<-- Paused: Debugger.paused` event), inspect state:
-    `cdp> Runtime.getProperties {"objectId": "..."}` (get objectId from paused event details)
- 5. Use stepping aliases: `step`, `next`, `out`.
- 6. Resume execution: `cont`.
+	jsfile <path>       Execute JavaScript from a file
 
-Coverage Workflow Example (JS):
+Annotation Commands (--har-mode=enhanced only):
 
-1.  `cdp> Page.navigate {"url":"your_test_page.html"}`
-2.  `cdp> covjs_start`
-3.  Interact with the page/features you want to measure.
-4.  `cdp> covjs_take` (View coverage collected so far)
-5.  Continue interaction...
-6.  `cdp> covjs_stop` (View final coverage report)
-7.  `cdp> covjs_disable`
+	note <text>         Add a text annotation to HAR file
+	dom <desc>          Capture DOM snapshot
 
-Output:
+Console Monitoring:
 
-  - Successful command results are printed as pretty-formatted JSON.
-  - Errors from Chrome are printed with error codes and messages.
-  - Asynchronous events received from Chrome (e.g., Network.requestWillBeSent)
-    are printed prefixed with "<-- Event:".
-  - Debugger paused/resumed events are highlighted with "<-- Paused:" / "<-- Resumed".
+	console             Enable console monitoring
 
-Exiting:
+Session Commands:
 
-Type 'exit', 'quit', or press Ctrl+D (EOF) to close the connection and exit cdp.
-Press Ctrl+C to send an interrupt signal, which also triggers shutdown.
+	reconnect / rc      Reconnect to browser if connection lost
+	refresh-profile / rp Re-copy user profile and reconnect
+	hup                 Detach from browser (leave it running)
+	help                Show help
+	help aliases        List all alias commands
+	exit / quit         Exit the program
+
+Exit Codes:
+
+	0 - Success
+	1 - General error
+	2 - Command line usage error
+	3 - Browser launch/connection failed
+	4 - Page navigation failed
+	5 - Operation timed out
 */
 package main
