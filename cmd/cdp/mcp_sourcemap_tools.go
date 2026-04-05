@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/tmc/misc/chrome-to-har/internal/coverage"
 	"github.com/tmc/misc/chrome-to-har/internal/sourcemap"
 )
 
@@ -119,20 +120,19 @@ set_bundle_structure with the inferred file structure.`,
 			return nil, nil, fmt.Errorf("analyze_bundle: bundle_url is required")
 		}
 
-		chunks, bundleSource, err := extractBundleChunks(s, input.BundleURL, input.SnapshotName)
+		data, err := extractBundleCoverage(s, input.BundleURL, input.SnapshotName)
 		if err != nil {
 			return nil, nil, fmt.Errorf("analyze_bundle: %w", err)
 		}
-		if len(chunks) == 0 {
+		if len(data.Chunks) == 0 {
 			return &mcp.CallToolResult{
 				Content: []mcp.Content{&mcp.TextContent{Text: "no executed code found for " + input.BundleURL + " — start coverage and navigate first"}},
 			}, nil, nil
 		}
 
 		// Try MCP sampling first — works with clients that support CreateMessage.
-		result, samplingErr := sampleBundleAnalysis(ctx, req.Session, input.BundleURL, chunks, input.ActionLabel)
+		result, samplingErr := sampleBundleAnalysis(ctx, req.Session, input.BundleURL, data.Chunks, input.ActionLabel)
 		if samplingErr == nil && result != nil {
-			// Sampling succeeded — generate sourcemap directly.
 			if s.syntheticMaps == nil {
 				s.syntheticMaps = newSyntheticMapStore()
 			}
@@ -142,7 +142,7 @@ set_bundle_structure with the inferred file structure.`,
 			}
 			sm.Sources = result
 
-			mapJSON, err := generateMapFromInferred(bundleSource, result)
+			mapJSON, err := generateMapFromInferred(data.Source, result)
 			if err != nil {
 				return nil, nil, fmt.Errorf("analyze_bundle: generate map: %w", err)
 			}
@@ -156,9 +156,6 @@ set_bundle_structure with the inferred file structure.`,
 			}
 			for _, f := range result.Files {
 				fmt.Fprintf(&b, "  %s (lines %d-%d): %s\n", f.Path, f.StartLine, f.EndLine, f.Description)
-				for _, fn := range f.Functions {
-					fmt.Fprintf(&b, "    %s (lines %d-%d): %s\n", fn.Name, fn.StartLine, fn.EndLine, fn.Description)
-				}
 			}
 			fmt.Fprintf(&b, "\nSourcemap generated (%d bytes). Use serve_sourcemap to activate.\n", len(mapJSON))
 			return &mcp.CallToolResult{
@@ -166,14 +163,15 @@ set_bundle_structure with the inferred file structure.`,
 			}, nil, nil
 		}
 
-		// Sampling not available — return chunks for the agent to analyze.
-		prompt := buildAnalysisPrompt(input.BundleURL, chunks, input.ActionLabel)
+		// Sampling not available — return function-level coverage for agent analysis.
+		prompt := buildFunctionAnalysisPrompt(input.BundleURL, data, input.ActionLabel)
 
 		var b strings.Builder
-		fmt.Fprintf(&b, "Bundle: %s\nExecuted chunks: %d\n", input.BundleURL, len(chunks))
+		fmt.Fprintf(&b, "Bundle: %s (%d bytes, %d functions, %d executed chunks)\n",
+			input.BundleURL, len(data.Source), len(data.Functions), len(data.Chunks))
 		fmt.Fprintf(&b, "(MCP sampling unavailable: %v)\n\n", samplingErr)
 		b.WriteString(prompt)
-		b.WriteString("\n\nAfter analyzing the chunks above, call set_bundle_structure with:\n")
+		b.WriteString("\n\nAfter analyzing, call set_bundle_structure with:\n")
 		b.WriteString(`  {"bundle_url": "` + input.BundleURL + `", "structure": <your JSON response>}`)
 		b.WriteString("\n")
 
@@ -466,18 +464,33 @@ Otherwise, returns new chunks for you to re-analyze, then call set_bundle_struct
 	})
 }
 
+// bundleCoverageData holds coverage data for a single bundle script.
+type bundleCoverageData struct {
+	Source    string
+	Chunks   []sourcemap.CodeChunk
+	Functions []coverage.FunctionCoverage
+}
+
 // extractBundleChunks gets coverage data for a specific bundle URL.
 func extractBundleChunks(s *mcpSession, bundleURL, snapshotName string) ([]sourcemap.CodeChunk, string, error) {
+	data, err := extractBundleCoverage(s, bundleURL, snapshotName)
+	if err != nil {
+		return nil, "", err
+	}
+	return data.Chunks, data.Source, nil
+}
+
+// extractBundleCoverage gets full coverage data including per-function entries.
+func extractBundleCoverage(s *mcpSession, bundleURL, snapshotName string) (*bundleCoverageData, error) {
 	if s.coverageCollector == nil {
-		return nil, "", fmt.Errorf("coverage not active — use start_coverage first")
+		return nil, fmt.Errorf("coverage not active — use start_coverage first")
 	}
 
 	snapshots := s.coverageCollector.Snapshots()
 	if len(snapshots) == 0 {
-		return nil, "", fmt.Errorf("no coverage snapshots — take a snapshot first")
+		return nil, fmt.Errorf("no coverage snapshots — take a snapshot first")
 	}
 
-	// Find the requested snapshot (or latest).
 	var snap = snapshots[len(snapshots)-1]
 	if snapshotName != "" {
 		snap = nil
@@ -488,16 +501,15 @@ func extractBundleChunks(s *mcpSession, bundleURL, snapshotName string) ([]sourc
 			}
 		}
 		if snap == nil {
-			return nil, "", fmt.Errorf("snapshot %q not found", snapshotName)
+			return nil, fmt.Errorf("snapshot %q not found", snapshotName)
 		}
 	}
 
 	scriptCov, ok := snap.Scripts[bundleURL]
 	if !ok {
-		return nil, "", fmt.Errorf("no coverage data for %s in snapshot %s", bundleURL, snap.Name)
+		return nil, fmt.Errorf("no coverage data for %s in snapshot %s", bundleURL, snap.Name)
 	}
 
-	// Convert coverage ranges.
 	var ranges []sourcemap.CoverageRange
 	for _, r := range scriptCov.ByteRanges {
 		ranges = append(ranges, sourcemap.CoverageRange{
@@ -508,7 +520,11 @@ func extractBundleChunks(s *mcpSession, bundleURL, snapshotName string) ([]sourc
 	}
 
 	chunks := sourcemap.ExtractChunks(scriptCov.Source, ranges, 3)
-	return chunks, scriptCov.Source, nil
+	return &bundleCoverageData{
+		Source:    scriptCov.Source,
+		Chunks:   chunks,
+		Functions: scriptCov.Functions,
+	}, nil
 }
 
 
@@ -551,6 +567,132 @@ func sampleBundleAnalysis(ctx context.Context, session *mcp.ServerSession, bundl
 		return nil, fmt.Errorf("parse sampling response: %w\nraw: %.500s", err, text)
 	}
 	return &inferred, nil
+}
+
+// buildFunctionAnalysisPrompt creates a prompt using V8's per-function coverage data.
+// This is superior to chunk-based analysis for minified bundles because V8 gives us
+// precise function boundaries regardless of how the code was bundled.
+func buildFunctionAnalysisPrompt(bundleURL string, data *bundleCoverageData, actionLabel string) string {
+	var b strings.Builder
+	b.WriteString("Analyze this JavaScript bundle to infer original source files.\n")
+	b.WriteString("V8 has identified individual functions with precise byte ranges.\n\n")
+	fmt.Fprintf(&b, "Bundle URL: %s\n", bundleURL)
+	fmt.Fprintf(&b, "Bundle size: %d bytes\n", len(data.Source))
+	if actionLabel != "" {
+		fmt.Fprintf(&b, "Action context: %s\n", actionLabel)
+	}
+
+	// Show executed functions with their source text.
+	executedFns := 0
+	for _, fn := range data.Functions {
+		if fn.HitCount > 0 {
+			executedFns++
+		}
+	}
+	fmt.Fprintf(&b, "Total functions: %d (%d executed)\n\n", len(data.Functions), executedFns)
+
+	b.WriteString("=== EXECUTED FUNCTIONS ===\n\n")
+	shown := 0
+	for _, fn := range data.Functions {
+		if fn.HitCount == 0 {
+			continue
+		}
+		if shown >= 50 {
+			fmt.Fprintf(&b, "... and %d more executed functions (truncated)\n", executedFns-50)
+			break
+		}
+		shown++
+
+		name := fn.Name
+		if name == "" {
+			name = "(anonymous)"
+		}
+
+		// Extract the function's source text from the bundle using byte ranges.
+		funcSource := ""
+		if len(fn.Ranges) > 0 {
+			start := fn.Ranges[0].StartOffset
+			end := fn.Ranges[0].EndOffset
+			if start >= 0 && end <= len(data.Source) && start < end {
+				funcSource = data.Source[start:end]
+			}
+		}
+
+		fmt.Fprintf(&b, "--- Function: %s (bytes %d-%d, %d hits) ---\n",
+			name, fn.StartLine, fn.EndLine, fn.HitCount) // StartLine/EndLine are already computed
+		if len(fn.Ranges) > 0 {
+			fmt.Fprintf(&b, "    byte range: %d-%d\n", fn.Ranges[0].StartOffset, fn.Ranges[0].EndOffset)
+		}
+		if funcSource != "" {
+			if len(funcSource) > 1500 {
+				funcSource = funcSource[:1500] + "\n// ... truncated"
+			}
+			b.WriteString(funcSource)
+			b.WriteString("\n\n")
+		}
+	}
+
+	// Also list non-executed functions briefly (they might be dead code or lazy-loaded).
+	unexecuted := 0
+	for _, fn := range data.Functions {
+		if fn.HitCount == 0 {
+			unexecuted++
+		}
+	}
+	if unexecuted > 0 {
+		fmt.Fprintf(&b, "\n=== NON-EXECUTED FUNCTIONS (%d) ===\n", unexecuted)
+		shown = 0
+		for _, fn := range data.Functions {
+			if fn.HitCount != 0 {
+				continue
+			}
+			if shown >= 20 {
+				fmt.Fprintf(&b, "... and %d more\n", unexecuted-20)
+				break
+			}
+			shown++
+			name := fn.Name
+			if name == "" {
+				name = "(anonymous)"
+			}
+			if len(fn.Ranges) > 0 {
+				fmt.Fprintf(&b, "  %s (bytes %d-%d)\n", name, fn.Ranges[0].StartOffset, fn.Ranges[0].EndOffset)
+			} else {
+				fmt.Fprintf(&b, "  %s\n", name)
+			}
+		}
+	}
+
+	b.WriteString(`
+
+Respond with JSON:
+{
+  "files": [
+    {
+      "path": "src/router.js",
+      "description": "Client-side router",
+      "start_offset": 0,
+      "end_offset": 5000,
+      "start_line": 1,
+      "end_line": 1,
+      "functions": [
+        {"name": "navigate", "start_line": 1, "end_line": 1, "description": "Navigate to path", "exported": true}
+      ],
+      "framework": "next",
+      "module": "routing"
+    }
+  ],
+  "summary": "Brief description"
+}
+
+Rules:
+- Group functions into inferred source files based on naming, call patterns, and co-activation
+- start_offset/end_offset are BYTE positions in the bundle (critical for minified single-line code)
+- For webpack/turbopack: module IDs in require() calls hint at module boundaries
+- Export names (Object.defineProperty patterns) often match original file/function names
+- Cluster co-activated functions (similar hit counts) into the same module
+`)
+	return b.String()
 }
 
 func buildAnalysisPrompt(bundleURL string, chunks []sourcemap.CodeChunk, actionLabel string) string {
