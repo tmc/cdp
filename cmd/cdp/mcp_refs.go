@@ -247,6 +247,9 @@ func buildAXSnapshot(ctx context.Context, refs *refRegistry) (string, error) {
 // resolveRef resolves a @ref number to a BackendNodeID.
 // If the selector starts with "@", it's treated as a ref.
 // Otherwise returns 0 (meaning use CSS selector).
+// When the stored BackendNodeID is stale (DOM node gone), it attempts
+// recovery by re-querying the AX tree for a node matching the stored
+// role and name.
 func resolveRef(refs *refRegistry, selector string) (cdp.BackendNodeID, error) {
 	if !strings.HasPrefix(selector, "@") {
 		return 0, nil
@@ -260,6 +263,69 @@ func resolveRef(refs *refRegistry, selector string) (cdp.BackendNodeID, error) {
 		return 0, fmt.Errorf("ref %s not found (run page_snapshot to refresh refs)", selector)
 	}
 	return entry.BackendNodeID, nil
+}
+
+// resolveRefWithRecovery is like resolveRef but takes a context so it can
+// attempt stale-ref recovery when DOM.resolveNode would fail.
+func resolveRefWithRecovery(ctx context.Context, refs *refRegistry, selector string) (cdp.BackendNodeID, error) {
+	if !strings.HasPrefix(selector, "@") {
+		return 0, nil
+	}
+	var ref int
+	if _, err := fmt.Sscanf(selector, "@%d", &ref); err != nil {
+		return 0, fmt.Errorf("invalid ref %q: %w", selector, err)
+	}
+	entry, ok := refs.get(ref)
+	if !ok {
+		return 0, fmt.Errorf("ref %s not found (run page_snapshot to refresh refs)", selector)
+	}
+
+	// Check if the stored node is still valid by attempting to resolve it.
+	_, err := dom.ResolveNode().WithBackendNodeID(entry.BackendNodeID).Do(ctx)
+	if err == nil {
+		return entry.BackendNodeID, nil
+	}
+
+	// Node is stale — try to recover by matching role+name in the AX tree.
+	if entry.Role == "" {
+		return 0, fmt.Errorf("ref %s is stale and has no role for recovery (run page_snapshot to refresh)", selector)
+	}
+	recovered, recovErr := recoverRef(ctx, refs, ref, entry)
+	if recovErr != nil {
+		return 0, fmt.Errorf("ref %s is stale: %w (run page_snapshot to refresh)", selector, recovErr)
+	}
+	return recovered, nil
+}
+
+// recoverRef searches the AX tree for a node matching the given role and name,
+// updates the ref entry, and returns the new BackendNodeID.
+func recoverRef(ctx context.Context, refs *refRegistry, ref int, entry refEntry) (cdp.BackendNodeID, error) {
+	nodes, err := accessibility.GetFullAXTree().Do(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("recovery ax tree: %w", err)
+	}
+
+	// Look for exact role+name match.
+	for _, n := range nodes {
+		if n.Ignored || n.BackendDOMNodeID == 0 {
+			continue
+		}
+		role := axValueString(n.Role)
+		name := axValueString(n.Name)
+		if role == entry.Role && name == entry.Name {
+			// Update the ref entry with the new BackendNodeID.
+			refs.mu.Lock()
+			refs.entries[ref] = refEntry{
+				BackendNodeID: n.BackendDOMNodeID,
+				Role:          role,
+				Name:          name,
+			}
+			refs.mu.Unlock()
+			return n.BackendDOMNodeID, nil
+		}
+	}
+
+	return 0, fmt.Errorf("no matching node with role=%q name=%q", entry.Role, entry.Name)
 }
 
 // clickByBackendNodeID scrolls to the element, gets its center, and clicks it.

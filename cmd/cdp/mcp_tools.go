@@ -340,20 +340,17 @@ func registerInteractionTools(server *mcp.Server, s *mcpSession) {
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input ClickInput) (*mcp.CallToolResult, any, error) {
 		actx, cancel := interactionCtx(s.activeCtx(), input.Timeout)
 		defer cancel()
-		backendID, err := resolveRef(s.refs, input.Selector)
-		if err != nil {
-			return nil, nil, fmt.Errorf("click: %w", err)
-		}
-		if backendID != 0 {
-			if err := chromedp.Run(actx, chromedp.ActionFunc(func(ctx context.Context) error {
+		if err := chromedp.Run(actx, chromedp.ActionFunc(func(ctx context.Context) error {
+			backendID, err := resolveRefWithRecovery(ctx, s.refs, input.Selector)
+			if err != nil {
+				return err
+			}
+			if backendID != 0 {
 				return clickByBackendNodeID(ctx, backendID)
-			})); err != nil {
-				return nil, nil, fmt.Errorf("click: %w", err)
 			}
-		} else {
-			if err := chromedp.Run(actx, chromedp.Click(input.Selector, chromedp.ByQuery)); err != nil {
-				return nil, nil, fmt.Errorf("click: %w", err)
-			}
+			return chromedp.Click(input.Selector, chromedp.ByQuery).Do(ctx)
+		})); err != nil {
+			return nil, nil, fmt.Errorf("click: %w", err)
 		}
 		return &mcp.CallToolResult{
 			Content: []mcp.Content{
@@ -372,20 +369,17 @@ func registerInteractionTools(server *mcp.Server, s *mcpSession) {
 		}
 		actx, cancel := interactionCtx(s.activeCtx(), input.Timeout)
 		defer cancel()
-		backendID, err := resolveRef(s.refs, input.Selector)
-		if err != nil {
-			return nil, nil, fmt.Errorf("type_text: %w", err)
-		}
-		if backendID != 0 {
-			if err := chromedp.Run(actx, chromedp.ActionFunc(func(ctx context.Context) error {
+		if err := chromedp.Run(actx, chromedp.ActionFunc(func(ctx context.Context) error {
+			backendID, err := resolveRefWithRecovery(ctx, s.refs, input.Selector)
+			if err != nil {
+				return err
+			}
+			if backendID != 0 {
 				return typeByBackendNodeID(ctx, backendID, text)
-			})); err != nil {
-				return nil, nil, fmt.Errorf("type_text: %w", err)
 			}
-		} else {
-			if err := chromedp.Run(actx, chromedp.SendKeys(input.Selector, text, chromedp.ByQuery)); err != nil {
-				return nil, nil, fmt.Errorf("type_text: %w", err)
-			}
+			return chromedp.SendKeys(input.Selector, text, chromedp.ByQuery).Do(ctx)
+		})); err != nil {
+			return nil, nil, fmt.Errorf("type_text: %w", err)
 		}
 		return &mcp.CallToolResult{
 			Content: []mcp.Content{
@@ -400,23 +394,18 @@ func registerInteractionTools(server *mcp.Server, s *mcpSession) {
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input WaitForInput) (*mcp.CallToolResult, any, error) {
 		actx, cancel := interactionCtx(s.activeCtx(), input.Timeout)
 		defer cancel()
-		// For @refs, check that the element exists (it was visible at snapshot time).
-		backendID, err := resolveRef(s.refs, input.Selector)
-		if err != nil {
-			return nil, nil, fmt.Errorf("wait_for: %w", err)
-		}
-		if backendID != 0 {
-			// Verify the node still exists by describing it.
-			if err := chromedp.Run(actx, chromedp.ActionFunc(func(ctx context.Context) error {
+		if err := chromedp.Run(actx, chromedp.ActionFunc(func(ctx context.Context) error {
+			backendID, err := resolveRefWithRecovery(ctx, s.refs, input.Selector)
+			if err != nil {
+				return err
+			}
+			if backendID != 0 {
 				_, err := dom.DescribeNode().WithBackendNodeID(backendID).Do(ctx)
 				return err
-			})); err != nil {
-				return nil, nil, fmt.Errorf("wait_for: ref element no longer exists: %w", err)
 			}
-		} else {
-			if err := chromedp.Run(actx, chromedp.WaitVisible(input.Selector, chromedp.ByQuery)); err != nil {
-				return nil, nil, fmt.Errorf("wait_for: %w", err)
-			}
+			return chromedp.WaitVisible(input.Selector, chromedp.ByQuery).Do(ctx)
+		})); err != nil {
+			return nil, nil, fmt.Errorf("wait_for: %w", err)
 		}
 		return &mcp.CallToolResult{
 			Content: []mcp.Content{
