@@ -35,6 +35,7 @@ type mcpSession struct {
 	traces            *traceCollector
 	domSnapshots      *domSnapshotStore
 	syntheticMaps     *syntheticMapStore
+	webMCP            *webMCPCollector
 	activeFrameID     cdp.FrameID
 	outputDir         string
 	contextStack      []string
