@@ -164,27 +164,35 @@ func enableWebMCP(ctx context.Context) (*webMCPCollector, error) {
 // discoverToolsViaJS uses the JS API to discover registered tools.
 // Returns a JSON array of tool info, or an error.
 func discoverToolsViaJS(ctx context.Context) (string, error) {
-	expr := `(async () => {
-  const mc = navigator.modelContext;
-  if (!mc) return JSON.stringify({error: "no navigator.modelContext"});
-  if (typeof mc.getTools === 'function') {
-    const tools = await mc.getTools();
-    return JSON.stringify(tools.map(t => ({
-      name: t.name,
-      description: t.description || '',
-      input_schema: t.inputSchema || null,
-    })));
-  }
-  const methods = Object.getOwnPropertyNames(Object.getPrototypeOf(mc))
-    .filter(m => m !== 'constructor');
-  return JSON.stringify({
-    error: "getTools() not available",
-    available_methods: methods,
-    note: "This browser version supports registerTool/unregisterTool but not tool discovery."
-  });
-})()`
+	// Check if getTools is available (sync check).
+	var hasGetTools bool
+	if err := chromedp.Run(ctx, chromedp.Evaluate(
+		`typeof navigator.modelContext !== 'undefined' && typeof navigator.modelContext.getTools === 'function'`,
+		&hasGetTools,
+	)); err != nil {
+		return "", fmt.Errorf("discover tools via JS: %w", err)
+	}
+
+	if hasGetTools {
+		// Use getTools() — requires await, so use a promise callback pattern.
+		var result string
+		err := chromedp.Run(ctx, chromedp.Evaluate(
+			`navigator.modelContext.getTools().then(tools => JSON.stringify(tools.map(t => ({name: t.name, description: t.description || '', input_schema: t.inputSchema || null}))))`,
+			&result, chromedp.EvalAsValue,
+		))
+		if err != nil {
+			return "", fmt.Errorf("discover tools via JS: getTools: %w", err)
+		}
+		return result, nil
+	}
+
+	// No getTools — report available methods (sync, no async needed).
 	var result string
-	if err := chromedp.Run(ctx, chromedp.Evaluate(expr, &result, chromedp.EvalAsValue)); err != nil {
+	if err := chromedp.Run(ctx, chromedp.Evaluate(`JSON.stringify({
+  error: "getTools() not available",
+  available_methods: Object.getOwnPropertyNames(Object.getPrototypeOf(navigator.modelContext)).filter(m => m !== 'constructor'),
+  note: "This browser version supports registerTool/unregisterTool but not tool discovery."
+})`, &result)); err != nil {
 		return "", fmt.Errorf("discover tools via JS: %w", err)
 	}
 	return result, nil
@@ -193,20 +201,29 @@ func discoverToolsViaJS(ctx context.Context) (string, error) {
 // invokeWebToolJS calls a tool via the JS API, with a shape that works
 // regardless of whether getTools()/execute() or a direct invoke pattern is used.
 func invokeWebToolJS(ctx context.Context, name, inputJSON string) (string, error) {
-	expr := fmt.Sprintf(`(async () => {
-  const mc = navigator.modelContext;
-  if (!mc) throw new Error("no navigator.modelContext");
-  if (typeof mc.getTools === 'function') {
-    const tools = await mc.getTools();
-    const tool = tools.find(t => t.name === %q);
-    if (!tool) throw new Error("tool not found: %s");
-    return JSON.stringify(await tool.execute(%s));
-  }
-  if (typeof mc.invokeTool === 'function') {
-    return JSON.stringify(await mc.invokeTool(%q, %s));
-  }
-  throw new Error("no tool invocation method available (tried getTools().execute() and invokeTool())");
-})()`, name, name, inputJSON, name, inputJSON)
+	// Use .then() chains instead of async IIFE to avoid Brave EvaluateAsDevTools bug.
+	expr := fmt.Sprintf(`navigator.modelContext.getTools().then(tools => {
+  const tool = tools.find(t => t.name === %q);
+  if (!tool) throw new Error("tool not found: %s");
+  return tool.execute(%s);
+}).then(result => JSON.stringify(result))`, name, name, inputJSON)
+
+	var hasGetTools bool
+	if err := chromedp.Run(ctx, chromedp.Evaluate(
+		`typeof navigator.modelContext !== 'undefined' && typeof navigator.modelContext.getTools === 'function'`,
+		&hasGetTools,
+	)); err != nil || !hasGetTools {
+		// Try invokeTool as fallback.
+		invokeExpr := fmt.Sprintf(
+			`navigator.modelContext.invokeTool(%q, %s).then(r => JSON.stringify(r))`,
+			name, inputJSON,
+		)
+		var result string
+		if err2 := chromedp.Run(ctx, chromedp.Evaluate(invokeExpr, &result, chromedp.EvalAsValue)); err2 != nil {
+			return "", fmt.Errorf("invoke web tool %q: no invocation method available", name)
+		}
+		return result, nil
+	}
 
 	var result string
 	if err := chromedp.Run(ctx, chromedp.Evaluate(expr, &result, chromedp.EvalAsValue)); err != nil {
@@ -218,14 +235,12 @@ func invokeWebToolJS(ctx context.Context, name, inputJSON string) (string, error
 // invokeWebTool calls a page-registered MCP tool via Runtime.evaluate.
 // The WebMCP CDP domain is observation-only; invocation requires JS injection.
 func invokeWebTool(ctx context.Context, name, inputJSON string) (string, error) {
-	// Build the JS expression to find and invoke the tool.
-	expr := fmt.Sprintf(`(async () => {
-  const tools = await navigator.modelContext.getTools();
+	expr := fmt.Sprintf(
+		`navigator.modelContext.getTools().then(tools => {
   const tool = tools.find(t => t.name === %q);
   if (!tool) throw new Error("tool not found: %s");
-  const input = %s;
-  return JSON.stringify(await tool.execute(input));
-})()`, name, name, inputJSON)
+  return tool.execute(%s);
+}).then(result => JSON.stringify(result))`, name, name, inputJSON)
 
 	var result string
 	if err := chromedp.Run(ctx, chromedp.Evaluate(expr, &result, chromedp.EvalAsValue)); err != nil {
