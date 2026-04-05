@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -247,8 +248,17 @@ func runMCP(cfg mcpConfig) error {
 	}
 
 	// Start coverage API server for the DevTools extension.
-	if cfg.APIPort > 0 {
-		go startCoverageAPI(cfg.APIPort, session)
+	// In MCP mode, auto-assign a free port if none specified.
+	apiPort := cfg.APIPort
+	if apiPort == 0 {
+		if ln, err := net.Listen("tcp", "127.0.0.1:0"); err == nil {
+			apiPort = ln.Addr().(*net.TCPAddr).Port
+			ln.Close()
+		}
+	}
+	if apiPort > 0 {
+		log.Printf("Coverage API server on port %d", apiPort)
+		go startCoverageAPI(apiPort, session)
 	}
 
 	// Set up browser in a goroutine so the MCP server can respond to
