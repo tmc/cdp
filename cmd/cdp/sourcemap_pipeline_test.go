@@ -731,6 +731,94 @@ func TestSourcemapDiskPersistence(t *testing.T) {
 			t.Error("expected 0 from empty sourcesDir")
 		}
 	})
+
+	t.Run("AnalysisLog", func(t *testing.T) {
+		mapPath := sourcemapDiskPath(tmpDir, bundleURL)
+		bundleSource := "function app() { return 'hello'; }\nfunction render() { document.write('hi'); }\n"
+
+		inferred := &inferredResult{
+			Summary: "Small app with render function",
+			Files: []inferredFile{
+				{
+					Path:        "src/app.js",
+					Description: "App entry — identified by React.createElement pattern",
+					StartOffset: 0,
+					EndOffset:   35,
+					Functions: []inferredFunc{
+						{Name: "app", StartLine: 1, EndLine: 1, Description: "Main app function — export name match"},
+					},
+				},
+				{
+					Path:        "src/render.js",
+					Description: "DOM renderer — document.write call pattern",
+					StartOffset: 36,
+					EndOffset:   80,
+				},
+			},
+		}
+
+		// Write first entry.
+		appendAnalysisLog(mapPath, bundleURL, "homepage", inferred, bundleSource, false)
+
+		entries, err := readAnalysisLog(mapPath)
+		if err != nil {
+			t.Fatalf("read log: %v", err)
+		}
+		if len(entries) != 1 {
+			t.Fatalf("expected 1 entry, got %d", len(entries))
+		}
+		e := entries[0]
+		if e.BundleURL != bundleURL {
+			t.Errorf("bundle URL = %q", e.BundleURL)
+		}
+		if e.Context != "homepage" {
+			t.Errorf("context = %q, want %q", e.Context, "homepage")
+		}
+		if e.IsRefinement {
+			t.Error("expected IsRefinement=false for first entry")
+		}
+		if len(e.Files) != 2 {
+			t.Fatalf("expected 2 files, got %d", len(e.Files))
+		}
+		if e.Files[0].Path != "src/app.js" {
+			t.Errorf("file 0 path = %q", e.Files[0].Path)
+		}
+		if e.Files[0].Snippet == "" {
+			t.Error("expected non-empty snippet")
+		}
+		if e.Files[0].Reasoning != "App entry — identified by React.createElement pattern" {
+			t.Errorf("reasoning = %q", e.Files[0].Reasoning)
+		}
+		if len(e.Files[0].Functions) != 1 || e.Files[0].Functions[0].Name != "app" {
+			t.Error("expected function 'app'")
+		}
+
+		// Write refinement entry.
+		inferred.Summary = "Refined with new coverage data"
+		appendAnalysisLog(mapPath, bundleURL, "after-click", inferred, bundleSource, true)
+
+		entries, err = readAnalysisLog(mapPath)
+		if err != nil {
+			t.Fatalf("read log after refinement: %v", err)
+		}
+		if len(entries) != 2 {
+			t.Fatalf("expected 2 entries, got %d", len(entries))
+		}
+		if !entries[1].IsRefinement {
+			t.Error("expected IsRefinement=true for second entry")
+		}
+		if entries[1].Context != "after-click" {
+			t.Errorf("context = %q, want %q", entries[1].Context, "after-click")
+		}
+
+		// Verify countAnalysisLogEntries.
+		if n := countAnalysisLogEntries(mapPath); n != 2 {
+			t.Errorf("count = %d, want 2", n)
+		}
+		if n := countAnalysisLogEntries(""); n != 0 {
+			t.Errorf("count for empty path = %d, want 0", n)
+		}
+	})
 }
 
 // TestBuildAnalysisPrompt verifies the prompt builder produces a well-formed prompt.

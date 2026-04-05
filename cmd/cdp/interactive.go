@@ -1213,13 +1213,14 @@ func (im *InteractiveMode) registerSourcemapCommands() {
 		Name:        "sourcemap",
 		Category:    "Sourcemap",
 		Description: "Synthetic sourcemap generation from coverage data",
-		Usage:       "sourcemap <analyze|set-structure|generate|serve|list> [args]",
+		Usage:       "sourcemap <analyze|set-structure|generate|serve|list|log> [args]",
 		Examples: []string{
 			"sourcemap analyze http://example.com/bundle.js",
 			"sourcemap analyze http://example.com/bundle.js after-login",
 			`sourcemap set-structure http://example.com/bundle.js '{"files":[...],"summary":"..."}'`,
 			"sourcemap generate http://example.com/bundle.js",
 			"sourcemap list",
+			"sourcemap log http://example.com/bundle.js",
 		},
 		Aliases: []string{"smap"},
 		Handler: func(ctx context.Context, args []string) error {
@@ -1253,8 +1254,13 @@ func (im *InteractiveMode) registerSourcemapCommands() {
 				return im.sourcemapServe(args[1])
 			case "list":
 				return im.sourcemapList()
+			case "log":
+				if len(args) < 2 {
+					return fmt.Errorf("usage: sourcemap log <bundle_url>")
+				}
+				return im.sourcemapLog(args[1])
 			default:
-				return fmt.Errorf("unknown subcommand %q: use analyze, set-structure, generate, serve, list", args[0])
+				return fmt.Errorf("unknown subcommand %q: use analyze, set-structure, generate, serve, list, log", args[0])
 			}
 		},
 	})
@@ -1402,9 +1408,15 @@ func (im *InteractiveMode) sourcemapSetStructure(bundleURL, jsonStr string) erro
 	if im.sourceCollector != nil {
 		sourcesDir = im.sourceCollector.OutputDir()
 	}
+	isRefinement := sm.Sources != nil && len(sm.Sources.Files) > 0
 	if path := writeSourcemapToDisk(sourcesDir, bundleURL, mapJSON); path != "" {
 		sm.MapPath = path
 		writeStructureSidecar(path, &result)
+		ctxName := ""
+		if len(im.contextStack) > 0 {
+			ctxName = strings.Join(im.contextStack, "/")
+		}
+		appendAnalysisLog(path, bundleURL, ctxName, &result, scriptCov.Source, isRefinement)
 	}
 
 	im.syntheticMaps.set(bundleURL, sm)
@@ -1468,10 +1480,71 @@ func (im *InteractiveMode) sourcemapList() error {
 		if sm.Serving {
 			status = fmt.Sprintf("serving (rule %s)", sm.InterceptID)
 		}
-		fmt.Printf("  %s: %d files, %d bytes [%s]\n", sm.BundleURL, nFiles, len(sm.MapJSON), status)
+		logCount := countAnalysisLogEntries(sm.MapPath)
+		logInfo := ""
+		if logCount > 0 {
+			logInfo = fmt.Sprintf(", %d log entries", logCount)
+		}
+		fmt.Printf("  %s: %d files, %d bytes [%s%s]\n", sm.BundleURL, nFiles, len(sm.MapJSON), status, logInfo)
 		if sm.MapPath != "" {
 			fmt.Printf("    → %s\n", sm.MapPath)
 		}
+	}
+	return nil
+}
+
+func (im *InteractiveMode) sourcemapLog(bundleURL string) error {
+	if im.syntheticMaps == nil {
+		return fmt.Errorf("no sourcemaps")
+	}
+	sm := im.syntheticMaps.get(bundleURL)
+	if sm == nil {
+		// Try substring match.
+		for _, m := range im.syntheticMaps.list() {
+			if strings.Contains(m.BundleURL, bundleURL) {
+				sm = m
+				break
+			}
+		}
+	}
+	if sm == nil || sm.MapPath == "" {
+		return fmt.Errorf("no on-disk sourcemap for %s", bundleURL)
+	}
+
+	entries, err := readAnalysisLog(sm.MapPath)
+	if err != nil {
+		return fmt.Errorf("read log: %w", err)
+	}
+	if len(entries) == 0 {
+		fmt.Println("No analysis log entries.")
+		return nil
+	}
+
+	fmt.Printf("Analysis log for %s (%d entries):\n\n", sm.BundleURL, len(entries))
+	for i, e := range entries {
+		kind := "new"
+		if e.IsRefinement {
+			kind = "refinement"
+		}
+		ctx := ""
+		if e.Context != "" {
+			ctx = fmt.Sprintf(" [context: %s]", e.Context)
+		}
+		fmt.Printf("--- Entry %d (%s, %s%s) ---\n", i+1, e.Timestamp, kind, ctx)
+		if e.Summary != "" {
+			fmt.Printf("  Summary: %s\n", e.Summary)
+		}
+		for _, f := range e.Files {
+			fmt.Printf("  %s (bytes %d-%d)\n", f.Path, f.StartOffset, f.EndOffset)
+			fmt.Printf("    Reasoning: %s\n", f.Reasoning)
+			if f.Snippet != "" {
+				fmt.Printf("    Snippet: %s\n", f.Snippet)
+			}
+			for _, fn := range f.Functions {
+				fmt.Printf("    fn %s (L%d-%d): %s\n", fn.Name, fn.StartLine, fn.EndLine, fn.Reasoning)
+			}
+		}
+		fmt.Println()
 	}
 	return nil
 }

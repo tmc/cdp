@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/tmc/misc/chrome-to-har/internal/coverage"
@@ -24,6 +25,33 @@ type syntheticMap struct {
 	Serving      bool            `json:"serving"`
 	InterceptID  string          `json:"intercept_id,omitempty"`
 	MapPath      string          `json:"map_path,omitempty"` // on-disk path to .map file
+	LogEntries   int             `json:"log_entries,omitempty"`
+}
+
+// analysisLogEntry records the reasoning behind sourcemap naming decisions.
+type analysisLogEntry struct {
+	Timestamp   string               `json:"timestamp"`
+	BundleURL   string               `json:"bundle_url"`
+	Context     string               `json:"context,omitempty"`
+	IsRefinement bool                `json:"is_refinement"`
+	Summary     string               `json:"summary"`
+	Files       []analysisFileEntry  `json:"files"`
+}
+
+type analysisFileEntry struct {
+	Path        string              `json:"path"`
+	StartOffset int                 `json:"start_offset"`
+	EndOffset   int                 `json:"end_offset"`
+	Snippet     string              `json:"snippet"`
+	Reasoning   string              `json:"reasoning"`
+	Functions   []analysisFuncEntry `json:"functions,omitempty"`
+}
+
+type analysisFuncEntry struct {
+	Name      string `json:"name"`
+	StartLine int    `json:"start_line"`
+	EndLine   int    `json:"end_line"`
+	Reasoning string `json:"reasoning"`
 }
 
 // inferredResult is the LLM's structured response about bundle structure.
@@ -199,6 +227,106 @@ func writeStructureSidecar(mapPath string, sources *inferredResult) {
 	os.WriteFile(structPath, data, 0644)
 }
 
+// analysisLogPath returns the .analysis-log.jsonl path for a bundle's .map path.
+func analysisLogPath(mapPath string) string {
+	if mapPath == "" {
+		return ""
+	}
+	return strings.TrimSuffix(mapPath, ".map") + ".analysis-log.jsonl"
+}
+
+// appendAnalysisLog appends an entry to the analysis log.
+// bundleSource is used to extract code snippets for each file.
+func appendAnalysisLog(mapPath, bundleURL, contextName string, result *inferredResult, bundleSource string, isRefinement bool) {
+	logPath := analysisLogPath(mapPath)
+	if logPath == "" {
+		return
+	}
+
+	entry := analysisLogEntry{
+		Timestamp:    time.Now().UTC().Format(time.RFC3339),
+		BundleURL:    bundleURL,
+		Context:      contextName,
+		IsRefinement: isRefinement,
+		Summary:      result.Summary,
+	}
+
+	for _, f := range result.Files {
+		snippet := ""
+		if bundleSource != "" && f.StartOffset >= 0 && f.EndOffset > f.StartOffset && f.EndOffset <= len(bundleSource) {
+			snippet = bundleSource[f.StartOffset:f.EndOffset]
+		}
+		if len(snippet) > 200 {
+			snippet = snippet[:200] + "..."
+		}
+
+		fe := analysisFileEntry{
+			Path:        f.Path,
+			StartOffset: f.StartOffset,
+			EndOffset:   f.EndOffset,
+			Snippet:     snippet,
+			Reasoning:   f.Description,
+		}
+		for _, fn := range f.Functions {
+			fe.Functions = append(fe.Functions, analysisFuncEntry{
+				Name:      fn.Name,
+				StartLine: fn.StartLine,
+				EndLine:   fn.EndLine,
+				Reasoning: fn.Description,
+			})
+		}
+		entry.Files = append(entry.Files, fe)
+	}
+
+	data, err := json.Marshal(entry)
+	if err != nil {
+		log.Printf("analysis log: marshal: %v", err)
+		return
+	}
+	data = append(data, '\n')
+
+	f, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		log.Printf("analysis log: open %s: %v", logPath, err)
+		return
+	}
+	defer f.Close()
+	f.Write(data)
+}
+
+// readAnalysisLog reads all entries from an analysis log file.
+func readAnalysisLog(mapPath string) ([]analysisLogEntry, error) {
+	logPath := analysisLogPath(mapPath)
+	if logPath == "" {
+		return nil, fmt.Errorf("no log path")
+	}
+	data, err := os.ReadFile(logPath)
+	if err != nil {
+		return nil, err
+	}
+	var entries []analysisLogEntry
+	for _, line := range strings.Split(strings.TrimSpace(string(data)), "\n") {
+		if line == "" {
+			continue
+		}
+		var e analysisLogEntry
+		if err := json.Unmarshal([]byte(line), &e); err != nil {
+			continue
+		}
+		entries = append(entries, e)
+	}
+	return entries, nil
+}
+
+// countAnalysisLogEntries returns the number of entries in an analysis log.
+func countAnalysisLogEntries(mapPath string) int {
+	entries, err := readAnalysisLog(mapPath)
+	if err != nil {
+		return 0
+	}
+	return len(entries)
+}
+
 // --- MCP tool registration ---
 
 type AnalyzeBundleInput struct {
@@ -349,9 +477,11 @@ functions (optional), framework (optional), module (optional).`,
 		if s.sourceCollector != nil {
 			sourcesDir = s.sourceCollector.OutputDir()
 		}
+		isRefinement := sm.Sources != nil && len(sm.Sources.Files) > 0
 		if path := writeSourcemapToDisk(sourcesDir, input.BundleURL, mapJSON); path != "" {
 			sm.MapPath = path
 			writeStructureSidecar(path, &result)
+			appendAnalysisLog(path, input.BundleURL, s.contextPath(), &result, bundleSource, isRefinement)
 		}
 
 		// Hot-update the intercept rule if already serving.
@@ -491,6 +621,7 @@ functions (optional), framework (optional), module (optional).`,
 			Serving     bool   `json:"serving"`
 			InterceptID string `json:"intercept_id,omitempty"`
 			MapPath     string `json:"map_path,omitempty"`
+			LogEntries  int    `json:"log_entries"`
 		}
 		var infos []mapInfo
 		for _, m := range maps {
@@ -505,6 +636,7 @@ functions (optional), framework (optional), module (optional).`,
 				Serving:     m.Serving,
 				InterceptID: m.InterceptID,
 				MapPath:     m.MapPath,
+				LogEntries:  countAnalysisLogEntries(m.MapPath),
 			})
 		}
 		data, _ := json.Marshal(infos)
@@ -585,6 +717,17 @@ Otherwise, returns new chunks for you to re-analyze, then call set_bundle_struct
 					fmt.Fprintf(&b, "Currently serving (rule %s). ", existing.InterceptID)
 				}
 				b.WriteString("\n")
+				// Include prior reasoning from analysis log.
+				if existing.MapPath != "" {
+					if entries, err := readAnalysisLog(existing.MapPath); err == nil && len(entries) > 0 {
+						last := entries[len(entries)-1]
+						fmt.Fprintf(&b, "\nPrior analysis (%s):\n", last.Timestamp)
+						for _, f := range last.Files {
+							fmt.Fprintf(&b, "  %s (bytes %d-%d): %s\n", f.Path, f.StartOffset, f.EndOffset, f.Reasoning)
+						}
+						b.WriteString("\n")
+					}
+				}
 			}
 		}
 		b.WriteString("\n")
@@ -596,6 +739,41 @@ Otherwise, returns new chunks for you to re-analyze, then call set_bundle_struct
 
 		return &mcp.CallToolResult{
 			Content: []mcp.Content{&mcp.TextContent{Text: b.String()}},
+		}, nil, nil
+	})
+
+	type GetAnalysisLogInput struct {
+		BundleURL string `json:"bundle_url"`
+		Last      int    `json:"last,omitempty"`
+	}
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "get_analysis_log",
+		Description: "Read the analysis log for a bundle — shows prior reasoning behind sourcemap naming decisions across sessions.",
+		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
+	}, func(ctx context.Context, req *mcp.CallToolRequest, input GetAnalysisLogInput) (*mcp.CallToolResult, any, error) {
+		if s.syntheticMaps == nil {
+			return nil, nil, fmt.Errorf("get_analysis_log: no sourcemaps")
+		}
+		sm := s.syntheticMaps.get(input.BundleURL)
+		if sm == nil || sm.MapPath == "" {
+			return nil, nil, fmt.Errorf("get_analysis_log: no on-disk sourcemap for %s", input.BundleURL)
+		}
+		entries, err := readAnalysisLog(sm.MapPath)
+		if err != nil {
+			return nil, nil, fmt.Errorf("get_analysis_log: %w", err)
+		}
+		if len(entries) == 0 {
+			return &mcp.CallToolResult{
+				Content: []mcp.Content{&mcp.TextContent{Text: "no analysis log entries for " + input.BundleURL}},
+			}, nil, nil
+		}
+		if input.Last > 0 && input.Last < len(entries) {
+			entries = entries[len(entries)-input.Last:]
+		}
+		data, _ := json.MarshalIndent(entries, "", "  ")
+		return &mcp.CallToolResult{
+			Content: []mcp.Content{&mcp.TextContent{Text: string(data)}},
 		}, nil, nil
 	})
 }
