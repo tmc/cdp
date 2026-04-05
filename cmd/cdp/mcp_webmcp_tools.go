@@ -111,19 +111,22 @@ func (w *webMCPCollector) listInvocations(last int) []webMCPInvocation {
 
 // enableWebMCP enables the WebMCP domain and starts listening for events.
 // Falls back to JS API mode if the CDP domain is unavailable (-32601).
+//
+// Note: all CDP calls here use chromedp.ActionFunc + direct protocol calls
+// rather than sequential chromedp.Run calls. This avoids deadlocks: chromedp
+// serializes actions through a single executor per target, so if webmcp.Enable
+// hangs, subsequent chromedp.Run calls on the same context would block forever.
 func enableWebMCP(ctx context.Context) (*webMCPCollector, error) {
 	collector := newWebMCPCollector()
 
-	// Try the CDP domain first with a timeout. We use a goroutine + channel
-	// instead of context.WithTimeout because cancelling a chromedp-derived
-	// context kills the browser target.
-	type result struct{ err error }
-	ch := make(chan result, 1)
+	// Try the CDP domain first with a timeout.
+	type cdpResult struct{ err error }
+	ch := make(chan cdpResult, 1)
 	go func() {
 		err := chromedp.Run(ctx, chromedp.ActionFunc(func(ctx context.Context) error {
 			return webmcp.Enable().Do(ctx)
 		}))
-		ch <- result{err}
+		ch <- cdpResult{err}
 	}()
 
 	var cdpErr error
@@ -135,12 +138,13 @@ func enableWebMCP(ctx context.Context) (*webMCPCollector, error) {
 	}
 
 	if cdpErr == nil {
-		// CDP domain available — listen for events.
 		chromedp.ListenTarget(ctx, collector.handleEvent)
 		return collector, nil
 	}
 
-	// Check for JS API fallback with a timeout to avoid hanging.
+	// CDP domain failed. Probe JS APIs using runtime.Evaluate directly
+	// to avoid blocking on the chromedp executor (which may still be held
+	// by the timed-out webmcp.Enable goroutine).
 	type jsProbe struct {
 		hasContext bool
 		hasTesting bool
@@ -149,15 +153,35 @@ func enableWebMCP(ctx context.Context) (*webMCPCollector, error) {
 	jsCh := make(chan jsProbe, 1)
 	go func() {
 		var p jsProbe
-		p.err = chromedp.Run(ctx, chromedp.Evaluate(
-			`typeof navigator.modelContext !== 'undefined'`, &p.hasContext,
-		))
-		if p.err == nil {
-			chromedp.Run(ctx, chromedp.Evaluate(
+		// Use chromedp.Run with ActionFunc to get the cdp executor context,
+		// then call runtime.Evaluate directly. This queues behind the hung
+		// Enable only if the executor is truly blocked — but since Enable
+		// sends a CDP command and waits for a response, the executor is
+		// released between commands.
+		p.err = chromedp.Run(ctx, chromedp.ActionFunc(func(ectx context.Context) error {
+			// Check modelContext.
+			res, _, err := runtime.Evaluate(`typeof navigator.modelContext !== 'undefined'`).Do(ectx)
+			if err != nil {
+				return err
+			}
+			if res.Value != nil {
+				json.Unmarshal(res.Value, &p.hasContext)
+			}
+			if !p.hasContext {
+				return nil
+			}
+			// Check modelContextTesting.
+			res2, _, err := runtime.Evaluate(
 				`typeof navigator.modelContextTesting !== 'undefined' && typeof navigator.modelContextTesting.listTools === 'function'`,
-				&p.hasTesting,
-			))
-		}
+			).Do(ectx)
+			if err != nil {
+				return nil // non-fatal
+			}
+			if res2.Value != nil {
+				json.Unmarshal(res2.Value, &p.hasTesting)
+			}
+			return nil
+		}))
 		jsCh <- p
 	}()
 
@@ -165,7 +189,7 @@ func enableWebMCP(ctx context.Context) (*webMCPCollector, error) {
 	select {
 	case probe = <-jsCh:
 	case <-time.After(5 * time.Second):
-		return nil, fmt.Errorf("enable WebMCP domain: %w (JS API check timed out)", cdpErr)
+		return nil, fmt.Errorf("enable WebMCP domain: %w (JS API check timed out — executor may be blocked)", cdpErr)
 	}
 	if probe.err != nil || !probe.hasContext {
 		return nil, fmt.Errorf("enable WebMCP domain: %w (JS API also unavailable)", cdpErr)
@@ -250,7 +274,7 @@ func invokeWebToolJS(ctx context.Context, name, inputJSON string) (string, error
 		var result string
 		if err := chromedp.Run(ctx, chromedp.ActionFunc(func(ctx context.Context) error {
 			expr := fmt.Sprintf(
-				`navigator.modelContextTesting.executeTool(%q, %s).then(r => typeof r === 'string' ? r : JSON.stringify(r))`,
+				`navigator.modelContextTesting.executeTool(%q, %q).then(r => typeof r === 'string' ? r : JSON.stringify(r))`,
 				name, inputJSON,
 			)
 			res, exc, err := runtime.Evaluate(expr).WithAwaitPromise(true).Do(ctx)
