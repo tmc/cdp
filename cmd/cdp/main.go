@@ -1264,15 +1264,16 @@ func main() {
 	// MCP server mode — run as MCP server and exit
 	if mcpMode {
 		mcpCfg := mcpConfig{
-			Headless:    headless,
-			Verbose:     verbose,
-			OutputDir:   outputDir,
-			URL:         url,
-			DebugPort:   debugPort,
-			ToolsDir:    toolsDir,
-			SaveSources: saveSources,
-			NoScrub:     noScrub,
-			APIPort:     apiPort,
+			Headless:       headless,
+			Verbose:        verbose,
+			OutputDir:      outputDir,
+			URL:            url,
+			DebugPort:      debugPort,
+			ToolsDir:       toolsDir,
+			SaveSources:    saveSources,
+			NoScrub:        noScrub,
+			APIPort:        apiPort,
+			LoadExtensions: loadExtensions,
 		}
 		if err := runMCP(mcpCfg); err != nil {
 			exitWithError(ExitGeneralError, ErrorTypeGeneral, "MCP server: %v", err)
@@ -4229,6 +4230,7 @@ type fullCaptureConfig struct {
 	SaveSources     bool
 	NoScrub         bool
 	APIPort         int
+	LoadExtensions  string
 }
 
 // resolveDebugPort checks if the desired port is available. If it's in use
@@ -4392,6 +4394,9 @@ func setupChromeForEnhanced(ctx context.Context, cfg fullCaptureConfig) (context
 		chromedp.Flag("disable-renderer-backgrounding", true),
 		chromedp.Flag("metrics-recording-only", true),
 		chromedp.Flag("enable-unsafe-extension-debugging", true),
+	}
+	if cfg.LoadExtensions != "" {
+		opts = append(opts, chromedp.Flag("load-extension", cfg.LoadExtensions))
 	}
 	if selectedPath != "" {
 		opts = append(opts, chromedp.ExecPath(selectedPath))
