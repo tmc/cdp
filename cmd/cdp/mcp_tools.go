@@ -128,9 +128,10 @@ func registerNavigationTools(server *mcp.Server, s *mcpSession) {
 type ScreenshotInput struct {
 	Selector string `json:"selector,omitempty"`
 	FullPage bool   `json:"full_page,omitempty"`
-	Width    int    `json:"width,omitempty"`   // max width in pixels; downscales proportionally
-	Quality  int    `json:"quality,omitempty"` // 1-100; uses JPEG when set (much smaller than PNG)
-	Format   string `json:"format,omitempty"`  // png (default), jpeg, or webp
+	Width    int    `json:"width,omitempty"`    // max width in pixels; downscales proportionally
+	Quality  int    `json:"quality,omitempty"`  // 1-100; uses JPEG when set (much smaller than PNG)
+	Format   string `json:"format,omitempty"`   // png (default), jpeg, or webp
+	Annotate bool   `json:"annotate,omitempty"` // draw numbered boxes around interactive elements
 }
 
 type GetPageContentInput struct {
@@ -141,21 +142,26 @@ type GetPageContentInput struct {
 func registerObservationTools(server *mcp.Server, s *mcpSession) {
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "screenshot",
-		Description: "Take a screenshot. Options: selector (element only), full_page, width (max px, downscales), quality (1-100, uses JPEG), format (png/jpeg/webp).",
+		Description: "Take a screenshot. Options: selector (element only), full_page, width (max px, downscales), quality (1-100, uses JPEG), format (png/jpeg/webp), annotate (draw numbered boxes on interactive elements with metadata).",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input ScreenshotInput) (*mcp.CallToolResult, any, error) {
 		cdpFmt, mimeType := screenshotFormat(input.Format, input.Quality)
+		actx := s.activeCtx()
 
 		var buf []byte
 		if input.Selector != "" && !input.FullPage {
 			// Element screenshot — capture as PNG then re-encode if needed.
-			if err := chromedp.Run(s.activeCtx(), chromedp.Screenshot(input.Selector, &buf, chromedp.ByQuery)); err != nil {
+			if err := chromedp.Run(actx, chromedp.Screenshot(input.Selector, &buf, chromedp.ByQuery)); err != nil {
 				return nil, nil, fmt.Errorf("screenshot: %w", err)
 			}
 		} else {
 			// Full page or viewport — use CDP directly for format/quality.
-			if err := chromedp.Run(s.activeCtx(), chromedp.ActionFunc(func(ctx context.Context) error {
-				cmd := page.CaptureScreenshot().WithFormat(cdpFmt).WithCaptureBeyondViewport(input.FullPage)
-				if input.Quality > 0 && cdpFmt != page.CaptureScreenshotFormatPng {
+			capFmt := cdpFmt
+			if input.Annotate {
+				capFmt = page.CaptureScreenshotFormatPng // annotate needs PNG input
+			}
+			if err := chromedp.Run(actx, chromedp.ActionFunc(func(ctx context.Context) error {
+				cmd := page.CaptureScreenshot().WithFormat(capFmt).WithCaptureBeyondViewport(input.FullPage)
+				if !input.Annotate && input.Quality > 0 && capFmt != page.CaptureScreenshotFormatPng {
 					cmd = cmd.WithQuality(int64(input.Quality))
 				}
 				var err error
@@ -164,6 +170,31 @@ func registerObservationTools(server *mcp.Server, s *mcpSession) {
 			})); err != nil {
 				return nil, nil, fmt.Errorf("screenshot: %w", err)
 			}
+		}
+
+		// Annotate interactive elements if requested.
+		if input.Annotate {
+			annotated, annotations, err := annotateScreenshot(actx, buf, s.refs)
+			if err != nil {
+				return nil, nil, fmt.Errorf("screenshot: annotate: %w", err)
+			}
+			buf = annotated
+			mimeType = "image/png" // annotation always produces PNG
+
+			if input.Width > 0 {
+				resized, err := downsizeImage(buf, input.Width, mimeType)
+				if err != nil {
+					return nil, nil, fmt.Errorf("screenshot: resize: %w", err)
+				}
+				buf = resized
+			}
+
+			return &mcp.CallToolResult{
+				Content: []mcp.Content{
+					&mcp.ImageContent{Data: buf, MIMEType: mimeType},
+					&mcp.TextContent{Text: annotationsToJSON(annotations)},
+				},
+			}, nil, nil
 		}
 
 		if input.Width > 0 {
