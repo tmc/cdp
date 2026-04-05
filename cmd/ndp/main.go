@@ -31,15 +31,20 @@ var rootCmd = &cobra.Command{
 	Use:   "ndp",
 	Short: "Node Debug Protocol - Unified debugger for Node.js and Chrome",
 	Long: `NDP provides a powerful command-line interface for debugging Node.js
-applications and Chrome/Chromium browsers using the Chrome DevTools Protocol.
+applications using the V8 Inspector Protocol.
 
 Features:
-- Attach to running Node.js processes
-- Debug Chrome tabs and extensions
-- Set breakpoints and watch expressions
-- CPU and heap profiling
-- Network traffic analysis
-- Session persistence and scripting`,
+- Attach to running Node.js processes (--inspect port)
+- MCP server mode for AI agent integration (--mcp)
+- Source listing, reading, and search across loaded modules
+- CPU profiling, heap snapshots, and code coverage
+- Console and exception capture
+- Sourcemap analysis for bundled/compiled code
+- Electron main process debugging (detect_electron tool)
+
+Electron usage:
+  ndp --mcp --node-port 9229   # main process
+  cdp --mcp --remote-port 9222 # renderer (separate server)`,
 	Version: "1.0.0",
 	Run: func(cmd *cobra.Command, args []string) {
 		if mcpMode {

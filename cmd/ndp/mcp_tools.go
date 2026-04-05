@@ -386,4 +386,34 @@ func registerNDPTools(server *mcp.Server, s *ndpSession) {
 			Content: []mcp.Content{&mcp.TextContent{Text: string(data)}},
 		}, nil, nil
 	})
+
+	// --- Electron detection ---
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "detect_electron",
+		Description: "Check if the connected Node.js process is an Electron app. Returns Electron version, process type (main/renderer/worker), app name, and app path.",
+		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
+	}, func(ctx context.Context, req *mcp.CallToolRequest, input struct{}) (*mcp.CallToolResult, any, error) {
+		expr := `JSON.stringify({
+			electron: process.versions.electron || null,
+			chrome: process.versions.chrome || null,
+			node: process.versions.node || null,
+			type: process.type || null,
+			appName: typeof require !== 'undefined' && require('electron').app ? require('electron').app.getName() : null,
+			appPath: typeof require !== 'undefined' && require('electron').app ? require('electron').app.getAppPath() : null
+		})`
+		result, err := s.runtime.Evaluate(expr, &EvaluateOptions{
+			ReturnByValue: true,
+		})
+		if err != nil {
+			return nil, nil, fmt.Errorf("detect_electron: %w", err)
+		}
+		text := formatResult(result)
+		if strings.Contains(text, `"electron":null`) {
+			text = "not an Electron process\n" + text
+		}
+		return &mcp.CallToolResult{
+			Content: []mcp.Content{&mcp.TextContent{Text: text}},
+		}, nil, nil
+	})
 }
