@@ -1166,9 +1166,10 @@ func main() {
 		screenshotSelector string
 
 		// MCP server mode
-		mcpMode  bool
-		toolsDir string
-		apiPort  int
+		mcpMode        bool
+		toolsDir       string
+		apiPort        int
+		loadExtensions string
 
 		// Source capture
 		saveSources bool
@@ -1252,6 +1253,7 @@ func main() {
 	flag.BoolVar(&mcpMode, "mcp", false, "Run as MCP server (stdio transport)")
 	flag.StringVar(&toolsDir, "tools-dir", "", "Directory of .cdp tool definitions for MCP and shell")
 	flag.IntVar(&apiPort, "api-port", 0, "Port for coverage API server (DevTools extension); 0 to disable")
+	flag.StringVar(&loadExtensions, "load-extension", "", "Comma-separated paths to unpacked extensions to load at browser start")
 
 	// Source capture
 	flag.BoolVar(&saveSources, "save-sources", false, "Capture all JS/CSS sources (including sourcemapped originals) and write to disk")
@@ -2330,6 +2332,10 @@ func main() {
 				chromedp.Flag("disable-background-timer-throttling", true),
 				chromedp.Flag("disable-popup-blocking", true),
 				chromedp.Flag("disable-sync", true),
+				chromedp.Flag("enable-unsafe-extension-debugging", true),
+			}
+			if loadExtensions != "" {
+				opts = append(opts, chromedp.Flag("load-extension", loadExtensions))
 			}
 
 			// Add background launch flags to prevent window focusing
@@ -4385,6 +4391,7 @@ func setupChromeForEnhanced(ctx context.Context, cfg fullCaptureConfig) (context
 		chromedp.Flag("disable-dev-shm-usage", true),
 		chromedp.Flag("disable-renderer-backgrounding", true),
 		chromedp.Flag("metrics-recording-only", true),
+		chromedp.Flag("enable-unsafe-extension-debugging", true),
 	}
 	if selectedPath != "" {
 		opts = append(opts, chromedp.ExecPath(selectedPath))

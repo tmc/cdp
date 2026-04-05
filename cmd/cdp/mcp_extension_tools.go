@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/chromedp/cdproto/extensions"
 	"github.com/chromedp/cdproto/runtime"
 	"github.com/chromedp/cdproto/target"
 	"github.com/chromedp/chromedp"
@@ -70,6 +71,27 @@ type ExtensionEvaluateInput struct {
 	Expression string `json:"expression"`
 }
 
+type UninstallExtensionInput struct {
+	ID string `json:"id"`
+}
+
+type GetExtensionStorageInput struct {
+	ID   string   `json:"id"`
+	Area string   `json:"area"` // local, sync, session, managed
+	Keys []string `json:"keys,omitempty"`
+}
+
+type SetExtensionStorageInput struct {
+	ID     string         `json:"id"`
+	Area   string         `json:"area"`
+	Values map[string]any `json:"values"`
+}
+
+type ClearExtensionStorageInput struct {
+	ID   string `json:"id"`
+	Area string `json:"area"`
+}
+
 func registerExtensionTools(server *mcp.Server, s *mcpSession) {
 	// Per-extension console collectors, keyed by extension ID.
 	extConsoles := struct {
@@ -79,9 +101,26 @@ func registerExtensionTools(server *mcp.Server, s *mcpSession) {
 
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "list_extensions",
-		Description: "List installed Chrome extensions by enumerating CDP targets. Returns extension IDs, names, and target types.",
+		Description: "List installed Chrome extensions. Uses CDP Extensions.getExtensions when available, falls back to target enumeration.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input ListExtensionsInput) (*mcp.CallToolResult, any, error) {
+		// Try CDP Extensions.getExtensions first.
+		var exts []*extensions.ExtensionInfo
+		cdpErr := chromedp.Run(s.browserCtx, chromedp.ActionFunc(func(ctx context.Context) error {
+			var err error
+			exts, err = extensions.GetExtensions().Do(ctx)
+			return err
+		}))
+		if cdpErr == nil {
+			data, err := json.Marshal(exts)
+			if err != nil {
+				return nil, nil, fmt.Errorf("list_extensions: marshal: %w", err)
+			}
+			return &mcp.CallToolResult{
+				Content: []mcp.Content{&mcp.TextContent{Text: string(data)}},
+			}, nil, nil
+		}
+		// Fallback: enumerate CDP targets for chrome-extension:// URLs.
 		targets, err := chromedp.Targets(s.browserCtx)
 		if err != nil {
 			return nil, nil, fmt.Errorf("list_extensions: %w", err)
@@ -140,20 +179,24 @@ func registerExtensionTools(server *mcp.Server, s *mcpSession) {
 
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "install_extension",
-		Description: "Load an unpacked Chrome extension from a local directory path. Uses chrome.developerPrivate.loadUnpacked() on chrome://extensions.",
+		Description: "Load an unpacked Chrome extension from a local directory path via CDP Extensions.loadUnpacked.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input InstallExtensionInput) (*mcp.CallToolResult, any, error) {
-		result, err := runOnExtensionsPage(s, fmt.Sprintf(
-			`chrome.developerPrivate.loadUnpacked(%q)`, input.Path,
-		))
+		// Use the CDP Extensions.loadUnpacked command directly — it accepts a
+		// filesystem path and returns the extension ID.
+		var extID string
+		err := chromedp.Run(s.browserCtx, chromedp.ActionFunc(func(ctx context.Context) error {
+			id, err := extensions.LoadUnpacked(input.Path).Do(ctx)
+			if err != nil {
+				return err
+			}
+			extID = id
+			return nil
+		}))
 		if err != nil {
 			return nil, nil, fmt.Errorf("install_extension: %w", err)
 		}
-		text := "extension loaded"
-		if result != "" && result != "undefined" {
-			text += ": " + result
-		}
 		return &mcp.CallToolResult{
-			Content: []mcp.Content{&mcp.TextContent{Text: text}},
+			Content: []mcp.Content{&mcp.TextContent{Text: fmt.Sprintf("extension loaded: %s", extID)}},
 		}, nil, nil
 	})
 
@@ -272,6 +315,108 @@ func registerExtensionTools(server *mcp.Server, s *mcpSession) {
 			Content: []mcp.Content{&mcp.TextContent{Text: string(data)}},
 		}, nil, nil
 	})
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "uninstall_extension",
+		Description: "Uninstall an unpacked extension by ID via CDP Extensions.uninstall.",
+	}, func(ctx context.Context, req *mcp.CallToolRequest, input UninstallExtensionInput) (*mcp.CallToolResult, any, error) {
+		err := chromedp.Run(s.browserCtx, chromedp.ActionFunc(func(ctx context.Context) error {
+			return extensions.Uninstall(input.ID).Do(ctx)
+		}))
+		if err != nil {
+			return nil, nil, fmt.Errorf("uninstall_extension: %w", err)
+		}
+		return &mcp.CallToolResult{
+			Content: []mcp.Content{&mcp.TextContent{Text: fmt.Sprintf("uninstalled extension %s", input.ID)}},
+		}, nil, nil
+	})
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "get_extension_storage",
+		Description: "Get data from extension storage. Area: local, sync, session, or managed. Optionally filter by keys.",
+		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
+	}, func(ctx context.Context, req *mcp.CallToolRequest, input GetExtensionStorageInput) (*mcp.CallToolResult, any, error) {
+		area, err := parseStorageArea(input.Area)
+		if err != nil {
+			return nil, nil, fmt.Errorf("get_extension_storage: %w", err)
+		}
+		var data []byte
+		err = chromedp.Run(s.browserCtx, chromedp.ActionFunc(func(ctx context.Context) error {
+			params := extensions.GetStorageItems(input.ID, area)
+			if len(input.Keys) > 0 {
+				params = params.WithKeys(input.Keys)
+			}
+			val, err := params.Do(ctx)
+			if err != nil {
+				return err
+			}
+			data = val
+			return nil
+		}))
+		if err != nil {
+			return nil, nil, fmt.Errorf("get_extension_storage: %w", err)
+		}
+		return &mcp.CallToolResult{
+			Content: []mcp.Content{&mcp.TextContent{Text: string(data)}},
+		}, nil, nil
+	})
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "set_extension_storage",
+		Description: "Set values in extension storage. Area: local, sync, session, or managed.",
+	}, func(ctx context.Context, req *mcp.CallToolRequest, input SetExtensionStorageInput) (*mcp.CallToolResult, any, error) {
+		area, err := parseStorageArea(input.Area)
+		if err != nil {
+			return nil, nil, fmt.Errorf("set_extension_storage: %w", err)
+		}
+		valJSON, err := json.Marshal(input.Values)
+		if err != nil {
+			return nil, nil, fmt.Errorf("set_extension_storage: marshal: %w", err)
+		}
+		err = chromedp.Run(s.browserCtx, chromedp.ActionFunc(func(ctx context.Context) error {
+			return extensions.SetStorageItems(input.ID, area, valJSON).Do(ctx)
+		}))
+		if err != nil {
+			return nil, nil, fmt.Errorf("set_extension_storage: %w", err)
+		}
+		return &mcp.CallToolResult{
+			Content: []mcp.Content{&mcp.TextContent{Text: "storage updated"}},
+		}, nil, nil
+	})
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "clear_extension_storage",
+		Description: "Clear all data in extension storage area. Area: local, sync, session, or managed.",
+	}, func(ctx context.Context, req *mcp.CallToolRequest, input ClearExtensionStorageInput) (*mcp.CallToolResult, any, error) {
+		area, err := parseStorageArea(input.Area)
+		if err != nil {
+			return nil, nil, fmt.Errorf("clear_extension_storage: %w", err)
+		}
+		err = chromedp.Run(s.browserCtx, chromedp.ActionFunc(func(ctx context.Context) error {
+			return extensions.ClearStorageItems(input.ID, area).Do(ctx)
+		}))
+		if err != nil {
+			return nil, nil, fmt.Errorf("clear_extension_storage: %w", err)
+		}
+		return &mcp.CallToolResult{
+			Content: []mcp.Content{&mcp.TextContent{Text: "storage cleared"}},
+		}, nil, nil
+	})
+}
+
+func parseStorageArea(s string) (extensions.StorageArea, error) {
+	switch s {
+	case "local":
+		return extensions.StorageAreaLocal, nil
+	case "sync":
+		return extensions.StorageAreaSync, nil
+	case "session":
+		return extensions.StorageAreaSession, nil
+	case "managed":
+		return extensions.StorageAreaManaged, nil
+	default:
+		return "", fmt.Errorf("invalid storage area %q (use local, sync, session, or managed)", s)
+	}
 }
 
 // findExtensionSW finds the service worker target ID for a given extension ID.
