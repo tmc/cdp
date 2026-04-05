@@ -1168,6 +1168,7 @@ func main() {
 		// MCP server mode
 		mcpMode  bool
 		toolsDir string
+		apiPort  int
 
 		// Source capture
 		saveSources bool
@@ -1250,6 +1251,7 @@ func main() {
 	// MCP server mode
 	flag.BoolVar(&mcpMode, "mcp", false, "Run as MCP server (stdio transport)")
 	flag.StringVar(&toolsDir, "tools-dir", "", "Directory of .cdp tool definitions for MCP and shell")
+	flag.IntVar(&apiPort, "api-port", 0, "Port for coverage API server (DevTools extension); 0 to disable")
 
 	// Source capture
 	flag.BoolVar(&saveSources, "save-sources", false, "Capture all JS/CSS sources (including sourcemapped originals) and write to disk")
@@ -1268,6 +1270,7 @@ func main() {
 			ToolsDir:    toolsDir,
 			SaveSources: saveSources,
 			NoScrub:     noScrub,
+			APIPort:     apiPort,
 		}
 		if err := runMCP(mcpCfg); err != nil {
 			exitWithError(ExitGeneralError, ErrorTypeGeneral, "MCP server: %v", err)

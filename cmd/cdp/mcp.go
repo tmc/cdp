@@ -192,6 +192,7 @@ type mcpConfig struct {
 	ToolsDir    string
 	SaveSources bool
 	NoScrub     bool
+	APIPort     int
 }
 
 // runMCP starts the MCP server with browser session tools on stdio.
@@ -320,6 +321,11 @@ func runMCP(cfg mcpConfig) error {
 		if err := registerDefineToolMeta(server, session, cfg.ToolsDir); err != nil {
 			return fmt.Errorf("register define_tool: %w", err)
 		}
+	}
+
+	// Start coverage API server for the DevTools extension.
+	if cfg.APIPort > 0 {
+		go startCoverageAPI(cfg.APIPort, session)
 	}
 
 	return server.Run(ctx, &mcp.StdioTransport{})
