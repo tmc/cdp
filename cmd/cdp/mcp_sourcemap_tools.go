@@ -88,9 +88,9 @@ type AnalyzeBundleInput struct {
 }
 
 type SetBundleStructureInput struct {
-	BundleURL    string          `json:"bundle_url"`
-	SnapshotName string          `json:"snapshot_name,omitempty"`
-	Structure    json.RawMessage `json:"structure"`
+	BundleURL    string `json:"bundle_url"`
+	SnapshotName string `json:"snapshot_name,omitempty"`
+	Structure    string `json:"structure"`
 }
 
 type GenerateSourcemapInput struct {
@@ -194,7 +194,8 @@ functions (optional), framework (optional), module (optional).`,
 		}
 
 		var result inferredResult
-		if err := json.Unmarshal(input.Structure, &result); err != nil {
+		structJSON := stripCodeFences(input.Structure)
+		if err := json.Unmarshal([]byte(structJSON), &result); err != nil {
 			return nil, nil, fmt.Errorf("set_bundle_structure: invalid structure JSON: %w", err)
 		}
 		if len(result.Files) == 0 {
