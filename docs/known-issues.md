@@ -35,3 +35,25 @@
 **Not a bug**: Expected behavior — V8 coverage only tracks JavaScript execution. Document this in tool description.
 
 **Observed**: 2026-04-05, A998 session on news.ycombinator.com.
+
+### 4. CDP Extensions domain requires --remote-debugging-pipe, not --remote-debugging-port
+
+**Symptom**: `list_extensions` returns null, `install_extension` via `Extensions.loadUnpacked` fails with "Method not available". CDP Extensions domain commands only work with pipe transport.
+
+**Root cause**: Chrome's Extensions CDP domain is gated behind `--remote-debugging-pipe` + `--enable-unsafe-extension-debugging`. We connect via `--remote-debugging-port` (WebSocket), which doesn't expose the Extensions domain.
+
+**Workaround**: JS injection via `chrome.developerPrivate` API on `chrome://extensions` page works for most operations. `reload_extension` already uses this successfully. `--load-extension` CLI flag works for loading at launch.
+
+**Fix**: Add JS fallback to `list_extensions` using `developerPrivate.getExtensionsInfo()`. Consider supporting pipe transport as an option for full Extensions domain access.
+
+**Observed**: 2026-04-05, A998 extension test. Brave 146.1.88.138.
+
+### 5. extension_console/extension_evaluate fail for devtools-only extensions
+
+**Symptom**: "no target found for extension" when calling `extension_console` or `extension_evaluate` on a DevTools panel extension (like our coverage extension).
+
+**Root cause**: DevTools-only extensions (with `devtools_page` but no `background` service worker) don't create CDP-visible targets. There's no `chrome-extension://` target to attach to.
+
+**Workaround**: None currently. DevTools panel extensions run in the DevTools process, not as separate targets.
+
+**Observed**: 2026-04-05, A998 extension test. Extension ID agmhhbefggjmejggmflmppmacnbmhnne.
