@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/chromedp/cdproto/runtime"
 	"github.com/chromedp/cdproto/webmcp"
 	"github.com/chromedp/chromedp"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -199,17 +200,25 @@ func discoverToolsViaJS(ctx context.Context) (string, error) {
 		return result, nil
 	}
 
-	// Fallback: modelContext.getTools() (async, needs .then()).
+	// Fallback: modelContext.getTools() (async — use runtime.Evaluate + awaitPromise).
 	var hasGetTools bool
 	if err := chromedp.Run(ctx, chromedp.Evaluate(
 		`typeof navigator.modelContext !== 'undefined' && typeof navigator.modelContext.getTools === 'function'`,
 		&hasGetTools,
 	)); err == nil && hasGetTools {
 		var result string
-		if err := chromedp.Run(ctx, chromedp.Evaluate(
-			`navigator.modelContext.getTools().then(tools => JSON.stringify(tools.map(t => ({name: t.name, description: t.description || '', input_schema: t.inputSchema || null}))))`,
-			&result, chromedp.EvalAsValue,
-		)); err != nil {
+		if err := chromedp.Run(ctx, chromedp.ActionFunc(func(ctx context.Context) error {
+			res, exc, err := runtime.Evaluate(
+				`navigator.modelContext.getTools().then(tools => JSON.stringify(tools.map(t => ({name: t.name, description: t.description || '', input_schema: t.inputSchema || null}))))`,
+			).WithAwaitPromise(true).Do(ctx)
+			if err != nil {
+				return err
+			}
+			if exc != nil {
+				return fmt.Errorf("JS exception: %s", exc.Text)
+			}
+			return json.Unmarshal(res.Value, &result)
+		})); err != nil {
 			return "", fmt.Errorf("discover tools via JS: getTools: %w", err)
 		}
 		return result, nil
@@ -236,27 +245,51 @@ func invokeWebToolJS(ctx context.Context, name, inputJSON string) (string, error
 		`typeof navigator.modelContextTesting !== 'undefined' && typeof navigator.modelContextTesting.executeTool === 'function'`,
 		&hasTesting,
 	)); err == nil && hasTesting {
+		// executeTool returns a Promise. Use CDP Runtime.evaluate with
+		// awaitPromise directly to avoid chromedp's marshaling issues.
 		var result string
-		expr := fmt.Sprintf(`navigator.modelContextTesting.executeTool(%q, %s)`, name, inputJSON)
-		if err := chromedp.Run(ctx, chromedp.Evaluate(expr, &result)); err != nil {
+		if err := chromedp.Run(ctx, chromedp.ActionFunc(func(ctx context.Context) error {
+			expr := fmt.Sprintf(
+				`navigator.modelContextTesting.executeTool(%q, %s).then(r => typeof r === 'string' ? r : JSON.stringify(r))`,
+				name, inputJSON,
+			)
+			res, exc, err := runtime.Evaluate(expr).WithAwaitPromise(true).Do(ctx)
+			if err != nil {
+				return err
+			}
+			if exc != nil {
+				return fmt.Errorf("JS exception: %s", exc.Text)
+			}
+			// res.Value is a JSON-encoded string (e.g. "\"...\""").
+			return json.Unmarshal(res.Value, &result)
+		})); err != nil {
 			return "", fmt.Errorf("invoke web tool %q via modelContextTesting: %w", name, err)
 		}
 		return result, nil
 	}
 
-	// Fallback: modelContext.getTools() + execute (async, .then() chain).
+	// Fallback: modelContext.getTools() + execute (async — use runtime.Evaluate + awaitPromise).
 	var hasGetTools bool
 	if err := chromedp.Run(ctx, chromedp.Evaluate(
 		`typeof navigator.modelContext !== 'undefined' && typeof navigator.modelContext.getTools === 'function'`,
 		&hasGetTools,
 	)); err == nil && hasGetTools {
-		expr := fmt.Sprintf(`navigator.modelContext.getTools().then(tools => {
+		var result string
+		if err := chromedp.Run(ctx, chromedp.ActionFunc(func(ctx context.Context) error {
+			expr := fmt.Sprintf(`navigator.modelContext.getTools().then(tools => {
   const tool = tools.find(t => t.name === %q);
   if (!tool) throw new Error("tool not found: %s");
   return tool.execute(%s);
-}).then(result => JSON.stringify(result))`, name, name, inputJSON)
-		var result string
-		if err := chromedp.Run(ctx, chromedp.Evaluate(expr, &result, chromedp.EvalAsValue)); err != nil {
+}).then(r => typeof r === 'string' ? r : JSON.stringify(r))`, name, name, inputJSON)
+			res, exc, err := runtime.Evaluate(expr).WithAwaitPromise(true).Do(ctx)
+			if err != nil {
+				return err
+			}
+			if exc != nil {
+				return fmt.Errorf("JS exception: %s", exc.Text)
+			}
+			return json.Unmarshal(res.Value, &result)
+		})); err != nil {
 			return "", fmt.Errorf("invoke web tool %q: %w", name, err)
 		}
 		return result, nil
