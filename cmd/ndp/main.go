@@ -19,9 +19,11 @@ import (
 )
 
 var (
-	verbose bool
-	timeout int
-	config  string
+	verbose  bool
+	timeout  int
+	config   string
+	mcpMode  bool
+	nodePort string
 )
 
 var rootCmd = &cobra.Command{
@@ -39,6 +41,15 @@ Features:
 - Session persistence and scripting`,
 	Version: "1.0.0",
 	Run: func(cmd *cobra.Command, args []string) {
+		if mcpMode {
+			if err := runMCP(mcpConfig{
+				NodePort: nodePort,
+				Verbose:  verbose,
+			}); err != nil {
+				log.Fatalf("MCP server: %v", err)
+			}
+			return
+		}
 		// If no subcommand, list all debug sessions
 		if len(args) == 0 {
 			nodeListCmd.Run(cmd, args)
@@ -156,6 +167,8 @@ func init() {
 	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "Enable verbose output")
 	rootCmd.PersistentFlags().IntVar(&timeout, "timeout", 60, "Operation timeout in seconds")
 	rootCmd.PersistentFlags().StringVar(&config, "config", "", "Path to configuration file")
+	rootCmd.Flags().BoolVar(&mcpMode, "mcp", false, "Run as MCP server (stdio transport)")
+	rootCmd.Flags().StringVar(&nodePort, "node-port", "9229", "Node.js inspector port")
 
 	// Add subcommands
 	rootCmd.AddCommand(nodeCmd)

@@ -420,3 +420,14 @@ func (c *V8InspectorClient) GetTargetInfo() map[string]interface{} {
 		"scriptCount":     len(c.scripts),
 	}
 }
+
+// Scripts returns all loaded scripts.
+func (c *V8InspectorClient) Scripts() map[string]*V8Script {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	out := make(map[string]*V8Script, len(c.scripts))
+	for k, v := range c.scripts {
+		out[k] = v
+	}
+	return out
+}
