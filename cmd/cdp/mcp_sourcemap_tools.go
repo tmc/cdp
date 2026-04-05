@@ -599,19 +599,31 @@ func buildAnalysisPrompt(bundleURL string, chunks []sourcemap.CodeChunk, actionL
 
 Rules:
 - Infer realistic paths based on code patterns (src/..., lib/..., etc.)
-- start_line/end_line and start_offset/end_offset are positions in the BUNDLE
+- start_offset/end_offset are BYTE positions in the bundle (critical for minified single-line bundles)
+- start_line/end_line are line positions (may all be line 1 for minified code — use byte offsets instead)
 - Assign every chunk to a file
 - Identify framework (react, vue, angular, vanilla, etc.)
 - Group into logical modules
+- For webpack bundles: look for moduleId:(e,t,r)=>{...} patterns and use module IDs as grouping
 `)
 	return b.String()
 }
 
 // generateMapFromInferred builds a sourcemap v3 from inferred file structure.
+//
+// For single-line minified bundles (common in production), byte offsets are
+// used as column positions in the sourcemap. This is critical because line-level
+// mappings are useless when the entire bundle is one line.
 func generateMapFromInferred(bundleSource string, inferred *inferredResult) ([]byte, error) {
 	if len(inferred.Files) == 0 {
 		return nil, fmt.Errorf("no inferred files")
 	}
+
+	totalLines := sourcemap.CountLinesInString(bundleSource)
+
+	// Detect single-line bundles: if the bundle has very few lines relative
+	// to its size, use byte-offset (column) based mappings.
+	useByteOffsets := totalLines <= 3 && len(bundleSource) > 1000
 
 	var sources []string
 	var sourcesContent []string
@@ -622,24 +634,45 @@ func generateMapFromInferred(bundleSource string, inferred *inferredResult) ([]b
 	for srcIdx, f := range inferred.Files {
 		sources = append(sources, f.Path)
 
-		// Extract the source content from the bundle.
-		startLine := clampLine(f.StartLine, 1, sourcemap.CountLinesInString(bundleSource))
-		endLine := clampLine(f.EndLine, startLine, sourcemap.CountLinesInString(bundleSource))
-		content := extractLineRange(bundleSource, startLine, endLine)
-		sourcesContent = append(sourcesContent, content)
+		if useByteOffsets {
+			// Single-line bundle: use byte offsets as columns.
+			startOff := clampLine(f.StartOffset, 0, len(bundleSource))
+			endOff := clampLine(f.EndOffset, startOff, len(bundleSource))
+			if endOff <= startOff && f.EndOffset == 0 {
+				// Fallback: estimate from line numbers (line 1 = whole file).
+				startOff = 0
+				endOff = len(bundleSource)
+			}
+			content := bundleSource[startOff:endOff]
+			sourcesContent = append(sourcesContent, content)
 
-		// Create line-by-line mappings from bundle → inferred source.
-		for line := f.StartLine; line <= f.EndLine; line++ {
-			origLine := line - f.StartLine // 0-based in the extracted source
-			m := sourcemap.Mapping{
-				GeneratedLine: line - 1, // 0-based in bundle
-				GeneratedCol:  0,
+			// Single mapping at the start of this file's region.
+			mappings = append(mappings, sourcemap.Mapping{
+				GeneratedLine: 0,
+				GeneratedCol:  startOff,
 				SourceIdx:     srcIdx,
-				OriginalLine:  origLine,
+				OriginalLine:  0,
 				OriginalCol:   0,
 				NameIdx:       -1,
+			})
+		} else {
+			// Multi-line bundle: use line-based mappings.
+			startLine := clampLine(f.StartLine, 1, totalLines)
+			endLine := clampLine(f.EndLine, startLine, totalLines)
+			content := extractLineRange(bundleSource, startLine, endLine)
+			sourcesContent = append(sourcesContent, content)
+
+			for line := startLine; line <= endLine; line++ {
+				origLine := line - startLine
+				mappings = append(mappings, sourcemap.Mapping{
+					GeneratedLine: line - 1,
+					GeneratedCol:  0,
+					SourceIdx:     srcIdx,
+					OriginalLine:  origLine,
+					OriginalCol:   0,
+					NameIdx:       -1,
+				})
 			}
-			mappings = append(mappings, m)
 		}
 
 		// Add function names.
@@ -653,15 +686,36 @@ func generateMapFromInferred(bundleSource string, inferred *inferredResult) ([]b
 				names = append(names, fn.Name)
 				nameIdx[fn.Name] = idx
 			}
-			// Add a named mapping at the function start.
-			mappings = append(mappings, sourcemap.Mapping{
-				GeneratedLine: clampLine(fn.StartLine, 1, sourcemap.CountLinesInString(bundleSource)) - 1,
-				GeneratedCol:  0,
-				SourceIdx:     srcIdx,
-				OriginalLine:  clampLine(fn.StartLine, f.StartLine, f.EndLine) - f.StartLine,
-				OriginalCol:   0,
-				NameIdx:       idx,
-			})
+
+			if useByteOffsets {
+				// Use the function's byte offset as column position.
+				fnOff := clampLine(f.StartOffset, 0, len(bundleSource))
+				if fn.StartLine > f.StartLine {
+					// Rough estimate: scale within the file's range.
+					fileRange := f.EndOffset - f.StartOffset
+					lineRange := f.EndLine - f.StartLine
+					if lineRange > 0 {
+						fnOff = f.StartOffset + (fn.StartLine-f.StartLine)*fileRange/lineRange
+					}
+				}
+				mappings = append(mappings, sourcemap.Mapping{
+					GeneratedLine: 0,
+					GeneratedCol:  clampLine(fnOff, 0, len(bundleSource)),
+					SourceIdx:     srcIdx,
+					OriginalLine:  0,
+					OriginalCol:   0,
+					NameIdx:       idx,
+				})
+			} else {
+				mappings = append(mappings, sourcemap.Mapping{
+					GeneratedLine: clampLine(fn.StartLine, 1, totalLines) - 1,
+					GeneratedCol:  0,
+					SourceIdx:     srcIdx,
+					OriginalLine:  clampLine(fn.StartLine, f.StartLine, f.EndLine) - f.StartLine,
+					OriginalCol:   0,
+					NameIdx:       idx,
+				})
+			}
 		}
 	}
 
