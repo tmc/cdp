@@ -1425,6 +1425,7 @@ func main() {
 			ToolsDir:        toolsDir,
 			SaveSources:     saveSources,
 			NoScrub:         noScrub,
+			APIPort:         apiPort,
 		})
 		return
 	}
@@ -4211,6 +4212,7 @@ func handleEnhancedMode(command string, interactive bool, cfg fullCaptureConfig)
 // fullCaptureConfig holds configuration for full-capture mode browser setup.
 type fullCaptureConfig struct {
 	Verbose         bool
+	Headless        bool
 	ChromePath      string
 	ShowChromeFlags bool
 	UseProfile      string
@@ -4220,6 +4222,7 @@ type fullCaptureConfig struct {
 	ToolsDir        string
 	SaveSources     bool
 	NoScrub         bool
+	APIPort         int
 }
 
 // resolveDebugPort checks if the desired port is available. If it's in use
@@ -4394,6 +4397,13 @@ func setupChromeForEnhanced(ctx context.Context, cfg fullCaptureConfig) (context
 		log.Printf("Launching new browser (path=%s, port=%d)", selectedPath, debugPort)
 	}
 
+	if cfg.Headless {
+		opts = append(opts, chromedp.Headless)
+		if verbose {
+			log.Println("Running Chrome in headless mode")
+		}
+	}
+
 	if cfg.ShowChromeFlags {
 		opts = append(opts, chromedp.ModifyCmdFunc(func(cmd *exec.Cmd) {
 			fmt.Fprintf(os.Stderr, "Chrome flags: %s\n", strings.Join(cmd.Args[1:], " "))
@@ -4401,7 +4411,9 @@ func setupChromeForEnhanced(ctx context.Context, cfg fullCaptureConfig) (context
 	}
 
 	allocCtx, allocCancel := chromedp.NewExecAllocator(ctx, opts...)
-	browserCtx, browserCancel := chromedp.NewContext(allocCtx)
+	browserCtx, browserCancel := chromedp.NewContext(allocCtx,
+		chromedp.WithErrorf(filteredErrorf),
+	)
 
 	// Verify the browser starts by navigating to about:blank.
 	// Use browserCtx directly — do NOT wrap in context.WithTimeout,

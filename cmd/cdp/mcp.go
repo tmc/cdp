@@ -48,6 +48,10 @@ func (s *mcpSession) activeCtx() context.Context {
 	return s.ctx
 }
 
+func (s *mcpSession) getCoverageCollector() *coverage.Collector {
+	return s.coverageCollector
+}
+
 // setActiveCtx sets the active tab context, canceling the previous tab context if any.
 func (s *mcpSession) setActiveCtx(ctx context.Context, cancel context.CancelFunc) {
 	s.mu.Lock()
@@ -211,101 +215,18 @@ func runMCP(cfg mcpConfig) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// Set up Chrome browser context.
-	fcfg := fullCaptureConfig{
-		Verbose:   cfg.Verbose,
-		DebugPort: cfg.DebugPort,
-		OutputDir: cfg.OutputDir,
-	}
-	browserCtx, browserCancel, _, err := setupChromeForEnhanced(ctx, fcfg)
-	if err != nil {
-		return fmt.Errorf("setup browser: %w", err)
+	// Create session immediately so the MCP server can start responding
+	// to initialize before the browser is ready. Browser setup runs in
+	// the background; tools that need it will block until ready.
+	session := &mcpSession{
+		refs:      newRefRegistry(),
+		outputDir: cfg.OutputDir,
 	}
 
 	// Set up secret scrubber (default on, --no-scrub to disable).
 	var scrubber *scrub.Scrubber
 	if !cfg.NoScrub {
 		scrubber = scrub.New()
-	}
-
-	// Optionally create a recorder for HAR capture.
-	var rec *harrecorder.Recorder
-	if cfg.OutputDir != "" {
-		if err := os.MkdirAll(cfg.OutputDir, 0755); err != nil {
-			return fmt.Errorf("create output dir: %w", err)
-		}
-		opts := []harrecorder.Option{
-			harrecorder.WithVerbose(cfg.Verbose),
-			harrecorder.WithStreaming(true),
-			harrecorder.WithOutputDir(cfg.OutputDir),
-		}
-		if scrubber != nil {
-			opts = append(opts, harrecorder.WithScrubber(scrubber))
-		}
-		rec, err = harrecorder.New(opts...)
-		if err != nil {
-			return fmt.Errorf("create recorder: %w", err)
-		}
-	}
-
-	// Navigate to initial URL if provided.
-	if cfg.URL != "" && cfg.URL != "about:blank" {
-		if err := chromedp.Run(browserCtx, chromedp.Navigate(cfg.URL)); err != nil {
-			return fmt.Errorf("navigate to %s: %w", cfg.URL, err)
-		}
-	}
-
-	// Set up source capture if requested.
-	// Set up defers so source capture runs before browserCancel (LIFO).
-	var sourceCollector *sources.Collector
-	if cfg.SaveSources {
-		sourcesDir := filepath.Join(cfg.OutputDir, "sources")
-		if cfg.OutputDir == "" {
-			sourcesDir = "sources"
-		}
-		sourceCollector = sources.New(sourcesDir, cfg.Verbose)
-		if scrubber != nil {
-			sourceCollector.SetScrubber(scrubber)
-		}
-		if err := sourceCollector.Enable(browserCtx); err != nil {
-			log.Printf("warning: failed to enable source capture: %v", err)
-			sourceCollector = nil
-		} else {
-			chromedp.ListenTarget(browserCtx, sourceCollector.HandleEvent)
-		}
-	}
-	defer browserCancel()
-	if sourceCollector != nil {
-		defer func() {
-			sourceCollector.Close() // drain background goroutine
-			if err := sourceCollector.CaptureAll(browserCtx); err != nil && cfg.Verbose {
-				log.Printf("warning: source capture errors: %v", err)
-			}
-			if err := sourceCollector.WriteToDisk(); err != nil {
-				log.Printf("warning: failed to write sources: %v", err)
-			}
-		}()
-	}
-
-	session := &mcpSession{
-		browserCtx:      browserCtx,
-		ctx:             browserCtx,
-		cancel:          browserCancel,
-		recorder:        rec,
-		refs:            newRefRegistry(),
-		console:         enableConsoleCapture(browserCtx),
-		dialogs:         enableDialogCapture(browserCtx),
-		outputDir:       cfg.OutputDir,
-		sourceCollector: sourceCollector,
-	}
-
-	// Auto-load sourcemaps from disk if --save-sources is active.
-	if sourceCollector != nil {
-		store := newSyntheticMapStore()
-		if n := loadSourcemapsFromDisk(sourceCollector.OutputDir(), store); n > 0 {
-			session.syntheticMaps = store
-			log.Printf("loaded %d sourcemap(s) from %s", n, sourceCollector.OutputDir())
-		}
 	}
 
 	server := mcp.NewServer(&mcp.Implementation{
@@ -328,6 +249,114 @@ func runMCP(cfg mcpConfig) error {
 	if cfg.APIPort > 0 {
 		go startCoverageAPI(cfg.APIPort, session)
 	}
+
+	// Set up browser in a goroutine so the MCP server can respond to
+	// initialize immediately. The browser is typically ready within a
+	// few seconds, well before the first tool call arrives.
+	browserReady := make(chan struct{})
+	go func() {
+		defer close(browserReady)
+
+		fcfg := fullCaptureConfig{
+			Verbose:   cfg.Verbose,
+			Headless:  cfg.Headless,
+			DebugPort: cfg.DebugPort,
+			OutputDir: cfg.OutputDir,
+		}
+		browserCtx, browserCancel, _, err := setupChromeForEnhanced(ctx, fcfg)
+		if err != nil {
+			log.Printf("error: setup browser: %v", err)
+			return
+		}
+
+		// Optionally create a recorder for HAR capture.
+		var rec *harrecorder.Recorder
+		if cfg.OutputDir != "" {
+			if err := os.MkdirAll(cfg.OutputDir, 0755); err != nil {
+				log.Printf("error: create output dir: %v", err)
+				browserCancel()
+				return
+			}
+			opts := []harrecorder.Option{
+				harrecorder.WithVerbose(cfg.Verbose),
+				harrecorder.WithStreaming(true),
+				harrecorder.WithOutputDir(cfg.OutputDir),
+			}
+			if scrubber != nil {
+				opts = append(opts, harrecorder.WithScrubber(scrubber))
+			}
+			rec, err = harrecorder.New(opts...)
+			if err != nil {
+				log.Printf("error: create recorder: %v", err)
+				browserCancel()
+				return
+			}
+		}
+
+		// Navigate to initial URL if provided.
+		if cfg.URL != "" && cfg.URL != "about:blank" {
+			if err := chromedp.Run(browserCtx, chromedp.Navigate(cfg.URL)); err != nil {
+				log.Printf("error: navigate to %s: %v", cfg.URL, err)
+			}
+		}
+
+		// Set up source capture if requested.
+		var sourceCollector *sources.Collector
+		if cfg.SaveSources {
+			sourcesDir := filepath.Join(cfg.OutputDir, "sources")
+			if cfg.OutputDir == "" {
+				sourcesDir = "sources"
+			}
+			sourceCollector = sources.New(sourcesDir, cfg.Verbose)
+			if scrubber != nil {
+				sourceCollector.SetScrubber(scrubber)
+			}
+			if err := sourceCollector.Enable(browserCtx); err != nil {
+				log.Printf("warning: failed to enable source capture: %v", err)
+				sourceCollector = nil
+			} else {
+				chromedp.ListenTarget(browserCtx, sourceCollector.HandleEvent)
+			}
+		}
+
+		// Populate the session now that the browser is ready.
+		session.mu.Lock()
+		session.browserCtx = browserCtx
+		session.ctx = browserCtx
+		session.cancel = browserCancel
+		session.recorder = rec
+		session.console = enableConsoleCapture(browserCtx)
+		session.dialogs = enableDialogCapture(browserCtx)
+		session.sourceCollector = sourceCollector
+		session.mu.Unlock()
+
+		// Auto-load sourcemaps from disk if --save-sources is active.
+		if sourceCollector != nil {
+			store := newSyntheticMapStore()
+			if n := loadSourcemapsFromDisk(sourceCollector.OutputDir(), store); n > 0 {
+				session.mu.Lock()
+				session.syntheticMaps = store
+				session.mu.Unlock()
+				log.Printf("loaded %d sourcemap(s) from %s", n, sourceCollector.OutputDir())
+			}
+		}
+
+		log.Printf("browser ready")
+
+		// Block until context is cancelled to keep cleanup in scope.
+		<-ctx.Done()
+
+		if sourceCollector != nil {
+			sourceCollector.Close()
+			if err := sourceCollector.CaptureAll(browserCtx); err != nil && cfg.Verbose {
+				log.Printf("warning: source capture errors: %v", err)
+			}
+			if err := sourceCollector.WriteToDisk(); err != nil {
+				log.Printf("warning: failed to write sources: %v", err)
+			}
+		}
+		browserCancel()
+	}()
 
 	return server.Run(ctx, &mcp.StdioTransport{})
 }

@@ -11,10 +11,15 @@ import (
 	"github.com/tmc/misc/chrome-to-har/internal/coverage"
 )
 
+// coverageProvider is the subset of session state needed by the coverage API.
+type coverageProvider interface {
+	getCoverageCollector() *coverage.Collector
+}
+
 // startCoverageAPI starts an HTTP server exposing coverage data for the
 // DevTools extension. It serves on the given port and never returns
 // (intended to be called in a goroutine).
-func startCoverageAPI(port int, session *mcpSession) {
+func startCoverageAPI(port int, provider coverageProvider) {
 	if port <= 0 {
 		return
 	}
@@ -23,7 +28,7 @@ func startCoverageAPI(port int, session *mcpSession) {
 
 	mux.HandleFunc("GET /api/coverage/snapshots", func(w http.ResponseWriter, r *http.Request) {
 		setCORS(w)
-		cc := session.coverageCollector
+		cc := provider.getCoverageCollector()
 		if cc == nil {
 			json.NewEncoder(w).Encode([]any{})
 			return
@@ -63,12 +68,12 @@ func startCoverageAPI(port int, session *mcpSession) {
 	mux.HandleFunc("GET /api/coverage/snapshot/{name}", func(w http.ResponseWriter, r *http.Request) {
 		setCORS(w)
 		name := r.PathValue("name")
-		cc := session.coverageCollector
+		cc := provider.getCoverageCollector()
 		if cc == nil {
 			http.Error(w, "no coverage collector", http.StatusNotFound)
 			return
 		}
-		snap := findSnapshot(session, name)
+		snap := findSnapshot(provider, name)
 		if snap == nil {
 			http.Error(w, "snapshot not found", http.StatusNotFound)
 			return
@@ -80,13 +85,13 @@ func startCoverageAPI(port int, session *mcpSession) {
 		setCORS(w)
 		before := r.URL.Query().Get("before")
 		after := r.URL.Query().Get("after")
-		cc := session.coverageCollector
+		cc := provider.getCoverageCollector()
 		if cc == nil {
 			http.Error(w, "no coverage collector", http.StatusNotFound)
 			return
 		}
-		snapBefore := findSnapshot(session, before)
-		snapAfter := findSnapshot(session, after)
+		snapBefore := findSnapshot(provider, before)
+		snapAfter := findSnapshot(provider, after)
 		if snapBefore == nil || snapAfter == nil {
 			http.Error(w, "snapshot not found", http.StatusNotFound)
 			return
@@ -99,13 +104,13 @@ func startCoverageAPI(port int, session *mcpSession) {
 		setCORS(w)
 		w.Header().Set("Content-Type", "text/plain")
 		name := r.URL.Query().Get("name")
-		snap := findSnapshot(session, name)
+		snap := findSnapshot(provider, name)
 		if snap == nil {
 			http.Error(w, "snapshot not found", http.StatusNotFound)
 			return
 		}
 		// Use the coverage package's lcov formatter.
-		fmt.Fprint(w, formatSnapshotLcov(session, snap))
+		fmt.Fprint(w, formatSnapshotLcov(snap))
 	})
 
 	// Handle CORS preflight.
@@ -128,8 +133,8 @@ func setCORS(w http.ResponseWriter) {
 	w.Header().Set("Content-Type", "application/json")
 }
 
-func findSnapshot(session *mcpSession, name string) *coverage.Snapshot {
-	cc := session.coverageCollector
+func findSnapshot(provider coverageProvider, name string) *coverage.Snapshot {
+	cc := provider.getCoverageCollector()
 	if cc == nil {
 		return nil
 	}
@@ -141,8 +146,7 @@ func findSnapshot(session *mcpSession, name string) *coverage.Snapshot {
 	return nil
 }
 
-func formatSnapshotLcov(session *mcpSession, snap *coverage.Snapshot) string {
-	_ = session
+func formatSnapshotLcov(snap *coverage.Snapshot) string {
 	var b strings.Builder
 	for url, cov := range snap.Scripts {
 		fmt.Fprintf(&b, "SF:%s\n", url)

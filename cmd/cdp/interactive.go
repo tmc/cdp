@@ -41,6 +41,10 @@ type InteractiveMode struct {
 	syntheticMaps     *syntheticMapStore
 }
 
+func (im *InteractiveMode) getCoverageCollector() *coverage.Collector {
+	return im.coverageCollector
+}
+
 // recorderWithOutputDir is the subset of recorder.Recorder needed for context switching.
 type recorderWithOutputDir interface {
 	SetOutputDir(dir string)
@@ -443,6 +447,9 @@ func findSourceInCollector(sc *sources.Collector, u string) (string, error) {
 
 // Run starts the interactive session
 func (im *InteractiveMode) Run() error {
+	if im.cfg.APIPort > 0 {
+		go startCoverageAPI(im.cfg.APIPort, im)
+	}
 	im.showWelcome()
 
 	scanner := bufio.NewScanner(os.Stdin)
