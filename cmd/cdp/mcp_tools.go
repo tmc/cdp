@@ -522,13 +522,14 @@ func registerContextTools(server *mcp.Server, s *mcpSession) {
 type GetHAREntriesInput struct {
 	Domain     string `json:"domain,omitempty"`
 	URLPattern string `json:"url_pattern,omitempty"`
+	Index      int    `json:"index,omitempty"` // 1-based; returns single entry
 	Limit      int    `json:"limit,omitempty"`
 }
 
 func registerHARTools(server *mcp.Server, s *mcpSession) {
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "get_har_entries",
-		Description: "Get captured HAR network entries, optionally filtered by domain or URL pattern (substring match)",
+		Description: "Get captured HAR network entries. Filter by domain or url_pattern (substring match). Use index (1-based) to get a single entry. Returns most recent entries when limit is set.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input GetHAREntriesInput) (*mcp.CallToolResult, any, error) {
 		if s.recorder == nil {
 			return nil, nil, fmt.Errorf("get_har_entries: no recorder active")
@@ -560,7 +561,14 @@ func registerHARTools(server *mcp.Server, s *mcpSession) {
 			}
 			entries = filtered
 		}
-		if input.Limit > 0 && len(entries) > input.Limit {
+		if input.Index > 0 {
+			if input.Index > len(entries) {
+				return &mcp.CallToolResult{
+					Content: []mcp.Content{&mcp.TextContent{Text: fmt.Sprintf("index %d out of range (have %d entries)", input.Index, len(entries))}},
+				}, nil, nil
+			}
+			entries = entries[input.Index-1 : input.Index]
+		} else if input.Limit > 0 && len(entries) > input.Limit {
 			entries = entries[len(entries)-input.Limit:]
 		}
 		data, err := json.Marshal(entries)

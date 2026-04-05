@@ -318,7 +318,7 @@ func registerExtensionTools(server *mcp.Server, s *mcpSession) {
 
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "uninstall_extension",
-		Description: "Uninstall a Chrome extension by ID. Tries chrome.management.uninstall() in the extension's service worker, falls back to chrome.developerPrivate on chrome://extensions.",
+		Description: "Uninstall a Chrome extension by ID. Tries CDP Extensions.uninstall, then chrome.management.uninstall() in the service worker, then disables via chrome.developerPrivate.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input UninstallExtensionInput) (*mcp.CallToolResult, any, error) {
 		// Try CDP Extensions.uninstall first.
 		cdpErr := chromedp.Run(s.browserCtx, chromedp.ActionFunc(func(ctx context.Context) error {
