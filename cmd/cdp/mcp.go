@@ -199,6 +199,13 @@ func runMCP(cfg mcpConfig) error {
 	// Ensure all log output goes to stderr; stdout is the MCP transport.
 	log.SetOutput(os.Stderr)
 
+	// Default --save-sources to true in MCP mode when --output-dir is set,
+	// since disk persistence is needed for the sourcemap pipeline.
+	if cfg.OutputDir != "" && !cfg.SaveSources {
+		cfg.SaveSources = true
+		log.Printf("MCP mode: enabling --save-sources (output-dir=%s)", cfg.OutputDir)
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
