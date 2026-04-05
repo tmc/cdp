@@ -128,8 +128,8 @@ func enableWebMCP(ctx context.Context) (*webMCPCollector, error) {
 	select {
 	case r := <-ch:
 		cdpErr = r.err
-	case <-time.After(10 * time.Second):
-		cdpErr = fmt.Errorf("timed out after 10s")
+	case <-time.After(3 * time.Second):
+		cdpErr = fmt.Errorf("timed out after 3s")
 	}
 
 	if cdpErr == nil {
@@ -139,11 +139,21 @@ func enableWebMCP(ctx context.Context) (*webMCPCollector, error) {
 	}
 
 	// Check if navigator.modelContext JS API is available as fallback.
+	// Use a timeout to avoid hanging if the browser tab is unresponsive.
 	var hasAPI bool
-	if err := chromedp.Run(ctx, chromedp.Evaluate(
-		`typeof navigator.modelContext !== 'undefined'`, &hasAPI,
-	)); err != nil || !hasAPI {
-		return nil, fmt.Errorf("enable WebMCP domain: %w (JS API also unavailable)", cdpErr)
+	jsCh := make(chan error, 1)
+	go func() {
+		jsCh <- chromedp.Run(ctx, chromedp.Evaluate(
+			`typeof navigator.modelContext !== 'undefined'`, &hasAPI,
+		))
+	}()
+	select {
+	case jsErr := <-jsCh:
+		if jsErr != nil || !hasAPI {
+			return nil, fmt.Errorf("enable WebMCP domain: %w (JS API also unavailable)", cdpErr)
+		}
+	case <-time.After(5 * time.Second):
+		return nil, fmt.Errorf("enable WebMCP domain: %w (JS API check timed out)", cdpErr)
 	}
 
 	log.Printf("WebMCP CDP domain unavailable (%v), using JS API fallback", cdpErr)
@@ -156,39 +166,28 @@ func enableWebMCP(ctx context.Context) (*webMCPCollector, error) {
 func discoverToolsViaJS(ctx context.Context) (string, error) {
 	expr := `(async () => {
   const mc = navigator.modelContext;
-  if (!mc) return {error: "no navigator.modelContext"};
-  // Try getTools() first (Chrome 148+), then fall back to method discovery.
+  if (!mc) return JSON.stringify({error: "no navigator.modelContext"});
   if (typeof mc.getTools === 'function') {
     const tools = await mc.getTools();
-    return tools.map(t => ({
+    return JSON.stringify(tools.map(t => ({
       name: t.name,
       description: t.description || '',
       input_schema: t.inputSchema || null,
-    }));
+    })));
   }
-  // No getTools — report available methods so the caller knows what's possible.
   const methods = Object.getOwnPropertyNames(Object.getPrototypeOf(mc))
     .filter(m => m !== 'constructor');
-  return {
+  return JSON.stringify({
     error: "getTools() not available",
     available_methods: methods,
-    note: "This browser version supports registerTool/unregisterTool but not tool discovery. Pages can register tools, but we cannot enumerate them without getTools()."
-  };
+    note: "This browser version supports registerTool/unregisterTool but not tool discovery."
+  });
 })()`
-	var result json.RawMessage
+	var result string
 	if err := chromedp.Run(ctx, chromedp.Evaluate(expr, &result, chromedp.EvalAsValue)); err != nil {
 		return "", fmt.Errorf("discover tools via JS: %w", err)
 	}
-	// Pretty-print the result.
-	var pretty json.RawMessage
-	if err := json.Unmarshal(result, &pretty); err != nil {
-		return string(result), nil
-	}
-	out, err := json.MarshalIndent(pretty, "", "  ")
-	if err != nil {
-		return string(result), nil
-	}
-	return string(out), nil
+	return result, nil
 }
 
 // invokeWebToolJS calls a tool via the JS API, with a shape that works
@@ -197,26 +196,23 @@ func invokeWebToolJS(ctx context.Context, name, inputJSON string) (string, error
 	expr := fmt.Sprintf(`(async () => {
   const mc = navigator.modelContext;
   if (!mc) throw new Error("no navigator.modelContext");
-  // Try getTools + execute pattern first.
   if (typeof mc.getTools === 'function') {
     const tools = await mc.getTools();
     const tool = tools.find(t => t.name === %q);
     if (!tool) throw new Error("tool not found: %s");
-    return await tool.execute(%s);
+    return JSON.stringify(await tool.execute(%s));
   }
-  // No getTools — try direct invokeTool if available.
   if (typeof mc.invokeTool === 'function') {
-    return await mc.invokeTool(%q, %s);
+    return JSON.stringify(await mc.invokeTool(%q, %s));
   }
   throw new Error("no tool invocation method available (tried getTools().execute() and invokeTool())");
 })()`, name, name, inputJSON, name, inputJSON)
 
-	var result json.RawMessage
+	var result string
 	if err := chromedp.Run(ctx, chromedp.Evaluate(expr, &result, chromedp.EvalAsValue)); err != nil {
 		return "", fmt.Errorf("invoke web tool %q: %w", name, err)
 	}
-	out, _ := json.MarshalIndent(result, "", "  ")
-	return string(out), nil
+	return result, nil
 }
 
 // invokeWebTool calls a page-registered MCP tool via Runtime.evaluate.
@@ -228,15 +224,14 @@ func invokeWebTool(ctx context.Context, name, inputJSON string) (string, error) 
   const tool = tools.find(t => t.name === %q);
   if (!tool) throw new Error("tool not found: %s");
   const input = %s;
-  return await tool.execute(input);
+  return JSON.stringify(await tool.execute(input));
 })()`, name, name, inputJSON)
 
-	var result json.RawMessage
+	var result string
 	if err := chromedp.Run(ctx, chromedp.Evaluate(expr, &result, chromedp.EvalAsValue)); err != nil {
 		return "", fmt.Errorf("invoke web tool %q: %w", name, err)
 	}
-	out, _ := json.MarshalIndent(result, "", "  ")
-	return string(out), nil
+	return result, nil
 }
 
 // --- MCP tool registration ---
