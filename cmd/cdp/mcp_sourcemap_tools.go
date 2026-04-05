@@ -4,6 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
+	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 
@@ -19,6 +23,7 @@ type syntheticMap struct {
 	Sources      *inferredResult `json:"sources,omitempty"`
 	Serving      bool            `json:"serving"`
 	InterceptID  string          `json:"intercept_id,omitempty"`
+	MapPath      string          `json:"map_path,omitempty"` // on-disk path to .map file
 }
 
 // inferredResult is the LLM's structured response about bundle structure.
@@ -77,6 +82,121 @@ func (s *syntheticMapStore) list() []*syntheticMap {
 		result = append(result, m)
 	}
 	return result
+}
+
+// sourcemapDiskPath returns the on-disk path for a bundle URL's .map file.
+// Follows the same layout as sources: outputDir/origin/_compiled/path.map
+func sourcemapDiskPath(sourcesDir, bundleURL string) string {
+	u, err := url.Parse(bundleURL)
+	if err != nil || u.Host == "" {
+		return ""
+	}
+	relPath := strings.TrimPrefix(u.Path, "/")
+	if relPath == "" {
+		relPath = "index.js"
+	}
+	return filepath.Join(sourcesDir, u.Host, "_compiled", relPath+".map")
+}
+
+// writeSourcemapToDisk writes a .map file alongside the saved source.
+// Returns the path written, or empty string if sourcesDir is not configured.
+func writeSourcemapToDisk(sourcesDir, bundleURL string, mapJSON []byte) string {
+	if sourcesDir == "" {
+		return ""
+	}
+	path := sourcemapDiskPath(sourcesDir, bundleURL)
+	if path == "" {
+		return ""
+	}
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		log.Printf("sourcemap: mkdir %s: %v", dir, err)
+		return ""
+	}
+	if err := os.WriteFile(path, mapJSON, 0644); err != nil {
+		log.Printf("sourcemap: write %s: %v", path, err)
+		return ""
+	}
+	return path
+}
+
+// loadSourcemapsFromDisk scans a sources directory for .map files and loads
+// them into the store. Returns the number of maps loaded.
+func loadSourcemapsFromDisk(sourcesDir string, store *syntheticMapStore) int {
+	if sourcesDir == "" {
+		return 0
+	}
+	loaded := 0
+	filepath.Walk(sourcesDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil || info.IsDir() {
+			return nil
+		}
+		if !strings.HasSuffix(path, ".js.map") {
+			return nil
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return nil
+		}
+		// Validate it's a sourcemap v3.
+		var sm struct {
+			Version int `json:"version"`
+		}
+		if json.Unmarshal(data, &sm) != nil || sm.Version != 3 {
+			return nil
+		}
+
+		// Reconstruct the bundle URL from the path.
+		// Path: sourcesDir/origin/_compiled/path.js.map
+		// Bundle URL: http://origin/path.js
+		rel, err := filepath.Rel(sourcesDir, path)
+		if err != nil {
+			return nil
+		}
+		parts := strings.SplitN(rel, string(filepath.Separator), 2)
+		if len(parts) < 2 {
+			return nil
+		}
+		origin := parts[0]
+		rest := parts[1]
+		rest = strings.TrimPrefix(rest, "_compiled"+string(filepath.Separator))
+		rest = strings.TrimSuffix(rest, ".map") // remove .map suffix to get bundle path
+		bundleURL := "https://" + origin + "/" + filepath.ToSlash(rest)
+
+		// Try to load the inferred structure if a .structure.json sidecar exists.
+		var sources *inferredResult
+		structPath := strings.TrimSuffix(path, ".map") + ".structure.json"
+		if structData, err := os.ReadFile(structPath); err == nil {
+			var ir inferredResult
+			if json.Unmarshal(structData, &ir) == nil && len(ir.Files) > 0 {
+				sources = &ir
+			}
+		}
+
+		store.set(bundleURL, &syntheticMap{
+			BundleURL: bundleURL,
+			MapJSON:   data,
+			Sources:   sources,
+			MapPath:   path,
+		})
+		loaded++
+		return nil
+	})
+	return loaded
+}
+
+// writeStructureSidecar writes the inferred file structure as a JSON sidecar
+// next to the .map file, so it can be reloaded on startup.
+func writeStructureSidecar(mapPath string, sources *inferredResult) {
+	if mapPath == "" || sources == nil {
+		return
+	}
+	structPath := strings.TrimSuffix(mapPath, ".map") + ".structure.json"
+	data, err := json.MarshalIndent(sources, "", "  ")
+	if err != nil {
+		return
+	}
+	os.WriteFile(structPath, data, 0644)
 }
 
 // --- MCP tool registration ---
@@ -224,6 +344,16 @@ functions (optional), framework (optional), module (optional).`,
 		}
 		sm.MapJSON = mapJSON
 
+		// Write to disk alongside saved sources.
+		sourcesDir := ""
+		if s.sourceCollector != nil {
+			sourcesDir = s.sourceCollector.OutputDir()
+		}
+		if path := writeSourcemapToDisk(sourcesDir, input.BundleURL, mapJSON); path != "" {
+			sm.MapPath = path
+			writeStructureSidecar(path, &result)
+		}
+
 		// Hot-update the intercept rule if already serving.
 		if sm.Serving && sm.InterceptID != "" && s.intercepts != nil {
 			s.intercepts.mu.Lock()
@@ -246,10 +376,13 @@ functions (optional), framework (optional), module (optional).`,
 		for _, f := range result.Files {
 			fmt.Fprintf(&b, "  %s (lines %d-%d): %s\n", f.Path, f.StartLine, f.EndLine, f.Description)
 		}
+		if sm.MapPath != "" {
+			fmt.Fprintf(&b, "\nWritten to %s\n", sm.MapPath)
+		}
 		if sm.Serving {
-			fmt.Fprintf(&b, "\nSourcemap hot-updated (serving via rule %s).\n", sm.InterceptID)
+			fmt.Fprintf(&b, "Sourcemap hot-updated (serving via rule %s).\n", sm.InterceptID)
 		} else {
-			fmt.Fprintf(&b, "\nUse serve_sourcemap to activate, or generate_sourcemap to get the raw JSON.\n")
+			fmt.Fprintf(&b, "Use serve_sourcemap to activate, or generate_sourcemap to get the raw JSON.\n")
 		}
 
 		return &mcp.CallToolResult{
@@ -357,6 +490,7 @@ functions (optional), framework (optional), module (optional).`,
 			MapSize     int    `json:"map_size"`
 			Serving     bool   `json:"serving"`
 			InterceptID string `json:"intercept_id,omitempty"`
+			MapPath     string `json:"map_path,omitempty"`
 		}
 		var infos []mapInfo
 		for _, m := range maps {
@@ -370,6 +504,7 @@ functions (optional), framework (optional), module (optional).`,
 				MapSize:     len(m.MapJSON),
 				Serving:     m.Serving,
 				InterceptID: m.InterceptID,
+				MapPath:     m.MapPath,
 			})
 		}
 		data, _ := json.Marshal(infos)

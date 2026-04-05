@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -634,6 +635,100 @@ func TestSourcemapPipeline_NoChrome(t *testing.T) {
 			if got != tt.want {
 				t.Errorf("stripCodeFences(%q) = %q, want %q", tt.input, got, tt.want)
 			}
+		}
+	})
+}
+
+// TestSourcemapDiskPersistence tests write-to-disk and load-from-disk round-trip.
+func TestSourcemapDiskPersistence(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	bundleURL := "https://example.com/static/js/bundle.js"
+	mapJSON := []byte(`{"version":3,"file":"bundle.js","sources":["src/app.js"],"mappings":"AAAA"}`)
+
+	t.Run("DiskPath", func(t *testing.T) {
+		path := sourcemapDiskPath(tmpDir, bundleURL)
+		want := tmpDir + "/example.com/_compiled/static/js/bundle.js.map"
+		if path != want {
+			t.Errorf("path = %q, want %q", path, want)
+		}
+	})
+
+	t.Run("WriteToDisk", func(t *testing.T) {
+		path := writeSourcemapToDisk(tmpDir, bundleURL, mapJSON)
+		if path == "" {
+			t.Fatal("expected non-empty path")
+		}
+
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read: %v", err)
+		}
+		if string(data) != string(mapJSON) {
+			t.Error("file content mismatch")
+		}
+	})
+
+	t.Run("WriteStructureSidecar", func(t *testing.T) {
+		path := sourcemapDiskPath(tmpDir, bundleURL)
+		sources := &inferredResult{
+			Summary: "test",
+			Files:   []inferredFile{{Path: "src/app.js", Description: "app entry"}},
+		}
+		writeStructureSidecar(path, sources)
+
+		structPath := strings.TrimSuffix(path, ".map") + ".structure.json"
+		data, err := os.ReadFile(structPath)
+		if err != nil {
+			t.Fatalf("read sidecar: %v", err)
+		}
+		if !strings.Contains(string(data), "src/app.js") {
+			t.Error("sidecar missing expected content")
+		}
+	})
+
+	t.Run("LoadFromDisk", func(t *testing.T) {
+		store := newSyntheticMapStore()
+		n := loadSourcemapsFromDisk(tmpDir, store)
+		if n != 1 {
+			t.Fatalf("loaded %d, want 1", n)
+		}
+
+		sm := store.get("https://example.com/static/js/bundle.js")
+		if sm == nil {
+			t.Fatal("expected to find loaded sourcemap")
+		}
+		if string(sm.MapJSON) != string(mapJSON) {
+			t.Error("loaded map JSON mismatch")
+		}
+		if sm.MapPath == "" {
+			t.Error("expected non-empty MapPath")
+		}
+		// Should have loaded the structure sidecar too.
+		if sm.Sources == nil || len(sm.Sources.Files) != 1 {
+			t.Error("expected loaded structure sidecar")
+		}
+		if sm.Sources != nil && sm.Sources.Files[0].Path != "src/app.js" {
+			t.Errorf("sources path = %q, want %q", sm.Sources.Files[0].Path, "src/app.js")
+		}
+	})
+
+	t.Run("EmptyDir", func(t *testing.T) {
+		store := newSyntheticMapStore()
+		n := loadSourcemapsFromDisk(t.TempDir(), store)
+		if n != 0 {
+			t.Errorf("loaded %d from empty dir, want 0", n)
+		}
+	})
+
+	t.Run("NoSourcesDir", func(t *testing.T) {
+		path := writeSourcemapToDisk("", bundleURL, mapJSON)
+		if path != "" {
+			t.Error("expected empty path when sourcesDir is empty")
+		}
+		n := loadSourcemapsFromDisk("", newSyntheticMapStore())
+		if n != 0 {
+			t.Error("expected 0 from empty sourcesDir")
 		}
 	})
 }

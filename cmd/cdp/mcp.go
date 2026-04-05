@@ -290,6 +290,15 @@ func runMCP(cfg mcpConfig) error {
 		sourceCollector: sourceCollector,
 	}
 
+	// Auto-load sourcemaps from disk if --save-sources is active.
+	if sourceCollector != nil {
+		store := newSyntheticMapStore()
+		if n := loadSourcemapsFromDisk(sourceCollector.OutputDir(), store); n > 0 {
+			session.syntheticMaps = store
+			log.Printf("loaded %d sourcemap(s) from %s", n, sourceCollector.OutputDir())
+		}
+	}
+
 	server := mcp.NewServer(&mcp.Implementation{
 		Name:    "cdp",
 		Version: "0.1.0",

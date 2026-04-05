@@ -81,8 +81,17 @@ func (im *InteractiveMode) SetRecorder(rec recorderWithOutputDir, baseOutputDir 
 }
 
 // SetSourceCollector sets the source collector for source browsing commands.
+// Also auto-loads any .map files from disk into the sourcemap store.
 func (im *InteractiveMode) SetSourceCollector(sc *sources.Collector) {
 	im.sourceCollector = sc
+	if sc != nil {
+		if im.syntheticMaps == nil {
+			im.syntheticMaps = newSyntheticMapStore()
+		}
+		if n := loadSourcemapsFromDisk(sc.OutputDir(), im.syntheticMaps); n > 0 {
+			fmt.Printf("Loaded %d sourcemap(s) from %s\n", n, sc.OutputDir())
+		}
+	}
 	im.registerSourceCommands()
 }
 
@@ -1387,13 +1396,27 @@ func (im *InteractiveMode) sourcemapSetStructure(bundleURL, jsonStr string) erro
 		return fmt.Errorf("generate sourcemap: %w", err)
 	}
 	sm.MapJSON = mapJSON
+
+	// Write to disk alongside saved sources.
+	sourcesDir := ""
+	if im.sourceCollector != nil {
+		sourcesDir = im.sourceCollector.OutputDir()
+	}
+	if path := writeSourcemapToDisk(sourcesDir, bundleURL, mapJSON); path != "" {
+		sm.MapPath = path
+		writeStructureSidecar(path, &result)
+	}
+
 	im.syntheticMaps.set(bundleURL, sm)
 
 	fmt.Printf("Sourcemap generated: %d files, %d bytes\n", len(result.Files), len(mapJSON))
 	for _, f := range result.Files {
 		fmt.Printf("  %s (bytes %d-%d): %s\n", f.Path, f.StartOffset, f.EndOffset, f.Description)
 	}
-	fmt.Println("\nUse 'sourcemap generate' to view the raw JSON or 'sourcemap serve' to activate.")
+	if sm.MapPath != "" {
+		fmt.Printf("\nWritten to %s\n", sm.MapPath)
+	}
+	fmt.Println("Use 'sourcemap generate' to view the raw JSON or 'sourcemap serve' to activate.")
 	return nil
 }
 
@@ -1446,6 +1469,9 @@ func (im *InteractiveMode) sourcemapList() error {
 			status = fmt.Sprintf("serving (rule %s)", sm.InterceptID)
 		}
 		fmt.Printf("  %s: %d files, %d bytes [%s]\n", sm.BundleURL, nFiles, len(sm.MapJSON), status)
+		if sm.MapPath != "" {
+			fmt.Printf("    → %s\n", sm.MapPath)
+		}
 	}
 	return nil
 }
