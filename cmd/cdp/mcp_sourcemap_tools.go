@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/chromedp/chromedp"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/tmc/misc/chrome-to-har/internal/coverage"
 	"github.com/tmc/misc/chrome-to-har/internal/sourcemap"
@@ -225,6 +226,45 @@ func writeStructureSidecar(mapPath string, sources *inferredResult) {
 		return
 	}
 	os.WriteFile(structPath, data, 0644)
+}
+
+// activateSourcemap makes Chrome DevTools aware of a synthetic sourcemap by:
+// 1. Installing a response-stage Fetch intercept on the bundle URL that appends
+//    a //# sourceMappingURL comment and a SourceMap HTTP header.
+// 2. Triggering Page.reload() so scripts re-fetch through the intercept.
+// 3. DevTools sees the comment/header, requests the .map URL, our existing
+//    request-stage intercept serves the synthetic sourcemap.
+//
+// Returns a human-readable status message.
+func activateSourcemap(s *mcpSession, bundleURL, mapURL string) string {
+	var messages []string
+
+	// Install response intercept on the bundle URL to append sourceMappingURL.
+	if s.intercepts != nil {
+		bundleRule := interceptRule{
+			URLPattern: bundleURL,
+			Stage:      "response",
+			Action:     "append-sourcemap",
+			Body:       "\n//# sourceMappingURL=" + mapURL + "\n",
+			Headers: map[string]string{
+				"SourceMap": mapURL,
+			},
+		}
+		bundleRuleID := s.intercepts.addRule(bundleRule)
+		messages = append(messages, fmt.Sprintf("bundle intercept installed (rule %s)", bundleRuleID))
+	}
+
+	// Trigger page reload so scripts re-fetch through our intercepts.
+	actx := s.activeCtx()
+	if actx == nil {
+		messages = append(messages, "reload skipped: no active browser context")
+	} else if err := chromedp.Run(actx, chromedp.Reload()); err != nil {
+		messages = append(messages, fmt.Sprintf("reload failed: %v", err))
+	} else {
+		messages = append(messages, "page reloaded — DevTools Sources panel should show inferred original files")
+	}
+
+	return strings.Join(messages, "; ")
 }
 
 // analysisLogPath returns the .analysis-log.jsonl path for a bundle's .map path.
@@ -576,24 +616,11 @@ functions (optional), framework (optional), module (optional).`,
 		sm.InterceptID = id
 		s.syntheticMaps.set(input.BundleURL, sm)
 
-		// Also inject the sourceMappingURL comment into the bundle response
-		// so Chrome knows to look for the .map file.
-		sourceMapComment := fmt.Sprintf("\n//# sourceMappingURL=%s\n", mapURL)
-		appendRule := interceptRule{
-			URLPattern: input.BundleURL,
-			Stage:      "response",
-			Action:     "fulfill",
-			StatusCode: 200,
-			ContentType: "application/javascript",
-		}
-		// We need to fetch the actual bundle content and append the comment.
-		// For now, just install the .map intercept — the agent can use
-		// evaluate to inject the sourceURL.
-		_ = appendRule
-		_ = sourceMapComment
+		// Activate: install bundle response intercept + reload page.
+		activateMsg := activateSourcemap(s, input.BundleURL, mapURL)
 
 		return &mcp.CallToolResult{
-			Content: []mcp.Content{&mcp.TextContent{Text: fmt.Sprintf("serving sourcemap at %s (rule %s, %d bytes)\nTo activate in DevTools, run: evaluate({expression: 'document.querySelectorAll(\"script\").forEach(s => { if(s.src.includes(\"%s\")) console.log(\"sourcemap active\") })'})", mapURL, id, len(sm.MapJSON), input.BundleURL)}},
+			Content: []mcp.Content{&mcp.TextContent{Text: fmt.Sprintf("serving sourcemap at %s (rule %s, %d bytes)\n%s", mapURL, id, len(sm.MapJSON), activateMsg)}},
 		}, nil, nil
 	})
 
