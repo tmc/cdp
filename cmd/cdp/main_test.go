@@ -33,12 +33,14 @@ func TestMain(m *testing.M) {
 func skipIfNoBrowser(t testing.TB) {
 	t.Helper()
 
-	// Skip browser tests in short mode (go test -short)
 	if testing.Short() {
 		t.Skip("Skipping browser test in short mode")
 	}
 
-	// Skip if in CI environment
+	if os.Getenv("SKIP_BROWSER_TESTS") != "" {
+		t.Skip("Skipping browser test (SKIP_BROWSER_TESTS is set)")
+	}
+
 	if os.Getenv("CI") != "" {
 		t.Skip("Skipping browser tests in CI environment")
 	}
@@ -390,8 +392,10 @@ func TestCDP_HARRecording(t *testing.T) {
 
 	// Let it run for a few seconds then terminate
 	time.Sleep(5 * time.Second)
-	cmd.Process.Kill()
-	cmd.Wait()
+	if err := cmd.Process.Kill(); err != nil {
+		t.Logf("kill: %v", err)
+	}
+	_ = cmd.Wait() // expected non-zero exit after kill
 
 	output := stdout.String()
 	stderrOutput := stderr.String()
