@@ -147,6 +147,31 @@ We can use this to find and attach to any extension target.
 - For extension_console/extension_evaluate, use `Target.getTargets` + `chromedp.NewContext(ctx, chromedp.WithTargetID(tid))` to attach to the service worker.
 - Add unit tests for target URL matching (`chrome-extension://id/` extraction).
 
+## Bundled Extension Distribution
+
+Our coverage DevTools extension (5 files, ~12KB) should be embedded in the cdp binary so it's fully self-contained.
+
+**Approach**: `go:embed` + extract to `~/.cdp/extensions/coverage/`
+
+```go
+//go:embed extension/coverage/*
+var coverageExtFS embed.FS
+
+func extractBundledExtensions() (string, error) {
+    dir := filepath.Join(os.UserHomeDir(), ".cdp", "extensions", "coverage")
+    // Extract embedded files to dir, overwriting on version change
+    // Return dir path for --load-extension or install_extension
+}
+```
+
+**Integration points**:
+- On `cdp --mcp` startup: extract to `~/.cdp/extensions/coverage/`, log the path
+- `install_bundled_extensions` MCP tool: calls `install_extension` with the extracted path
+- Chrome launch: optionally add `--load-extension=~/.cdp/extensions/coverage` to auto-load
+- Version check: embed a version stamp, only re-extract when cdp binary updates
+
+**Why embed**: Single binary distribution. No "clone the repo to get the extension" step. `go install github.com/tmc/misc/chrome-to-har/cmd/cdp@latest` gives you everything.
+
 ## Complexity
 
 | Tool | Lines | Difficulty |
