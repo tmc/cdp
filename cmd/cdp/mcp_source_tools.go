@@ -257,8 +257,9 @@ func registerCoverageTools(server *mcp.Server, s *mcpSession) {
 		Name:        "start_coverage",
 		Description: "Start collecting JavaScript code coverage for the current page",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input StartCoverageInput) (*mcp.CallToolResult, any, error) {
+		// Stop any previous collector for clean restart (survives page reloads).
 		if s.coverageCollector != nil && s.coverageCollector.Running() {
-			return nil, nil, fmt.Errorf("start_coverage: already running")
+			s.coverageCollector.Stop()
 		}
 		c := coverage.New(false)
 		if err := c.Start(s.activeCtx()); err != nil {

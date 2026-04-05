@@ -21,7 +21,7 @@ import (
 // It does not write to disk; callers handle persistence.
 type Collector struct {
 	mu        sync.Mutex
-	ctx       context.Context
+	outerCtx  context.Context // chromedp context (survives page reloads)
 	running   bool
 	snapshots []*Snapshot
 	verbose   bool
@@ -70,8 +70,8 @@ type CSSCoverage struct {
 
 // Delta describes lines newly covered between two snapshots.
 type Delta struct {
-	Name    string                    `json:"name"`
-	Scripts map[string]*ScriptDelta   `json:"scripts,omitempty"`
+	Name    string                  `json:"name"`
+	Scripts map[string]*ScriptDelta `json:"scripts,omitempty"`
 }
 
 // ScriptDelta holds per-file differential coverage.
@@ -109,12 +109,7 @@ func (c *Collector) Start(ctx context.Context) error {
 		return fmt.Errorf("coverage collection already running")
 	}
 
-	// Wrap CDP domain calls in chromedp.Run to obtain the page-level
-	// executor context. Direct .Do(ctx) fails when ctx is the outer
-	// chromedp context rather than the inner target context.
-	var innerCtx context.Context
 	if err := chromedp.Run(ctx, chromedp.ActionFunc(func(ctx context.Context) error {
-		innerCtx = ctx
 		if err := profiler.Enable().Do(ctx); err != nil {
 			return fmt.Errorf("enable profiler: %w", err)
 		}
@@ -135,7 +130,7 @@ func (c *Collector) Start(ctx context.Context) error {
 		return err
 	}
 
-	c.ctx = innerCtx
+	c.outerCtx = ctx
 	c.running = true
 	c.snapshots = nil
 	return nil
@@ -156,82 +151,84 @@ func (c *Collector) TakeSnapshot(name string) (*Snapshot, error) {
 		Scripts:   make(map[string]*ScriptCoverage),
 	}
 
-	// Collect JS coverage.
-	jsCoverage, _, err := profiler.TakePreciseCoverage().Do(c.ctx)
-	if err != nil {
-		return nil, fmt.Errorf("take js coverage: %w", err)
-	}
-
-	for _, sc := range jsCoverage {
-		if sc.URL == "" || strings.HasPrefix(sc.URL, "data:") {
-			continue
+	// Collect JS and CSS coverage via fresh chromedp.Run calls.
+	// Using the outer chromedp context ensures we get a valid executor
+	// even after page reloads (which reset the inner target context).
+	if err := chromedp.Run(c.outerCtx, chromedp.ActionFunc(func(ctx context.Context) error {
+		jsCoverage, _, err := profiler.TakePreciseCoverage().Do(ctx)
+		if err != nil {
+			return fmt.Errorf("take js coverage: %w", err)
 		}
 
-		source, _, err := debugger.GetScriptSource(sc.ScriptID).Do(c.ctx)
+		for _, sc := range jsCoverage {
+			if sc.URL == "" || strings.HasPrefix(sc.URL, "data:") {
+				continue
+			}
+
+			source, _, err := debugger.GetScriptSource(sc.ScriptID).Do(ctx)
+			if err != nil {
+				if c.verbose {
+					fmt.Printf("coverage: skip script %s: %v\n", sc.URL, err)
+				}
+				continue
+			}
+
+			cov := &ScriptCoverage{
+				URL:    sc.URL,
+				Source: source,
+				Lines:  make(map[int]int),
+			}
+
+			for _, fn := range sc.Functions {
+				var ranges []CoverageRange
+				var hitCount int
+				for _, r := range fn.Ranges {
+					cr := CoverageRange{
+						StartOffset: int(r.StartOffset),
+						EndOffset:   int(r.EndOffset),
+						Count:       int(r.Count),
+					}
+					ranges = append(ranges, cr)
+					cov.ByteRanges = append(cov.ByteRanges, cr)
+					if r.Count > 0 {
+						hitCount += int(r.Count)
+					}
+				}
+
+				startLine, _ := offsetToLineCol(source, int(fn.Ranges[0].StartOffset))
+				endLine, _ := offsetToLineCol(source, int(fn.Ranges[0].EndOffset))
+
+				cov.Functions = append(cov.Functions, FunctionCoverage{
+					Name:      fn.FunctionName,
+					StartLine: startLine,
+					EndLine:   endLine,
+					HitCount:  hitCount,
+					Ranges:    ranges,
+				})
+
+				for _, r := range fn.Ranges {
+					if r.Count == 0 {
+						continue
+					}
+					sl, _ := offsetToLineCol(source, int(r.StartOffset))
+					el, _ := offsetToLineCol(source, int(r.EndOffset))
+					for line := sl; line <= el; line++ {
+						cov.Lines[line] += int(r.Count)
+					}
+				}
+			}
+
+			snap.Scripts[sc.URL] = cov
+		}
+
+		// Collect CSS coverage delta.
+		cssRules, _, err := css.TakeCoverageDelta().Do(ctx)
 		if err != nil {
 			if c.verbose {
-				fmt.Printf("coverage: skip script %s: %v\n", sc.URL, err)
+				fmt.Printf("coverage: css delta: %v\n", err)
 			}
-			continue
+			return nil // CSS failure is non-fatal
 		}
-
-		cov := &ScriptCoverage{
-			URL:    sc.URL,
-			Source: source,
-			Lines:  make(map[int]int),
-		}
-
-		for _, fn := range sc.Functions {
-			var ranges []CoverageRange
-			var hitCount int
-			for _, r := range fn.Ranges {
-				cr := CoverageRange{
-					StartOffset: int(r.StartOffset),
-					EndOffset:   int(r.EndOffset),
-					Count:       int(r.Count),
-				}
-				ranges = append(ranges, cr)
-				cov.ByteRanges = append(cov.ByteRanges, cr)
-				if r.Count > 0 {
-					hitCount += int(r.Count)
-				}
-			}
-
-			startLine, _ := offsetToLineCol(source, int(fn.Ranges[0].StartOffset))
-			endLine, _ := offsetToLineCol(source, int(fn.Ranges[0].EndOffset))
-
-			cov.Functions = append(cov.Functions, FunctionCoverage{
-				Name:      fn.FunctionName,
-				StartLine: startLine,
-				EndLine:   endLine,
-				HitCount:  hitCount,
-				Ranges:    ranges,
-			})
-
-			// Build per-line hit counts from all ranges.
-			for _, r := range fn.Ranges {
-				if r.Count == 0 {
-					continue
-				}
-				sl, _ := offsetToLineCol(source, int(r.StartOffset))
-				el, _ := offsetToLineCol(source, int(r.EndOffset))
-				for line := sl; line <= el; line++ {
-					cov.Lines[line] += int(r.Count)
-				}
-			}
-		}
-
-		snap.Scripts[sc.URL] = cov
-	}
-
-	// Collect CSS coverage delta.
-	cssRules, _, err := css.TakeCoverageDelta().Do(c.ctx)
-	if err != nil {
-		if c.verbose {
-			fmt.Printf("coverage: css delta: %v\n", err)
-		}
-	} else {
-		// Group rules by stylesheet.
 		bySheet := make(map[string]*CSSCoverage)
 		for _, rule := range cssRules {
 			id := string(rule.StyleSheetID)
@@ -254,6 +251,10 @@ func (c *Collector) TakeSnapshot(name string) (*Snapshot, error) {
 		for _, cc := range bySheet {
 			snap.CSS = append(snap.CSS, cc)
 		}
+
+		return nil
+	})); err != nil {
+		return nil, err
 	}
 
 	c.snapshots = append(c.snapshots, snap)
@@ -271,14 +272,19 @@ func (c *Collector) Stop() error {
 	c.running = false
 
 	var firstErr error
-	if err := profiler.StopPreciseCoverage().Do(c.ctx); err != nil && firstErr == nil {
-		firstErr = fmt.Errorf("stop precise coverage: %w", err)
-	}
-	if err := profiler.Disable().Do(c.ctx); err != nil && firstErr == nil {
-		firstErr = fmt.Errorf("disable profiler: %w", err)
-	}
-	if _, err := css.StopRuleUsageTracking().Do(c.ctx); err != nil && firstErr == nil {
-		firstErr = fmt.Errorf("stop css tracking: %w", err)
+	if err := chromedp.Run(c.outerCtx, chromedp.ActionFunc(func(ctx context.Context) error {
+		if err := profiler.StopPreciseCoverage().Do(ctx); err != nil {
+			return fmt.Errorf("stop precise coverage: %w", err)
+		}
+		if err := profiler.Disable().Do(ctx); err != nil {
+			return fmt.Errorf("disable profiler: %w", err)
+		}
+		if _, err := css.StopRuleUsageTracking().Do(ctx); err != nil {
+			return fmt.Errorf("stop css tracking: %w", err)
+		}
+		return nil
+	})); err != nil {
+		firstErr = err
 	}
 	return firstErr
 }
@@ -408,7 +414,6 @@ func SnapshotToLcov(snap *Snapshot) string {
 			}
 		}
 		fmt.Fprintf(&b, "FNH:%d\n", hit)
-		// Sort lines for deterministic output.
 		lines := sortedKeys(cov.Lines)
 		for _, ln := range lines {
 			fmt.Fprintf(&b, "DA:%d,%d\n", ln, cov.Lines[ln])
