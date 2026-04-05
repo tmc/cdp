@@ -28,6 +28,9 @@ type ndpSession struct {
 
 	// Coverage
 	coverageCollector *V8CoverageCollector
+
+	// Sourcemaps
+	bundles *bundleStore
 }
 
 // getCoverageStore satisfies the coverageProvider interface for the HTTP API.
@@ -180,6 +183,7 @@ func runMCP(cfg mcpConfig) error {
 	}, &mcp.ServerOptions{})
 
 	registerNDPTools(server, session)
+	registerSourcemapTools(server, session)
 
 	log.Printf("ndp MCP server ready")
 	transport := &mcp.StdioTransport{}
