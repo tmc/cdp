@@ -1,0 +1,8 @@
+{
+  "manifest_version": 3,
+  "name": "CDP Coverage Explorer",
+  "version": "0.1.0",
+  "description": "Tagged coverage profiles for cdp MCP server — context timeline, deltas, comparison, lcov export",
+  "devtools_page": "devtools.html",
+  "permissions": ["storage"]
+}

@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  :root {
+    --bg: #1e1e1e;
+    --bg-secondary: #252526;
+    --bg-highlight: #2a2d2e;
+    --text: #cccccc;
+    --text-dim: #888888;
+    --accent: #007acc;
+    --green: #4ec94e;
+    --yellow: #cca700;
+    --red: #f14c4c;
+    --border: #3c3c3c;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text); font: 12px/1.4 -apple-system, "Segoe UI", sans-serif; }
+  .toolbar {
+    display: flex; align-items: center; gap: 8px;
+    padding: 4px 8px; background: var(--bg-secondary); border-bottom: 1px solid var(--border);
+  }
+  .toolbar input { background: var(--bg); color: var(--text); border: 1px solid var(--border); padding: 2px 6px; font-size: 11px; width: 200px; }
+  .toolbar button {
+    background: var(--bg); color: var(--text); border: 1px solid var(--border);
+    padding: 2px 8px; cursor: pointer; font-size: 11px;
+  }
+  .toolbar button:hover { background: var(--bg-highlight); }
+  .toolbar button.active { background: var(--accent); border-color: var(--accent); }
+  .toolbar .spacer { flex: 1; }
+  .toolbar .status { color: var(--text-dim); font-size: 11px; }
+  .timeline {
+    display: flex; gap: 2px; padding: 8px; min-height: 48px;
+    overflow-x: auto; background: var(--bg-secondary); border-bottom: 1px solid var(--border);
+  }
+  .ctx-block {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    padding: 4px 12px; border-radius: 3px; cursor: pointer;
+    min-width: 60px; font-size: 11px; text-align: center; transition: opacity 0.15s;
+  }
+  .ctx-block:hover { opacity: 0.85; }
+  .ctx-block.selected { outline: 2px solid #fff; outline-offset: 1px; }
+  .ctx-block .name { font-weight: 600; white-space: nowrap; }
+  .ctx-block .pct { font-size: 10px; opacity: 0.8; }
+  .detail { padding: 8px; overflow: auto; flex: 1; }
+  .detail h3 { font-size: 12px; margin-bottom: 6px; color: var(--text-dim); }
+  table { width: 100%; border-collapse: collapse; font-size: 11px; }
+  th { text-align: left; padding: 3px 8px; background: var(--bg-secondary); border-bottom: 1px solid var(--border); color: var(--text-dim); font-weight: 500; position: sticky; top: 0; }
+  td { padding: 3px 8px; border-bottom: 1px solid var(--border); }
+  tr:hover td { background: var(--bg-highlight); }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .pct-bar { display: inline-block; height: 10px; border-radius: 2px; min-width: 2px; }
+  .link { color: var(--accent); cursor: pointer; text-decoration: none; }
+  .link:hover { text-decoration: underline; }
+  .empty { padding: 24px; text-align: center; color: var(--text-dim); }
+  .delta-pos { color: var(--green); }
+  .delta-neg { color: var(--red); }
+  #app { display: flex; flex-direction: column; height: 100vh; }
+</style>
+</head>
+<body>
+<div id="app">
+  <div class="toolbar">
+    <input id="api-url" type="text" value="http://127.0.0.1:9224" placeholder="API endpoint">
+    <button id="btn-refresh" title="Refresh">Refresh</button>
+    <button id="btn-mode" title="Toggle cumulative/delta">Delta</button>
+    <div class="spacer"></div>
+    <button id="btn-export" title="Export lcov">Export</button>
+    <span class="status" id="status"></span>
+  </div>
+  <div class="timeline" id="timeline"></div>
+  <div class="detail" id="detail">
+    <div class="empty">No coverage data. Start coverage in cdp, then click Refresh.</div>
+  </div>
+</div>
+<script src="panel.js"></script>
+</body>
+</html>
