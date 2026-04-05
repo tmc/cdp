@@ -20,6 +20,7 @@ type webMCPCollector struct {
 	invocations []webMCPInvocation
 	maxEntries  int
 	jsMode      bool // true when CDP domain unavailable, using JS API fallback
+	hasTesting  bool // true when navigator.modelContextTesting is available
 }
 
 type webMCPInvocation struct {
@@ -138,115 +139,137 @@ func enableWebMCP(ctx context.Context) (*webMCPCollector, error) {
 		return collector, nil
 	}
 
-	// Check if navigator.modelContext JS API is available as fallback.
-	// Use a timeout to avoid hanging if the browser tab is unresponsive.
-	var hasAPI bool
-	jsCh := make(chan error, 1)
+	// Check for JS API fallback with a timeout to avoid hanging.
+	type jsProbe struct {
+		hasContext bool
+		hasTesting bool
+		err        error
+	}
+	jsCh := make(chan jsProbe, 1)
 	go func() {
-		jsCh <- chromedp.Run(ctx, chromedp.Evaluate(
-			`typeof navigator.modelContext !== 'undefined'`, &hasAPI,
+		var p jsProbe
+		p.err = chromedp.Run(ctx, chromedp.Evaluate(
+			`typeof navigator.modelContext !== 'undefined'`, &p.hasContext,
 		))
-	}()
-	select {
-	case jsErr := <-jsCh:
-		if jsErr != nil || !hasAPI {
-			return nil, fmt.Errorf("enable WebMCP domain: %w (JS API also unavailable)", cdpErr)
+		if p.err == nil {
+			chromedp.Run(ctx, chromedp.Evaluate(
+				`typeof navigator.modelContextTesting !== 'undefined' && typeof navigator.modelContextTesting.listTools === 'function'`,
+				&p.hasTesting,
+			))
 		}
+		jsCh <- p
+	}()
+
+	var probe jsProbe
+	select {
+	case probe = <-jsCh:
 	case <-time.After(5 * time.Second):
 		return nil, fmt.Errorf("enable WebMCP domain: %w (JS API check timed out)", cdpErr)
 	}
+	if probe.err != nil || !probe.hasContext {
+		return nil, fmt.Errorf("enable WebMCP domain: %w (JS API also unavailable)", cdpErr)
+	}
 
-	log.Printf("WebMCP CDP domain unavailable (%v), using JS API fallback", cdpErr)
 	collector.jsMode = true
+	collector.hasTesting = probe.hasTesting
+	if probe.hasTesting {
+		log.Printf("WebMCP CDP domain unavailable (%v), using modelContextTesting API", cdpErr)
+	} else {
+		log.Printf("WebMCP CDP domain unavailable (%v), using modelContext API (registration only)", cdpErr)
+	}
 	return collector, nil
 }
 
 // discoverToolsViaJS uses the JS API to discover registered tools.
-// Returns a JSON array of tool info, or an error.
+// Priority: modelContextTesting.listTools() > modelContext.getTools() > method enumeration.
 func discoverToolsViaJS(ctx context.Context) (string, error) {
-	// Check if getTools is available (sync check).
+	// Try modelContextTesting.listTools() first (sync, no promises).
+	var hasTesting bool
+	if err := chromedp.Run(ctx, chromedp.Evaluate(
+		`typeof navigator.modelContextTesting !== 'undefined' && typeof navigator.modelContextTesting.listTools === 'function'`,
+		&hasTesting,
+	)); err == nil && hasTesting {
+		var result string
+		if err := chromedp.Run(ctx, chromedp.Evaluate(
+			`JSON.stringify(navigator.modelContextTesting.listTools().map(t => ({name: t.name, description: t.description || '', input_schema: t.inputSchema || null})))`,
+			&result,
+		)); err != nil {
+			return "", fmt.Errorf("discover tools via JS: modelContextTesting.listTools: %w", err)
+		}
+		return result, nil
+	}
+
+	// Fallback: modelContext.getTools() (async, needs .then()).
 	var hasGetTools bool
 	if err := chromedp.Run(ctx, chromedp.Evaluate(
 		`typeof navigator.modelContext !== 'undefined' && typeof navigator.modelContext.getTools === 'function'`,
 		&hasGetTools,
-	)); err != nil {
-		return "", fmt.Errorf("discover tools via JS: %w", err)
-	}
-
-	if hasGetTools {
-		// Use getTools() — requires await, so use a promise callback pattern.
+	)); err == nil && hasGetTools {
 		var result string
-		err := chromedp.Run(ctx, chromedp.Evaluate(
+		if err := chromedp.Run(ctx, chromedp.Evaluate(
 			`navigator.modelContext.getTools().then(tools => JSON.stringify(tools.map(t => ({name: t.name, description: t.description || '', input_schema: t.inputSchema || null}))))`,
 			&result, chromedp.EvalAsValue,
-		))
-		if err != nil {
+		)); err != nil {
 			return "", fmt.Errorf("discover tools via JS: getTools: %w", err)
 		}
 		return result, nil
 	}
 
-	// No getTools — report available methods (sync, no async needed).
+	// No discovery method — report available methods.
 	var result string
 	if err := chromedp.Run(ctx, chromedp.Evaluate(`JSON.stringify({
-  error: "getTools() not available",
-  available_methods: Object.getOwnPropertyNames(Object.getPrototypeOf(navigator.modelContext)).filter(m => m !== 'constructor'),
-  note: "This browser version supports registerTool/unregisterTool but not tool discovery."
+  error: "no tool discovery method available",
+  available_methods: typeof navigator.modelContext !== 'undefined' ? Object.getOwnPropertyNames(Object.getPrototypeOf(navigator.modelContext)).filter(m => m !== 'constructor') : [],
+  note: "Enable 'WebMCP for testing' flag for tool discovery via modelContextTesting.listTools()."
 })`, &result)); err != nil {
 		return "", fmt.Errorf("discover tools via JS: %w", err)
 	}
 	return result, nil
 }
 
-// invokeWebToolJS calls a tool via the JS API, with a shape that works
-// regardless of whether getTools()/execute() or a direct invoke pattern is used.
+// invokeWebToolJS calls a tool via the JS API.
+// Priority: modelContextTesting.executeTool() > modelContext.getTools().execute().
 func invokeWebToolJS(ctx context.Context, name, inputJSON string) (string, error) {
-	// Use .then() chains instead of async IIFE to avoid Brave EvaluateAsDevTools bug.
-	expr := fmt.Sprintf(`navigator.modelContext.getTools().then(tools => {
-  const tool = tools.find(t => t.name === %q);
-  if (!tool) throw new Error("tool not found: %s");
-  return tool.execute(%s);
-}).then(result => JSON.stringify(result))`, name, name, inputJSON)
-
-	var hasGetTools bool
+	// Try modelContextTesting.executeTool() first (sync).
+	var hasTesting bool
 	if err := chromedp.Run(ctx, chromedp.Evaluate(
-		`typeof navigator.modelContext !== 'undefined' && typeof navigator.modelContext.getTools === 'function'`,
-		&hasGetTools,
-	)); err != nil || !hasGetTools {
-		// Try invokeTool as fallback.
-		invokeExpr := fmt.Sprintf(
-			`navigator.modelContext.invokeTool(%q, %s).then(r => JSON.stringify(r))`,
-			name, inputJSON,
-		)
+		`typeof navigator.modelContextTesting !== 'undefined' && typeof navigator.modelContextTesting.executeTool === 'function'`,
+		&hasTesting,
+	)); err == nil && hasTesting {
 		var result string
-		if err2 := chromedp.Run(ctx, chromedp.Evaluate(invokeExpr, &result, chromedp.EvalAsValue)); err2 != nil {
-			return "", fmt.Errorf("invoke web tool %q: no invocation method available", name)
+		expr := fmt.Sprintf(`navigator.modelContextTesting.executeTool(%q, %s)`, name, inputJSON)
+		if err := chromedp.Run(ctx, chromedp.Evaluate(expr, &result)); err != nil {
+			return "", fmt.Errorf("invoke web tool %q via modelContextTesting: %w", name, err)
 		}
 		return result, nil
 	}
 
-	var result string
-	if err := chromedp.Run(ctx, chromedp.Evaluate(expr, &result, chromedp.EvalAsValue)); err != nil {
-		return "", fmt.Errorf("invoke web tool %q: %w", name, err)
-	}
-	return result, nil
-}
-
-// invokeWebTool calls a page-registered MCP tool via Runtime.evaluate.
-// The WebMCP CDP domain is observation-only; invocation requires JS injection.
-func invokeWebTool(ctx context.Context, name, inputJSON string) (string, error) {
-	expr := fmt.Sprintf(
-		`navigator.modelContext.getTools().then(tools => {
+	// Fallback: modelContext.getTools() + execute (async, .then() chain).
+	var hasGetTools bool
+	if err := chromedp.Run(ctx, chromedp.Evaluate(
+		`typeof navigator.modelContext !== 'undefined' && typeof navigator.modelContext.getTools === 'function'`,
+		&hasGetTools,
+	)); err == nil && hasGetTools {
+		expr := fmt.Sprintf(`navigator.modelContext.getTools().then(tools => {
   const tool = tools.find(t => t.name === %q);
   if (!tool) throw new Error("tool not found: %s");
   return tool.execute(%s);
 }).then(result => JSON.stringify(result))`, name, name, inputJSON)
-
-	var result string
-	if err := chromedp.Run(ctx, chromedp.Evaluate(expr, &result, chromedp.EvalAsValue)); err != nil {
-		return "", fmt.Errorf("invoke web tool %q: %w", name, err)
+		var result string
+		if err := chromedp.Run(ctx, chromedp.Evaluate(expr, &result, chromedp.EvalAsValue)); err != nil {
+			return "", fmt.Errorf("invoke web tool %q: %w", name, err)
+		}
+		return result, nil
 	}
-	return result, nil
+
+	return "", fmt.Errorf("invoke web tool %q: no invocation method available (need modelContextTesting or modelContext.getTools)", name)
+}
+
+// invokeWebTool calls a page-registered MCP tool via Runtime.evaluate.
+// The WebMCP CDP domain is observation-only; invocation requires JS injection.
+// Delegates to invokeWebToolJS which handles API detection.
+func invokeWebTool(ctx context.Context, name, inputJSON string) (string, error) {
+	return invokeWebToolJS(ctx, name, inputJSON)
 }
 
 // --- MCP tool registration ---
@@ -393,6 +416,9 @@ Use list_web_tools to see discovered tools, invoke_web_tool to call them.`,
 			mode := "CDP"
 			if s.webMCP.jsMode {
 				mode = "JS API"
+				if s.webMCP.hasTesting {
+					mode = "JS API (modelContextTesting)"
+				}
 			}
 			tools := s.webMCP.listTools()
 			return &mcp.CallToolResult{
@@ -408,8 +434,15 @@ Use list_web_tools to see discovered tools, invoke_web_tool to call them.`,
 		s.webMCP = collector
 
 		if collector.jsMode {
+			msg := "WebMCP enabled (JS API fallback — CDP domain unavailable)."
+			if collector.hasTesting {
+				msg += " modelContextTesting API available — full tool discovery and invocation supported."
+			} else {
+				msg += " modelContext only — registration-side API (registerTool/unregisterTool). Enable 'WebMCP for testing' flag for tool discovery."
+			}
+			msg += " Note: passive invocation observation not available in JS mode."
 			return &mcp.CallToolResult{
-				Content: []mcp.Content{&mcp.TextContent{Text: "WebMCP enabled (JS API fallback — CDP domain unavailable). Use list_web_tools to discover tools, invoke_web_tool to call them. Note: passive invocation observation is not available in JS mode."}},
+				Content: []mcp.Content{&mcp.TextContent{Text: msg}},
 			}, nil, nil
 		}
 
