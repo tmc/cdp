@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -261,6 +263,51 @@ func registerExtensionTools(server *mcp.Server, s *mcpSession) {
 			return nil, nil, fmt.Errorf("install_extension: %w (hint: use --load-extension flag at launch instead)", err)
 		}
 		text := "extension loaded"
+		if result != "" && result != "undefined" {
+			text += ": " + result
+		}
+		return &mcp.CallToolResult{
+			Content: []mcp.Content{&mcp.TextContent{Text: text}},
+		}, nil, nil
+	})
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "install_bundled_extensions",
+		Description: "Install the bundled coverage DevTools extension at runtime via developerPrivate. Useful when --load-extension was not set at browser launch.",
+	}, func(ctx context.Context, req *mcp.CallToolRequest, input struct{}) (*mcp.CallToolResult, any, error) {
+		extBase, err := extractBundledExtensions()
+		if err != nil {
+			return nil, nil, fmt.Errorf("install_bundled_extensions: extract: %w", err)
+		}
+		coveragePath := filepath.Join(extBase, "coverage")
+		if _, err := os.Stat(filepath.Join(coveragePath, "manifest.json")); err != nil {
+			return nil, nil, fmt.Errorf("install_bundled_extensions: coverage extension not found at %s", coveragePath)
+		}
+
+		// Try CDP Extensions.loadUnpacked first.
+		var extID string
+		cdpErr := chromedp.Run(s.browserCtx, chromedp.ActionFunc(func(ctx context.Context) error {
+			id, err := extensions.LoadUnpacked(coveragePath).Do(ctx)
+			if err != nil {
+				return err
+			}
+			extID = id
+			return nil
+		}))
+		if cdpErr == nil {
+			return &mcp.CallToolResult{
+				Content: []mcp.Content{&mcp.TextContent{Text: fmt.Sprintf("bundled coverage extension loaded: %s", extID)}},
+			}, nil, nil
+		}
+
+		// Fallback: chrome.developerPrivate.loadUnpacked.
+		result, err := runOnExtensionsPage(s, fmt.Sprintf(
+			`chrome.developerPrivate.loadUnpacked(%q)`, coveragePath,
+		))
+		if err != nil {
+			return nil, nil, fmt.Errorf("install_bundled_extensions: %w", err)
+		}
+		text := "bundled coverage extension loaded"
 		if result != "" && result != "undefined" {
 			text += ": " + result
 		}

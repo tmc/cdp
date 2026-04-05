@@ -220,6 +220,22 @@ func runMCP(cfg mcpConfig) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	// Extract bundled extensions to ~/.cdp/extensions/.
+	extBase, err := extractBundledExtensions()
+	if err != nil {
+		log.Printf("warning: extract bundled extensions: %v", err)
+	} else {
+		coveragePath := filepath.Join(extBase, "coverage")
+		if _, err := os.Stat(filepath.Join(coveragePath, "manifest.json")); err == nil {
+			if cfg.LoadExtensions != "" {
+				cfg.LoadExtensions += "," + coveragePath
+			} else {
+				cfg.LoadExtensions = coveragePath
+			}
+			log.Printf("bundled coverage extension: %s", coveragePath)
+		}
+	}
+
 	// Create session immediately so the MCP server can start responding
 	// to initialize before the browser is ready. Browser setup runs in
 	// the background; tools that need it will block until ready.
