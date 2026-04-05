@@ -257,7 +257,7 @@ func registerCoverageTools(server *mcp.Server, s *mcpSession) {
 		Name:        "start_coverage",
 		Description: "Start collecting JavaScript code coverage for the current page",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input StartCoverageInput) (*mcp.CallToolResult, any, error) {
-		if s.coverageCollector != nil {
+		if s.coverageCollector != nil && s.coverageCollector.Running() {
 			return nil, nil, fmt.Errorf("start_coverage: already running")
 		}
 		c := coverage.New(false)
@@ -281,7 +281,7 @@ func registerCoverageTools(server *mcp.Server, s *mcpSession) {
 		if err := s.coverageCollector.Stop(); err != nil {
 			return nil, nil, fmt.Errorf("stop_coverage: %w", err)
 		}
-		s.coverageCollector = nil
+		// Keep the collector around so the coverage API can still serve snapshots.
 		return &mcp.CallToolResult{
 			Content: []mcp.Content{&mcp.TextContent{Text: "Coverage collection stopped."}},
 		}, nil, nil
