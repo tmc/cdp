@@ -273,6 +273,35 @@ func interactionCtx(actx context.Context, timeoutSec int) (context.Context, cont
 	return context.WithTimeout(actx, timeout)
 }
 
+// validateTarget checks that a target ID exists in the browser's target list.
+func validateTarget(browserCtx context.Context, tid string) error {
+	targets, err := chromedp.Targets(browserCtx)
+	if err != nil {
+		return fmt.Errorf("list targets: %w", err)
+	}
+	for _, t := range targets {
+		if string(t.TargetID) == tid {
+			return nil
+		}
+	}
+	return fmt.Errorf("target %q not found", tid)
+}
+
+// runWithTimeout runs chromedp actions with a timeout. It spawns a goroutine
+// for chromedp.Run and selects on completion vs deadline.
+func runWithTimeout(ctx context.Context, timeout time.Duration, actions ...chromedp.Action) error {
+	done := make(chan error, 1)
+	go func() {
+		done <- chromedp.Run(ctx, actions...)
+	}()
+	select {
+	case err := <-done:
+		return err
+	case <-time.After(timeout):
+		return fmt.Errorf("timed out after %s", timeout)
+	}
+}
+
 func registerInteractionTools(server *mcp.Server, s *mcpSession) {
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "click",
@@ -456,11 +485,15 @@ func registerTabTools(server *mcp.Server, s *mcpSession) {
 		Name:        "switch_tab",
 		Description: "Switch to a browser tab by target ID",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input SwitchTabInput) (*mcp.CallToolResult, TabOutput, error) {
+		// Validate target exists before attempting attach.
+		if err := validateTarget(s.browserCtx, input.ID); err != nil {
+			return nil, TabOutput{}, fmt.Errorf("switch_tab: %w", err)
+		}
 		tabCtx, tabCancel := chromedp.NewContext(s.browserCtx, chromedp.WithTargetID(target.ID(input.ID)))
 		// Run a no-op to ensure the context attaches to the target.
-		if err := chromedp.Run(tabCtx); err != nil {
+		if err := runWithTimeout(tabCtx, 10*time.Second); err != nil {
 			tabCancel()
-			return nil, TabOutput{}, fmt.Errorf("switch_tab: %w", err)
+			return nil, TabOutput{}, fmt.Errorf("switch_tab: attach: %w", err)
 		}
 		s.setActiveCtx(tabCtx, tabCancel)
 		var out TabOutput
@@ -475,12 +508,12 @@ func registerTabTools(server *mcp.Server, s *mcpSession) {
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input NewTabInput) (*mcp.CallToolResult, TabOutput, error) {
 		tabCtx, tabCancel := chromedp.NewContext(s.browserCtx)
 		if input.URL != "" {
-			if err := chromedp.Run(tabCtx, chromedp.Navigate(input.URL)); err != nil {
+			if err := runWithTimeout(tabCtx, 30*time.Second, chromedp.Navigate(input.URL)); err != nil {
 				tabCancel()
 				return nil, TabOutput{}, fmt.Errorf("new_tab: %w", err)
 			}
 		} else {
-			if err := chromedp.Run(tabCtx); err != nil {
+			if err := runWithTimeout(tabCtx, 10*time.Second); err != nil {
 				tabCancel()
 				return nil, TabOutput{}, fmt.Errorf("new_tab: %w", err)
 			}
@@ -499,6 +532,10 @@ func registerTabTools(server *mcp.Server, s *mcpSession) {
 		if tid == "" {
 			// Close the current tab.
 			tid = string(chromedp.FromContext(s.activeCtx()).Target.TargetID)
+		}
+		// Validate target exists before attempting close.
+		if err := validateTarget(s.browserCtx, tid); err != nil {
+			return nil, nil, fmt.Errorf("close_tab: %w", err)
 		}
 		if err := chromedp.Run(s.browserCtx, chromedp.ActionFunc(func(ctx context.Context) error {
 			return target.CloseTarget(target.ID(tid)).Do(ctx)
