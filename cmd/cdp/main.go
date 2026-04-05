@@ -1180,10 +1180,15 @@ func main() {
 
 	flag.StringVar(&url, "url", "about:blank", "URL to navigate to on start")
 	flag.BoolVar(&headless, "headless", false, "Run Chrome in headless mode")
+	// debugPort controls the Chrome --remote-debugging-port when launching a new browser.
+	// It may be overridden to 0 (auto-assign) when using profiles to avoid port conflicts.
+	// In CDP proxy mode, it also determines the proxy listen port.
 	flag.IntVar(&debugPort, "debug-port", 9222, "Connect to Chrome on specific port (0 for auto)")
 	flag.IntVar(&timeout, "timeout", 60, "Timeout in seconds (0 for no timeout)")
 	flag.BoolVar(&verbose, "verbose", false, "Enable verbose logging")
 	flag.StringVar(&remoteHost, "remote-host", "", "Connect to remote Chrome at this host")
+	// remotePort is used when connecting to an already-running Chrome instance (via --remote-host
+	// or auto-discovery). It is separate from debugPort, which applies when launching a new browser.
 	flag.IntVar(&remotePort, "remote-port", 9222, "Remote Chrome debugging port")
 	flag.StringVar(&remoteTab, "remote-tab", "", "Connect to specific tab ID or URL")
 	flag.BoolVar(&listTabs, "list-tabs", false, "List available tabs on remote Chrome")
@@ -1311,6 +1316,22 @@ func main() {
 		waitReady = true
 	}
 
+	// When --connect-existing is used with an explicit --debug-port, connect
+	// directly to that port instead of auto-discovering a different browser.
+	debugPortExplicit := false
+	flag.Visit(func(f *flag.Flag) {
+		if f.Name == "debug-port" {
+			debugPortExplicit = true
+		}
+	})
+	if connectExisting && debugPortExplicit && remoteHost == "" {
+		remoteHost = "localhost"
+		remotePort = debugPort
+		if verbose {
+			log.Printf("--connect-existing with explicit --debug-port %d: connecting directly", debugPort)
+		}
+	}
+
 	// Validate har-mode flag
 	if harMode != "simple" && harMode != "enhanced" {
 		exitWithError(ExitUsageError, ErrorTypeUsage, "Invalid --har-mode value: %s (must be 'simple' or 'enhanced')", harMode)
@@ -1345,10 +1366,13 @@ func main() {
 		jsScripts[len(jsScripts)-1] = script
 	}
 
-	// Handle profile configuration and port conflicts
+	// Handle profile configuration and port conflicts.
+	// Profiles launch a separate browser process, which would conflict with an existing
+	// browser already listening on 9222. When the user hasn't explicitly chosen a port
+	// (i.e., debugPort is still the default 9222), switch to 0 so the OS auto-assigns
+	// a free port. Note: this cannot distinguish "user passed --debug-port 9222" from
+	// "user omitted the flag" — both result in auto-assignment.
 	if profileDir != "" || useProfile != "" {
-		// If using a profile and port is default (9222), switch to auto (0)
-		// to avoid conflicts with existing running browsers on 9222.
 		if debugPort == 9222 {
 			debugPort = 0
 			if verbose {
@@ -1475,8 +1499,10 @@ func main() {
 		if len(candidates) > 0 {
 			selectedBrowser = selectBestBrowser(candidates, verbose)
 
-			// If we found a running browser with debug port, connect to it instead
-			// But only if we are NOT trying to use a specific profile (either directory or named profile)
+			// If we found a running browser with debug port, connect to it instead of
+			// launching a new one. This takes priority over --debug-port since we're
+			// reusing an existing process. Skipped when using profiles, which always
+			// need their own browser instance.
 			if selectedBrowser.IsRunning && selectedBrowser.DebugPort > 0 && profileDir == "" && useProfile == "" {
 				remoteHost = "localhost"
 				remotePort = selectedBrowser.DebugPort
@@ -1500,8 +1526,11 @@ func main() {
 	var proxyTargetBrowserPort int
 
 	if cdpProxyEnabled {
-		// Default: proxy listens on 9222, browser on internal port
-		// This allows other tools to connect to the proxy at the standard CDP port
+		// In proxy mode, debugPort serves double duty: it's the proxy listen port
+		// (where external tools connect) AND informs where the browser listens.
+		// The proxy sits between external tools and the browser:
+		//   external tools -> proxy (proxyListenPort) -> browser (proxyTargetBrowserPort)
+		// If debugPort is 0 (auto), default the proxy to the standard CDP port 9222.
 		proxyListenPort = debugPort
 		if proxyListenPort == 0 {
 			proxyListenPort = 9222
@@ -1569,9 +1598,10 @@ func main() {
 		fmt.Printf("CDP Observer UI: http://localhost:%d/_/\n", proxyListenPort)
 	}
 
-	// Handle --list-tabs separately
+	// Handle --list-tabs separately.
+	// This scans a fixed set of common debug ports rather than using debugPort,
+	// since the intent is to discover any running Chrome regardless of how it was launched.
 	if listTabs {
-		// Check for running Chrome instances first
 		debugPorts := []int{9222, 9223, 9224, 9225}
 		for _, port := range debugPorts {
 			if ok, _ := checkRunningChrome(port); ok {
@@ -2998,7 +3028,9 @@ func main() {
 
 				// Handle 'hup' command - detach from browser without closing it
 				if line == "hup" {
-					// Get target info for reconnection
+					// Get target info for reconnection.
+					// Use debugPort if we launched the browser, otherwise fall back to
+					// remotePort (the port of the browser we connected to via discovery).
 					c := chromedp.FromContext(browserCtx)
 					var targetID string
 					var port int = debugPort
@@ -4279,12 +4311,16 @@ func resolveDebugPort(ctx context.Context, port int, verbose bool) int {
 func setupChromeForEnhanced(ctx context.Context, cfg fullCaptureConfig) (context.Context, context.CancelFunc, bool, error) {
 	verbose := cfg.Verbose
 	selectedPath := cfg.ChromePath
+	// In enhanced mode, debugPort 0 means "use the standard port" (not auto-assign),
+	// because enhanced mode needs a known port for reconnection.
 	debugPort := cfg.DebugPort
 	if debugPort == 0 {
 		debugPort = 9222
 	}
 
 	// Auto-discover browser — prefer connecting to a running instance with debug port.
+	// When a running browser is found, its actual debug port overrides debugPort above,
+	// since we're connecting to it rather than launching a new one.
 	var remoteHost string
 	var remotePort int
 	candidates, err := discoverBrowsers(verbose)
