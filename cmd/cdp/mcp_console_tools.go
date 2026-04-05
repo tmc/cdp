@@ -175,6 +175,7 @@ func formatStackTrace(st *runtime.StackTrace) string {
 type GetConsoleInput struct {
 	Type  string `json:"type,omitempty"`
 	Limit int    `json:"limit,omitempty"`
+	Index int    `json:"index,omitempty"`
 	Clear bool   `json:"clear,omitempty"`
 }
 
@@ -186,7 +187,7 @@ type GetErrorsInput struct {
 func registerConsoleTools(server *mcp.Server, s *mcpSession) {
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "get_console",
-		Description: "Get captured console messages. Filter by type (log, warn, error, info, debug). Returns most recent entries.",
+		Description: "Get captured console messages. Filter by type (log, warn, error, info, debug). Use index (1-based) to get a single message. Returns most recent entries.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input GetConsoleInput) (*mcp.CallToolResult, any, error) {
 		if s.console == nil {
@@ -194,7 +195,17 @@ func registerConsoleTools(server *mcp.Server, s *mcpSession) {
 				Content: []mcp.Content{&mcp.TextContent{Text: "console capture not active"}},
 			}, nil, nil
 		}
-		messages := s.console.getMessages(input.Type, input.Limit)
+		messages := s.console.getMessages(input.Type, 0)
+		if input.Index > 0 {
+			if input.Index > len(messages) {
+				return &mcp.CallToolResult{
+					Content: []mcp.Content{&mcp.TextContent{Text: fmt.Sprintf("index %d out of range (have %d messages)", input.Index, len(messages))}},
+				}, nil, nil
+			}
+			messages = messages[input.Index-1 : input.Index]
+		} else if input.Limit > 0 && len(messages) > input.Limit {
+			messages = messages[len(messages)-input.Limit:]
+		}
 		if input.Clear {
 			s.console.clear()
 		}

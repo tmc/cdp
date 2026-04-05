@@ -391,6 +391,10 @@ type NewTabInput struct {
 	URL string `json:"url,omitempty"`
 }
 
+type CloseTabInput struct {
+	TargetID string `json:"target_id,omitempty"`
+}
+
 type TabOutput struct {
 	ID    string `json:"id"`
 	Title string `json:"title"`
@@ -457,6 +461,25 @@ func registerTabTools(server *mcp.Server, s *mcpSession) {
 		_ = chromedp.Run(tabCtx, chromedp.Title(&out.Title), chromedp.Location(&out.URL))
 		return nil, out, nil
 	})
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "close_tab",
+		Description: "Close a browser tab by target ID. If no ID given, closes the current tab.",
+	}, func(ctx context.Context, req *mcp.CallToolRequest, input CloseTabInput) (*mcp.CallToolResult, any, error) {
+		tid := input.TargetID
+		if tid == "" {
+			// Close the current tab.
+			tid = string(chromedp.FromContext(s.activeCtx()).Target.TargetID)
+		}
+		if err := chromedp.Run(s.browserCtx, chromedp.ActionFunc(func(ctx context.Context) error {
+			return target.CloseTarget(target.ID(tid)).Do(ctx)
+		})); err != nil {
+			return nil, nil, fmt.Errorf("close_tab: %w", err)
+		}
+		return &mcp.CallToolResult{
+			Content: []mcp.Content{&mcp.TextContent{Text: "closed tab " + tid}},
+		}, nil, nil
+	})
 }
 
 // --- Context tools ---
@@ -493,14 +516,15 @@ func registerContextTools(server *mcp.Server, s *mcpSession) {
 // --- HAR/Network tools ---
 
 type GetHAREntriesInput struct {
-	Domain string `json:"domain,omitempty"`
-	Limit  int    `json:"limit,omitempty"`
+	Domain     string `json:"domain,omitempty"`
+	URLPattern string `json:"url_pattern,omitempty"`
+	Limit      int    `json:"limit,omitempty"`
 }
 
 func registerHARTools(server *mcp.Server, s *mcpSession) {
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "get_har_entries",
-		Description: "Get captured HAR network entries, optionally filtered by domain",
+		Description: "Get captured HAR network entries, optionally filtered by domain or URL pattern (substring match)",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input GetHAREntriesInput) (*mcp.CallToolResult, any, error) {
 		if s.recorder == nil {
 			return nil, nil, fmt.Errorf("get_har_entries: no recorder active")
@@ -518,6 +542,15 @@ func registerHARTools(server *mcp.Server, s *mcpSession) {
 					continue
 				}
 				if strings.Contains(u.Host, input.Domain) {
+					filtered = append(filtered, e)
+				}
+			}
+			entries = filtered
+		}
+		if input.URLPattern != "" {
+			var filtered []*har.Entry
+			for _, e := range entries {
+				if strings.Contains(e.Request.URL, input.URLPattern) {
 					filtered = append(filtered, e)
 				}
 			}

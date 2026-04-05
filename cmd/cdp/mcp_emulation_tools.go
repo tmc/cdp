@@ -12,6 +12,31 @@ import (
 
 // --- Emulation tools ---
 
+// networkPreset defines a named network throttling configuration.
+type networkPreset struct {
+	Download float64 // bytes/sec
+	Upload   float64 // bytes/sec
+	Latency  float64 // ms
+	Offline  bool
+}
+
+var networkPresets = map[string]networkPreset{
+	"slow-3g": {Download: 50 * 1024, Upload: 50 * 1024, Latency: 2000},
+	"fast-3g": {Download: 187.5 * 1024, Upload: 56.25 * 1024, Latency: 562.5},
+	"slow-4g": {Download: 500 * 1024, Upload: 500 * 1024, Latency: 400},
+	"fast-4g": {Download: 4000 * 1024, Upload: 3000 * 1024, Latency: 170},
+	"offline": {Offline: true},
+	"none":    {Download: -1, Upload: -1, Latency: 0},
+}
+
+type SetThrottlingInput struct {
+	NetworkPreset  string  `json:"network_preset,omitempty"`
+	CPURate        float64 `json:"cpu_rate,omitempty"`
+	CustomDownload float64 `json:"custom_download,omitempty"`
+	CustomUpload   float64 `json:"custom_upload,omitempty"`
+	CustomLatency  float64 `json:"custom_latency,omitempty"`
+}
+
 type SetViewportInput struct {
 	Width  int64   `json:"width"`
 	Height int64   `json:"height"`
@@ -40,6 +65,68 @@ type SetExtraHeadersInput struct {
 }
 
 func registerEmulationTools(server *mcp.Server, s *mcpSession) {
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "set_throttling",
+		Description: `Set network and CPU throttling. Network presets: slow-3g, fast-3g, slow-4g, fast-4g, offline, none. Custom download/upload in bytes/sec override the preset. CPU rate is a slowdown multiplier (1=normal, 4=4x slower, max 20).`,
+	}, func(ctx context.Context, req *mcp.CallToolRequest, input SetThrottlingInput) (*mcp.CallToolResult, any, error) {
+		actx := s.activeCtx()
+
+		// Resolve network conditions.
+		var download, upload, latency float64
+		var offline bool
+		download, upload = -1, -1 // defaults: no throttling
+
+		if input.NetworkPreset != "" {
+			p, ok := networkPresets[input.NetworkPreset]
+			if !ok {
+				return nil, nil, fmt.Errorf("set_throttling: unknown preset %q", input.NetworkPreset)
+			}
+			download, upload, latency, offline = p.Download, p.Upload, p.Latency, p.Offline
+		}
+		if input.CustomDownload > 0 {
+			download = input.CustomDownload
+		}
+		if input.CustomUpload > 0 {
+			upload = input.CustomUpload
+		}
+		if input.CustomLatency > 0 {
+			latency = input.CustomLatency
+		}
+
+		if err := chromedp.Run(actx, chromedp.ActionFunc(func(ctx context.Context) error {
+			return network.OverrideNetworkState(offline, latency, download, upload).Do(ctx)
+		})); err != nil {
+			return nil, nil, fmt.Errorf("set_throttling: network: %w", err)
+		}
+
+		// Apply CPU throttling if requested.
+		cpuRate := input.CPURate
+		if cpuRate > 0 {
+			if cpuRate > 20 {
+				cpuRate = 20
+			}
+			if err := chromedp.Run(actx, chromedp.ActionFunc(func(ctx context.Context) error {
+				return emulation.SetCPUThrottlingRate(cpuRate).Do(ctx)
+			})); err != nil {
+				return nil, nil, fmt.Errorf("set_throttling: cpu: %w", err)
+			}
+		}
+
+		desc := "throttling set"
+		if input.NetworkPreset != "" {
+			desc += fmt.Sprintf(" (network=%s", input.NetworkPreset)
+		} else {
+			desc += fmt.Sprintf(" (network: down=%.0f up=%.0f latency=%.0fms", download, upload, latency)
+		}
+		if cpuRate > 0 {
+			desc += fmt.Sprintf(", cpu=%.1fx", cpuRate)
+		}
+		desc += ")"
+		return &mcp.CallToolResult{
+			Content: []mcp.Content{&mcp.TextContent{Text: desc}},
+		}, nil, nil
+	})
+
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "set_viewport",
 		Description: "Set the browser viewport size and device metrics. Width and height in pixels.",
