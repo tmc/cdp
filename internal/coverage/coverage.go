@@ -91,6 +91,14 @@ type FileSummary struct {
 	CoveragePercent float64 `json:"coverage_percent"`
 }
 
+// Store is the read-only interface used by the coverage HTTP API.
+// Both Collector (chromedp-backed) and external adapters (e.g. V8 via ndp)
+// implement this interface.
+type Store interface {
+	Snapshots() []*Snapshot
+	ComputeDelta(before, after *Snapshot) *Delta
+}
+
 // New creates a coverage collector.
 func New(verbose bool) *Collector {
 	return &Collector{

@@ -49,7 +49,10 @@ func (s *mcpSession) activeCtx() context.Context {
 	return s.ctx
 }
 
-func (s *mcpSession) getCoverageCollector() *coverage.Collector {
+func (s *mcpSession) getCoverageStore() coverage.Store {
+	if s.coverageCollector == nil {
+		return nil
+	}
 	return s.coverageCollector
 }
 

@@ -24,6 +24,7 @@ var (
 	config   string
 	mcpMode  bool
 	nodePort string
+	apiPort  int
 )
 
 var rootCmd = &cobra.Command{
@@ -44,6 +45,7 @@ Features:
 		if mcpMode {
 			if err := runMCP(mcpConfig{
 				NodePort: nodePort,
+				APIPort:  apiPort,
 				Verbose:  verbose,
 			}); err != nil {
 				log.Fatalf("MCP server: %v", err)
@@ -169,6 +171,7 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&config, "config", "", "Path to configuration file")
 	rootCmd.Flags().BoolVar(&mcpMode, "mcp", false, "Run as MCP server (stdio transport)")
 	rootCmd.Flags().StringVar(&nodePort, "node-port", "9229", "Node.js inspector port")
+	rootCmd.Flags().IntVar(&apiPort, "api-port", 0, "Coverage API port (0 = auto-assign)")
 
 	// Add subcommands
 	rootCmd.AddCommand(nodeCmd)

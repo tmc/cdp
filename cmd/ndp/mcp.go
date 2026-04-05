@@ -5,11 +5,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"net"
 	"os"
 	"sync"
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/tmc/misc/chrome-to-har/internal/coverage"
 )
 
 // ndpSession holds V8 state shared across MCP tool handlers.
@@ -24,8 +26,16 @@ type ndpSession struct {
 	consoleMsgs []consoleMsg
 	consoleErrs []consoleErr
 
-	// Coverage state
-	coverageRunning bool
+	// Coverage
+	coverageCollector *V8CoverageCollector
+}
+
+// getCoverageStore satisfies the coverageProvider interface for the HTTP API.
+func (s *ndpSession) getCoverageStore() coverage.Store {
+	if s.coverageCollector == nil {
+		return nil
+	}
+	return s.coverageCollector
 }
 
 type consoleMsg struct {
@@ -44,6 +54,7 @@ type consoleErr struct {
 
 type mcpConfig struct {
 	NodePort string
+	APIPort  int
 	Verbose  bool
 }
 
@@ -74,10 +85,24 @@ func runMCP(cfg mcpConfig) error {
 	}
 
 	session := &ndpSession{
-		client:   client,
-		runtime:  rt,
-		debugger: dbg,
-		profiler: prof,
+		client:            client,
+		runtime:           rt,
+		debugger:          dbg,
+		profiler:          prof,
+		coverageCollector: NewV8CoverageCollector(prof, dbg, cfg.Verbose),
+	}
+
+	// Start coverage HTTP API if port is configured.
+	apiPort := cfg.APIPort
+	if apiPort == 0 {
+		if ln, err := net.Listen("tcp", "127.0.0.1:0"); err == nil {
+			apiPort = ln.Addr().(*net.TCPAddr).Port
+			ln.Close()
+		}
+	}
+	if apiPort > 0 {
+		go coverage.StartAPI(apiPort, session.coverageCollector)
+		log.Printf("coverage API port: %d", apiPort)
 	}
 
 	// Listen for console and exception events.

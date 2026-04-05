@@ -41,7 +41,10 @@ type InteractiveMode struct {
 	syntheticMaps     *syntheticMapStore
 }
 
-func (im *InteractiveMode) getCoverageCollector() *coverage.Collector {
+func (im *InteractiveMode) getCoverageStore() coverage.Store {
+	if im.coverageCollector == nil {
+		return nil
+	}
 	return im.coverageCollector
 }
 

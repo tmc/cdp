@@ -233,16 +233,13 @@ func registerNDPTools(server *mcp.Server, s *ndpSession) {
 		Name:        "start_coverage",
 		Description: "Start collecting JavaScript code coverage in the Node.js process.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input StartCoverageInput) (*mcp.CallToolResult, any, error) {
-		if s.coverageRunning {
-			s.profiler.StopPreciseCoverage()
+		cc := s.coverageCollector
+		if cc.Running() {
+			cc.Stop()
 		}
-		if err := s.profiler.EnableProfiler(); err != nil {
-			return nil, nil, fmt.Errorf("start_coverage: enable profiler: %w", err)
-		}
-		if err := s.profiler.StartPreciseCoverage(true, true); err != nil {
+		if err := cc.Start(); err != nil {
 			return nil, nil, fmt.Errorf("start_coverage: %w", err)
 		}
-		s.coverageRunning = true
 		return &mcp.CallToolResult{
 			Content: []mcp.Content{&mcp.TextContent{Text: "coverage collection started"}},
 		}, nil, nil
@@ -252,15 +249,15 @@ func registerNDPTools(server *mcp.Server, s *ndpSession) {
 		Name:        "stop_coverage",
 		Description: "Stop collecting JavaScript code coverage.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input StopCoverageInput) (*mcp.CallToolResult, any, error) {
-		if !s.coverageRunning {
+		cc := s.coverageCollector
+		if !cc.Running() {
 			return &mcp.CallToolResult{
 				Content: []mcp.Content{&mcp.TextContent{Text: "coverage not running"}},
 			}, nil, nil
 		}
-		if err := s.profiler.StopPreciseCoverage(); err != nil {
+		if err := cc.Stop(); err != nil {
 			return nil, nil, fmt.Errorf("stop_coverage: %w", err)
 		}
-		s.coverageRunning = false
 		return &mcp.CallToolResult{
 			Content: []mcp.Content{&mcp.TextContent{Text: "coverage collection stopped"}},
 		}, nil, nil
@@ -268,32 +265,53 @@ func registerNDPTools(server *mcp.Server, s *ndpSession) {
 
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "get_coverage",
-		Description: "Get current code coverage data. Returns per-script function and range coverage.",
+		Description: "Get current code coverage data. Returns per-file line coverage with hit counts.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input GetCoverageInput) (*mcp.CallToolResult, any, error) {
-		if !s.coverageRunning {
+		cc := s.coverageCollector
+		if !cc.Running() {
 			return &mcp.CallToolResult{
 				Content: []mcp.Content{&mcp.TextContent{Text: "coverage not running — call start_coverage first"}},
 			}, nil, nil
 		}
-		cov, err := s.profiler.TakePreciseCoverage()
+		snap, err := cc.TakeSnapshot("latest")
 		if err != nil {
 			return nil, nil, fmt.Errorf("get_coverage: %w", err)
 		}
-		// Filter out internal scripts.
-		var filtered []ScriptCoverage
-		for _, sc := range cov {
-			if sc.URL == "" || strings.HasPrefix(sc.URL, "node:") {
-				continue
-			}
-			filtered = append(filtered, sc)
-		}
-		data, err := json.Marshal(filtered)
+		data, err := json.Marshal(snap.Summary())
 		if err != nil {
 			return nil, nil, fmt.Errorf("get_coverage: marshal: %w", err)
 		}
 		return &mcp.CallToolResult{
 			Content: []mcp.Content{&mcp.TextContent{Text: string(data)}},
+		}, nil, nil
+	})
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "coverage_snapshot",
+		Description: "Take a named coverage snapshot for later comparison. Coverage must be running.",
+	}, func(ctx context.Context, req *mcp.CallToolRequest, input CoverageSnapshotInput) (*mcp.CallToolResult, any, error) {
+		cc := s.coverageCollector
+		if !cc.Running() {
+			return &mcp.CallToolResult{
+				Content: []mcp.Content{&mcp.TextContent{Text: "coverage not running — call start_coverage first"}},
+			}, nil, nil
+		}
+		name := input.Name
+		if name == "" {
+			name = fmt.Sprintf("snap-%d", len(cc.Snapshots())+1)
+		}
+		snap, err := cc.TakeSnapshot(name)
+		if err != nil {
+			return nil, nil, fmt.Errorf("coverage_snapshot: %w", err)
+		}
+		summary := snap.Summary()
+		data, err := json.Marshal(summary)
+		if err != nil {
+			return nil, nil, fmt.Errorf("coverage_snapshot: marshal: %w", err)
+		}
+		return &mcp.CallToolResult{
+			Content: []mcp.Content{&mcp.TextContent{Text: fmt.Sprintf("snapshot %q: %d files\n%s", name, len(summary), string(data))}},
 		}, nil, nil
 	})
 
