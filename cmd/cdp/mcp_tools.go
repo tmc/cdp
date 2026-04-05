@@ -46,6 +46,7 @@ func registerMCPTools(server *mcp.Server, session *mcpSession) {
 	registerDomDiffTools(server, session)
 	registerSourcemapTools(server, session)
 	registerWebMCPTools(server, session)
+	registerExtensionTools(server, session)
 }
 
 // --- Navigation tools ---
