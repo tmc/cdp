@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"sync"
 	"time"
 
@@ -18,6 +19,7 @@ type webMCPCollector struct {
 	tools       map[string]*webmcp.Tool // name -> tool
 	invocations []webMCPInvocation
 	maxEntries  int
+	jsMode      bool // true when CDP domain unavailable, using JS API fallback
 }
 
 type webMCPInvocation struct {
@@ -106,15 +108,115 @@ func (w *webMCPCollector) listInvocations(last int) []webMCPInvocation {
 }
 
 // enableWebMCP enables the WebMCP domain and starts listening for events.
+// Falls back to JS API mode if the CDP domain is unavailable (-32601).
 func enableWebMCP(ctx context.Context) (*webMCPCollector, error) {
 	collector := newWebMCPCollector()
-	chromedp.ListenTarget(ctx, collector.handleEvent)
-	if err := chromedp.Run(ctx, chromedp.ActionFunc(func(ctx context.Context) error {
-		return webmcp.Enable().Do(ctx)
-	})); err != nil {
-		return nil, fmt.Errorf("enable WebMCP domain: %w", err)
+
+	// Try the CDP domain first with a timeout. We use a goroutine + channel
+	// instead of context.WithTimeout because cancelling a chromedp-derived
+	// context kills the browser target.
+	type result struct{ err error }
+	ch := make(chan result, 1)
+	go func() {
+		err := chromedp.Run(ctx, chromedp.ActionFunc(func(ctx context.Context) error {
+			return webmcp.Enable().Do(ctx)
+		}))
+		ch <- result{err}
+	}()
+
+	var cdpErr error
+	select {
+	case r := <-ch:
+		cdpErr = r.err
+	case <-time.After(10 * time.Second):
+		cdpErr = fmt.Errorf("timed out after 10s")
 	}
+
+	if cdpErr == nil {
+		// CDP domain available — listen for events.
+		chromedp.ListenTarget(ctx, collector.handleEvent)
+		return collector, nil
+	}
+
+	// Check if navigator.modelContext JS API is available as fallback.
+	var hasAPI bool
+	if err := chromedp.Run(ctx, chromedp.Evaluate(
+		`typeof navigator.modelContext !== 'undefined'`, &hasAPI,
+	)); err != nil || !hasAPI {
+		return nil, fmt.Errorf("enable WebMCP domain: %w (JS API also unavailable)", cdpErr)
+	}
+
+	log.Printf("WebMCP CDP domain unavailable (%v), using JS API fallback", cdpErr)
+	collector.jsMode = true
 	return collector, nil
+}
+
+// discoverToolsViaJS uses the JS API to discover registered tools.
+// Returns a JSON array of tool info, or an error.
+func discoverToolsViaJS(ctx context.Context) (string, error) {
+	expr := `(async () => {
+  const mc = navigator.modelContext;
+  if (!mc) return {error: "no navigator.modelContext"};
+  // Try getTools() first (Chrome 148+), then fall back to method discovery.
+  if (typeof mc.getTools === 'function') {
+    const tools = await mc.getTools();
+    return tools.map(t => ({
+      name: t.name,
+      description: t.description || '',
+      input_schema: t.inputSchema || null,
+    }));
+  }
+  // No getTools — report available methods so the caller knows what's possible.
+  const methods = Object.getOwnPropertyNames(Object.getPrototypeOf(mc))
+    .filter(m => m !== 'constructor');
+  return {
+    error: "getTools() not available",
+    available_methods: methods,
+    note: "This browser version supports registerTool/unregisterTool but not tool discovery. Pages can register tools, but we cannot enumerate them without getTools()."
+  };
+})()`
+	var result json.RawMessage
+	if err := chromedp.Run(ctx, chromedp.Evaluate(expr, &result, chromedp.EvalAsValue)); err != nil {
+		return "", fmt.Errorf("discover tools via JS: %w", err)
+	}
+	// Pretty-print the result.
+	var pretty json.RawMessage
+	if err := json.Unmarshal(result, &pretty); err != nil {
+		return string(result), nil
+	}
+	out, err := json.MarshalIndent(pretty, "", "  ")
+	if err != nil {
+		return string(result), nil
+	}
+	return string(out), nil
+}
+
+// invokeWebToolJS calls a tool via the JS API, with a shape that works
+// regardless of whether getTools()/execute() or a direct invoke pattern is used.
+func invokeWebToolJS(ctx context.Context, name, inputJSON string) (string, error) {
+	expr := fmt.Sprintf(`(async () => {
+  const mc = navigator.modelContext;
+  if (!mc) throw new Error("no navigator.modelContext");
+  // Try getTools + execute pattern first.
+  if (typeof mc.getTools === 'function') {
+    const tools = await mc.getTools();
+    const tool = tools.find(t => t.name === %q);
+    if (!tool) throw new Error("tool not found: %s");
+    return await tool.execute(%s);
+  }
+  // No getTools — try direct invokeTool if available.
+  if (typeof mc.invokeTool === 'function') {
+    return await mc.invokeTool(%q, %s);
+  }
+  throw new Error("no tool invocation method available (tried getTools().execute() and invokeTool())");
+})()`, name, name, inputJSON, name, inputJSON)
+
+	var result json.RawMessage
+	if err := chromedp.Run(ctx, chromedp.Evaluate(expr, &result, chromedp.EvalAsValue)); err != nil {
+		return "", fmt.Errorf("invoke web tool %q: %w", name, err)
+	}
+	out, _ := json.MarshalIndent(result, "", "  ")
+	return string(out), nil
 }
 
 // invokeWebTool calls a page-registered MCP tool via Runtime.evaluate.
@@ -126,15 +228,15 @@ func invokeWebTool(ctx context.Context, name, inputJSON string) (string, error) 
   const tool = tools.find(t => t.name === %q);
   if (!tool) throw new Error("tool not found: %s");
   const input = %s;
-  const result = await tool.execute(input);
-  return JSON.stringify(result);
+  return await tool.execute(input);
 })()`, name, name, inputJSON)
 
-	var result string
+	var result json.RawMessage
 	if err := chromedp.Run(ctx, chromedp.Evaluate(expr, &result, chromedp.EvalAsValue)); err != nil {
 		return "", fmt.Errorf("invoke web tool %q: %w", name, err)
 	}
-	return result, nil
+	out, _ := json.MarshalIndent(result, "", "  ")
+	return string(out), nil
 }
 
 // --- MCP tool registration ---
@@ -164,6 +266,19 @@ Returns tool names, descriptions, input schemas, and annotations.`,
 		if s.webMCP == nil {
 			return nil, nil, fmt.Errorf("WebMCP not enabled — call enable_webmcp first")
 		}
+
+		// JS mode: discover tools via the page's JS API.
+		if s.webMCP.jsMode {
+			actx := s.activeCtx()
+			result, err := discoverToolsViaJS(actx)
+			if err != nil {
+				return nil, nil, fmt.Errorf("list_web_tools: %w", err)
+			}
+			return &mcp.CallToolResult{
+				Content: []mcp.Content{&mcp.TextContent{Text: fmt.Sprintf("(JS API mode)\n%s", result)}},
+			}, nil, nil
+		}
+
 		tools := s.webMCP.listTools()
 		if len(tools) == 0 {
 			return &mcp.CallToolResult{
@@ -172,13 +287,13 @@ Returns tool names, descriptions, input schemas, and annotations.`,
 		}
 
 		type toolInfo struct {
-			Name        string      `json:"name"`
-			Description string      `json:"description"`
+			Name        string          `json:"name"`
+			Description string          `json:"description"`
 			InputSchema json.RawMessage `json:"input_schema,omitempty"`
-			ReadOnly    bool        `json:"read_only,omitempty"`
-			Autosubmit  bool        `json:"autosubmit,omitempty"`
-			FrameID     string      `json:"frame_id"`
-			NodeID      int64       `json:"node_id,omitempty"`
+			ReadOnly    bool            `json:"read_only,omitempty"`
+			Autosubmit  bool            `json:"autosubmit,omitempty"`
+			FrameID     string          `json:"frame_id"`
+			NodeID      int64           `json:"node_id,omitempty"`
 		}
 		var infos []toolInfo
 		for _, t := range tools {
@@ -221,10 +336,6 @@ via Runtime.evaluate calling navigator.modelContext on the page.`,
 		if input.Name == "" {
 			return nil, nil, fmt.Errorf("invoke_web_tool: name is required")
 		}
-		tool := s.webMCP.getTool(input.Name)
-		if tool == nil {
-			return nil, nil, fmt.Errorf("invoke_web_tool: tool %q not found — check list_web_tools", input.Name)
-		}
 
 		inputJSON := input.Input
 		if inputJSON == "" {
@@ -232,6 +343,24 @@ via Runtime.evaluate calling navigator.modelContext on the page.`,
 		}
 
 		actx := s.activeCtx()
+
+		// In JS mode, invoke directly — we can't check getTool since
+		// the CDP domain isn't providing tool discovery.
+		if s.webMCP.jsMode {
+			result, err := invokeWebToolJS(actx, input.Name, inputJSON)
+			if err != nil {
+				return nil, nil, fmt.Errorf("invoke_web_tool: %w", err)
+			}
+			return &mcp.CallToolResult{
+				Content: []mcp.Content{&mcp.TextContent{Text: result}},
+			}, nil, nil
+		}
+
+		tool := s.webMCP.getTool(input.Name)
+		if tool == nil {
+			return nil, nil, fmt.Errorf("invoke_web_tool: tool %q not found — check list_web_tools", input.Name)
+		}
+
 		result, err := invokeWebTool(actx, input.Name, inputJSON)
 		if err != nil {
 			return nil, nil, fmt.Errorf("invoke_web_tool: %w", err)
@@ -251,9 +380,13 @@ pages register tools via navigator.modelContext.registerTool().
 Use list_web_tools to see discovered tools, invoke_web_tool to call them.`,
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input struct{}) (*mcp.CallToolResult, any, error) {
 		if s.webMCP != nil {
+			mode := "CDP"
+			if s.webMCP.jsMode {
+				mode = "JS API"
+			}
 			tools := s.webMCP.listTools()
 			return &mcp.CallToolResult{
-				Content: []mcp.Content{&mcp.TextContent{Text: fmt.Sprintf("WebMCP already enabled (%d tools registered)", len(tools))}},
+				Content: []mcp.Content{&mcp.TextContent{Text: fmt.Sprintf("WebMCP already enabled (%s mode, %d tools registered)", mode, len(tools))}},
 			}, nil, nil
 		}
 
@@ -263,6 +396,12 @@ Use list_web_tools to see discovered tools, invoke_web_tool to call them.`,
 			return nil, nil, fmt.Errorf("enable_webmcp: %w", err)
 		}
 		s.webMCP = collector
+
+		if collector.jsMode {
+			return &mcp.CallToolResult{
+				Content: []mcp.Content{&mcp.TextContent{Text: "WebMCP enabled (JS API fallback — CDP domain unavailable). Use list_web_tools to discover tools, invoke_web_tool to call them. Note: passive invocation observation is not available in JS mode."}},
+			}, nil, nil
+		}
 
 		tools := collector.listTools()
 		return &mcp.CallToolResult{
@@ -277,6 +416,11 @@ Use list_web_tools to see discovered tools, invoke_web_tool to call them.`,
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input WebToolInvocationsInput) (*mcp.CallToolResult, any, error) {
 		if s.webMCP == nil {
 			return nil, nil, fmt.Errorf("WebMCP not enabled — call enable_webmcp first")
+		}
+		if s.webMCP.jsMode {
+			return &mcp.CallToolResult{
+				Content: []mcp.Content{&mcp.TextContent{Text: "invocation observation not available in JS API mode (requires CDP WebMCP domain for passive event monitoring)"}},
+			}, nil, nil
 		}
 		last := input.Last
 		if last <= 0 {
