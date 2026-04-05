@@ -29,66 +29,66 @@ type Collector struct {
 
 // Snapshot holds coverage data captured at a point in time.
 type Snapshot struct {
-	Name      string
-	Timestamp time.Time
-	Scripts   map[string]*ScriptCoverage // URL -> coverage
-	CSS       []*CSSCoverage
+	Name      string                     `json:"name"`
+	Timestamp time.Time                  `json:"timestamp"`
+	Scripts   map[string]*ScriptCoverage `json:"scripts,omitempty"` // URL -> coverage
+	CSS       []*CSSCoverage             `json:"css,omitempty"`
 }
 
 // ScriptCoverage holds per-script coverage data.
 type ScriptCoverage struct {
-	URL        string
-	Source     string
-	Functions  []FunctionCoverage
-	Lines      map[int]int     // line number -> hit count
-	ByteRanges []CoverageRange // raw CDP ranges
+	URL        string             `json:"url"`
+	Source     string             `json:"-"` // excluded from API responses
+	Functions  []FunctionCoverage `json:"functions,omitempty"`
+	Lines      map[int]int        `json:"lines,omitempty"`       // line number -> hit count
+	ByteRanges []CoverageRange    `json:"byte_ranges,omitempty"` // raw CDP ranges
 }
 
 // FunctionCoverage holds coverage for a single function.
 type FunctionCoverage struct {
-	Name      string
-	StartLine int
-	EndLine   int
-	HitCount  int
-	Ranges    []CoverageRange
+	Name      string          `json:"name"`
+	StartLine int             `json:"start_line"`
+	EndLine   int             `json:"end_line"`
+	HitCount  int             `json:"hit_count"`
+	Ranges    []CoverageRange `json:"ranges,omitempty"`
 }
 
 // CoverageRange is a byte-offset range with an execution count.
 type CoverageRange struct {
-	StartOffset int
-	EndOffset   int
-	Count       int
+	StartOffset int `json:"start_offset"`
+	EndOffset   int `json:"end_offset"`
+	Count       int `json:"count"`
 }
 
 // CSSCoverage holds per-stylesheet coverage data.
 type CSSCoverage struct {
-	URL        string
-	Ranges     []CoverageRange
-	UsedBytes  int
-	TotalBytes int
+	URL        string          `json:"url"`
+	Ranges     []CoverageRange `json:"ranges,omitempty"`
+	UsedBytes  int             `json:"used_bytes"`
+	TotalBytes int             `json:"total_bytes"`
 }
 
 // Delta describes lines newly covered between two snapshots.
 type Delta struct {
-	Name    string
-	Scripts map[string]*ScriptDelta
+	Name    string                    `json:"name"`
+	Scripts map[string]*ScriptDelta   `json:"scripts,omitempty"`
 }
 
 // ScriptDelta holds per-file differential coverage.
 type ScriptDelta struct {
-	URL           string
-	NewlyCovered  map[int]int // line -> hit count (was 0, now >0)
-	TotalLines    int
-	CoveredBefore int
-	CoveredAfter  int
+	URL           string      `json:"url"`
+	NewlyCovered  map[int]int `json:"newly_covered,omitempty"` // line -> hit count (was 0, now >0)
+	TotalLines    int         `json:"total_lines"`
+	CoveredBefore int         `json:"covered_before"`
+	CoveredAfter  int         `json:"covered_after"`
 }
 
 // FileSummary is a per-file coverage summary.
 type FileSummary struct {
-	URL             string
-	TotalLines      int
-	CoveredLines    int
-	CoveragePercent float64
+	URL             string  `json:"url"`
+	TotalLines      int     `json:"total_lines"`
+	CoveredLines    int     `json:"covered_lines"`
+	CoveragePercent float64 `json:"coverage_percent"`
 }
 
 // New creates a coverage collector.
