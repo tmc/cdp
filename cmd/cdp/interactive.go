@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"os"
@@ -15,6 +16,7 @@ import (
 	"github.com/chromedp/cdproto/target"
 	"github.com/chromedp/chromedp"
 	"github.com/tmc/misc/chrome-to-har/internal/coverage"
+	"github.com/tmc/misc/chrome-to-har/internal/sourcemap"
 	"github.com/tmc/misc/chrome-to-har/internal/sources"
 	"github.com/tmc/misc/chrome-to-har/internal/tooldef"
 )
@@ -36,6 +38,7 @@ type InteractiveMode struct {
 	toolsDir          string                    // directory for .cdp tool definitions
 	sourceCollector   *sources.Collector
 	coverageCollector *coverage.Collector
+	syntheticMaps     *syntheticMapStore
 }
 
 // recorderWithOutputDir is the subset of recorder.Recorder needed for context switching.
@@ -64,6 +67,7 @@ func NewInteractiveMode(ctx context.Context, cancel context.CancelFunc, launched
 	}
 	im.registerDefineCommand()
 	im.registerCoverageCommands()
+	im.registerSourcemapCommands()
 	if toolsDir != "" {
 		im.loadTools(toolsDir)
 	}
@@ -1191,5 +1195,257 @@ func (im *InteractiveMode) handleDefine(args []string) error {
 	// Register immediately.
 	im.registerToolCommand(def)
 	fmt.Printf("Tool '%s' defined and registered.\n", name)
+	return nil
+}
+
+// registerSourcemapCommands adds sourcemap commands to the registry.
+func (im *InteractiveMode) registerSourcemapCommands() {
+	im.registry.RegisterCommand(&Command{
+		Name:        "sourcemap",
+		Category:    "Sourcemap",
+		Description: "Synthetic sourcemap generation from coverage data",
+		Usage:       "sourcemap <analyze|set-structure|generate|serve|list> [args]",
+		Examples: []string{
+			"sourcemap analyze http://example.com/bundle.js",
+			"sourcemap analyze http://example.com/bundle.js after-login",
+			`sourcemap set-structure http://example.com/bundle.js '{"files":[...],"summary":"..."}'`,
+			"sourcemap generate http://example.com/bundle.js",
+			"sourcemap list",
+		},
+		Aliases: []string{"smap"},
+		Handler: func(ctx context.Context, args []string) error {
+			if len(args) == 0 {
+				return fmt.Errorf("subcommand required: analyze, set-structure, generate, serve, list")
+			}
+			switch args[0] {
+			case "analyze":
+				if len(args) < 2 {
+					return fmt.Errorf("usage: sourcemap analyze <bundle_url> [snapshot_name]")
+				}
+				snap := ""
+				if len(args) > 2 {
+					snap = args[2]
+				}
+				return im.sourcemapAnalyze(args[1], snap)
+			case "set-structure":
+				if len(args) < 3 {
+					return fmt.Errorf("usage: sourcemap set-structure <bundle_url> '<json>'")
+				}
+				return im.sourcemapSetStructure(args[1], strings.Join(args[2:], " "))
+			case "generate":
+				if len(args) < 2 {
+					return fmt.Errorf("usage: sourcemap generate <bundle_url>")
+				}
+				return im.sourcemapGenerate(args[1])
+			case "serve":
+				if len(args) < 2 {
+					return fmt.Errorf("usage: sourcemap serve <bundle_url>")
+				}
+				return im.sourcemapServe(args[1])
+			case "list":
+				return im.sourcemapList()
+			default:
+				return fmt.Errorf("unknown subcommand %q: use analyze, set-structure, generate, serve, list", args[0])
+			}
+		},
+	})
+}
+
+func (im *InteractiveMode) sourcemapAnalyze(bundleURL, snapshotName string) error {
+	if im.coverageCollector == nil {
+		return fmt.Errorf("coverage not active — run 'coverage start' first")
+	}
+
+	snapshots := im.coverageCollector.Snapshots()
+	if len(snapshots) == 0 {
+		return fmt.Errorf("no coverage snapshots — run 'coverage snapshot' first")
+	}
+
+	snap := snapshots[len(snapshots)-1]
+	if snapshotName != "" {
+		snap = nil
+		for _, sn := range snapshots {
+			if sn.Name == snapshotName {
+				snap = sn
+				break
+			}
+		}
+		if snap == nil {
+			return fmt.Errorf("snapshot %q not found", snapshotName)
+		}
+	}
+
+	scriptCov, ok := snap.Scripts[bundleURL]
+	if !ok {
+		// Try substring match.
+		for url, sc := range snap.Scripts {
+			if strings.Contains(url, bundleURL) {
+				scriptCov = sc
+				bundleURL = url
+				break
+			}
+		}
+		if scriptCov == nil {
+			fmt.Printf("No coverage data for %s. Available scripts:\n", bundleURL)
+			for url := range snap.Scripts {
+				fmt.Printf("  %s\n", url)
+			}
+			return nil
+		}
+	}
+
+	fmt.Printf("Bundle: %s (%d bytes)\n", bundleURL, len(scriptCov.Source))
+	fmt.Printf("Functions: %d\n", len(scriptCov.Functions))
+
+	executed := 0
+	for _, fn := range scriptCov.Functions {
+		if fn.HitCount > 0 {
+			executed++
+		}
+	}
+	fmt.Printf("Executed: %d\n\n", executed)
+
+	for i, fn := range scriptCov.Functions {
+		if fn.HitCount == 0 {
+			continue
+		}
+		if i >= 50 {
+			fmt.Printf("... and more\n")
+			break
+		}
+		name := fn.Name
+		if name == "" {
+			name = "(anonymous)"
+		}
+		byteRange := ""
+		if len(fn.Ranges) > 0 {
+			byteRange = fmt.Sprintf(" [bytes %d-%d]", fn.Ranges[0].StartOffset, fn.Ranges[0].EndOffset)
+		}
+		fmt.Printf("  %s (lines %d-%d, %d hits)%s\n", name, fn.StartLine, fn.EndLine, fn.HitCount, byteRange)
+	}
+
+	// Also show chunk summary.
+	var ranges []sourcemap.CoverageRange
+	for _, r := range scriptCov.ByteRanges {
+		ranges = append(ranges, sourcemap.CoverageRange{
+			StartOffset: r.StartOffset,
+			EndOffset:   r.EndOffset,
+			Count:       r.Count,
+		})
+	}
+	chunks := sourcemap.ExtractChunks(scriptCov.Source, ranges, 0)
+	fmt.Printf("\nExtracted %d code chunks from byte-range coverage.\n", len(chunks))
+	fmt.Println("Use 'sourcemap set-structure' to provide the inferred file structure.")
+	return nil
+}
+
+func (im *InteractiveMode) sourcemapSetStructure(bundleURL, jsonStr string) error {
+	if im.coverageCollector == nil {
+		return fmt.Errorf("coverage not active")
+	}
+
+	var result inferredResult
+	if err := json.Unmarshal([]byte(jsonStr), &result); err != nil {
+		return fmt.Errorf("invalid JSON: %w", err)
+	}
+	if len(result.Files) == 0 {
+		return fmt.Errorf("structure must contain at least one file")
+	}
+
+	// Get bundle source.
+	snapshots := im.coverageCollector.Snapshots()
+	if len(snapshots) == 0 {
+		return fmt.Errorf("no snapshots")
+	}
+	snap := snapshots[len(snapshots)-1]
+	scriptCov, ok := snap.Scripts[bundleURL]
+	if !ok {
+		for url, sc := range snap.Scripts {
+			if strings.Contains(url, bundleURL) {
+				scriptCov = sc
+				bundleURL = url
+				break
+			}
+		}
+		if scriptCov == nil {
+			return fmt.Errorf("no coverage data for %s", bundleURL)
+		}
+	}
+
+	if im.syntheticMaps == nil {
+		im.syntheticMaps = newSyntheticMapStore()
+	}
+
+	sm := im.syntheticMaps.get(bundleURL)
+	if sm == nil {
+		sm = &syntheticMap{BundleURL: bundleURL}
+	}
+	sm.Sources = &result
+
+	mapJSON, err := generateMapFromInferred(scriptCov.Source, &result)
+	if err != nil {
+		return fmt.Errorf("generate sourcemap: %w", err)
+	}
+	sm.MapJSON = mapJSON
+	im.syntheticMaps.set(bundleURL, sm)
+
+	fmt.Printf("Sourcemap generated: %d files, %d bytes\n", len(result.Files), len(mapJSON))
+	for _, f := range result.Files {
+		fmt.Printf("  %s (bytes %d-%d): %s\n", f.Path, f.StartOffset, f.EndOffset, f.Description)
+	}
+	fmt.Println("\nUse 'sourcemap generate' to view the raw JSON or 'sourcemap serve' to activate.")
+	return nil
+}
+
+func (im *InteractiveMode) sourcemapGenerate(bundleURL string) error {
+	if im.syntheticMaps == nil {
+		return fmt.Errorf("no sourcemaps — use 'sourcemap set-structure' first")
+	}
+	sm := im.syntheticMaps.get(bundleURL)
+	if sm == nil || sm.MapJSON == nil {
+		return fmt.Errorf("no sourcemap for %s", bundleURL)
+	}
+	fmt.Println(string(sm.MapJSON))
+	return nil
+}
+
+func (im *InteractiveMode) sourcemapServe(bundleURL string) error {
+	if im.syntheticMaps == nil {
+		return fmt.Errorf("no sourcemaps")
+	}
+	sm := im.syntheticMaps.get(bundleURL)
+	if sm == nil || sm.MapJSON == nil {
+		return fmt.Errorf("no sourcemap for %s — use 'sourcemap set-structure' first", bundleURL)
+	}
+	if sm.Serving {
+		fmt.Printf("Already serving sourcemap for %s (rule %s)\n", bundleURL, sm.InterceptID)
+		return nil
+	}
+	// Note: actual Fetch intercept requires the MCP interceptor plumbing.
+	// In interactive mode, print the map URL and instructions.
+	mapURL := bundleURL + ".map"
+	fmt.Printf("Sourcemap ready at %s (%d bytes)\n", mapURL, len(sm.MapJSON))
+	fmt.Println("To activate in DevTools, paste in console:")
+	fmt.Printf("  document.querySelectorAll('script').forEach(s => { if(s.src.includes('%s')) console.log('found bundle') })\n", bundleURL)
+	fmt.Println("\nNote: Full Fetch intercept serving requires MCP mode (cdp --mcp).")
+	return nil
+}
+
+func (im *InteractiveMode) sourcemapList() error {
+	if im.syntheticMaps == nil || len(im.syntheticMaps.list()) == 0 {
+		fmt.Println("No sourcemaps.")
+		return nil
+	}
+	for _, sm := range im.syntheticMaps.list() {
+		nFiles := 0
+		if sm.Sources != nil {
+			nFiles = len(sm.Sources.Files)
+		}
+		status := "generated"
+		if sm.Serving {
+			status = fmt.Sprintf("serving (rule %s)", sm.InterceptID)
+		}
+		fmt.Printf("  %s: %d files, %d bytes [%s]\n", sm.BundleURL, nFiles, len(sm.MapJSON), status)
+	}
 	return nil
 }
