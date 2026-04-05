@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"fmt"
+	"sort"
+	"strings"
 
 	"github.com/chromedp/cdproto/emulation"
 	"github.com/chromedp/cdproto/network"
@@ -64,7 +66,76 @@ type SetExtraHeadersInput struct {
 	Headers map[string]string `json:"headers"`
 }
 
+// devicePreset defines a mobile/tablet device for emulation.
+type devicePreset struct {
+	Width       int64
+	Height      int64
+	ScaleFactor float64
+	UserAgent   string
+	HasTouch    bool
+	IsMobile    bool
+}
+
+var devicePresets = map[string]devicePreset{
+	"iphone-14":        {Width: 390, Height: 844, ScaleFactor: 3, HasTouch: true, IsMobile: true, UserAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1"},
+	"iphone-14-pro":    {Width: 393, Height: 852, ScaleFactor: 3, HasTouch: true, IsMobile: true, UserAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1"},
+	"iphone-15-pro":    {Width: 393, Height: 852, ScaleFactor: 3, HasTouch: true, IsMobile: true, UserAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"},
+	"iphone-15-pro-max": {Width: 430, Height: 932, ScaleFactor: 3, HasTouch: true, IsMobile: true, UserAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"},
+	"iphone-se":        {Width: 375, Height: 667, ScaleFactor: 2, HasTouch: true, IsMobile: true, UserAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1"},
+	"ipad":             {Width: 810, Height: 1080, ScaleFactor: 2, HasTouch: true, IsMobile: true, UserAgent: "Mozilla/5.0 (iPad; CPU OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1"},
+	"ipad-pro-11":      {Width: 834, Height: 1194, ScaleFactor: 2, HasTouch: true, IsMobile: true, UserAgent: "Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"},
+	"ipad-pro-12.9":    {Width: 1024, Height: 1366, ScaleFactor: 2, HasTouch: true, IsMobile: true, UserAgent: "Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"},
+	"pixel-7":          {Width: 412, Height: 915, ScaleFactor: 2.625, HasTouch: true, IsMobile: true, UserAgent: "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Mobile Safari/537.36"},
+	"pixel-7-pro":      {Width: 412, Height: 892, ScaleFactor: 2.625, HasTouch: true, IsMobile: true, UserAgent: "Mozilla/5.0 (Linux; Android 13; Pixel 7 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Mobile Safari/537.36"},
+	"galaxy-s23":       {Width: 360, Height: 780, ScaleFactor: 3, HasTouch: true, IsMobile: true, UserAgent: "Mozilla/5.0 (Linux; Android 13; SM-S911B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Mobile Safari/537.36"},
+	"galaxy-s23-ultra": {Width: 384, Height: 824, ScaleFactor: 3, HasTouch: true, IsMobile: true, UserAgent: "Mozilla/5.0 (Linux; Android 13; SM-S918B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Mobile Safari/537.36"},
+	"galaxy-tab-s8":    {Width: 800, Height: 1280, ScaleFactor: 2, HasTouch: true, IsMobile: true, UserAgent: "Mozilla/5.0 (Linux; Android 13; SM-X700) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Safari/537.36"},
+	"desktop-1080p":    {Width: 1920, Height: 1080, ScaleFactor: 1, HasTouch: false, IsMobile: false, UserAgent: ""},
+	"desktop-1440p":    {Width: 2560, Height: 1440, ScaleFactor: 1, HasTouch: false, IsMobile: false, UserAgent: ""},
+}
+
+type SetDeviceInput struct {
+	Device string `json:"device"` // preset name
+}
+
 func registerEmulationTools(server *mcp.Server, s *mcpSession) {
+	// Device preset tool.
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "set_device",
+		Description: "Emulate a specific device. Sets viewport, scale, user agent, and touch. Presets: iphone-14, iphone-14-pro, iphone-15-pro, iphone-15-pro-max, iphone-se, ipad, ipad-pro-11, ipad-pro-12.9, pixel-7, pixel-7-pro, galaxy-s23, galaxy-s23-ultra, galaxy-tab-s8, desktop-1080p, desktop-1440p.",
+	}, func(ctx context.Context, req *mcp.CallToolRequest, input SetDeviceInput) (*mcp.CallToolResult, any, error) {
+		preset, ok := devicePresets[input.Device]
+		if !ok {
+			var names []string
+			for k := range devicePresets {
+				names = append(names, k)
+			}
+			sort.Strings(names)
+			return nil, nil, fmt.Errorf("set_device: unknown device %q (available: %s)", input.Device, strings.Join(names, ", "))
+		}
+		actx := s.activeCtx()
+		if err := chromedp.Run(actx, chromedp.ActionFunc(func(ctx context.Context) error {
+			if err := emulation.SetDeviceMetricsOverride(preset.Width, preset.Height, preset.ScaleFactor, preset.IsMobile).Do(ctx); err != nil {
+				return fmt.Errorf("set metrics: %w", err)
+			}
+			if err := emulation.SetTouchEmulationEnabled(preset.HasTouch).Do(ctx); err != nil {
+				return fmt.Errorf("set touch: %w", err)
+			}
+			if preset.UserAgent != "" {
+				if err := emulation.SetUserAgentOverride(preset.UserAgent).Do(ctx); err != nil {
+					return fmt.Errorf("set user agent: %w", err)
+				}
+			}
+			return nil
+		})); err != nil {
+			return nil, nil, fmt.Errorf("set_device: %w", err)
+		}
+		return &mcp.CallToolResult{
+			Content: []mcp.Content{&mcp.TextContent{Text: fmt.Sprintf("device set to %s (%dx%d @%.1fx, mobile=%v, touch=%v)",
+				input.Device, preset.Width, preset.Height, preset.ScaleFactor, preset.IsMobile, preset.HasTouch)}},
+		}, nil, nil
+	})
+
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "set_throttling",
 		Description: `Set network and CPU throttling. Network presets: slow-3g, fast-3g, slow-4g, fast-4g, offline, none. Custom download/upload in bytes/sec override the preset. CPU rate is a slowdown multiplier (1=normal, 4=4x slower, max 20).`,
