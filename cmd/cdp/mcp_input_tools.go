@@ -85,7 +85,7 @@ type FormField struct {
 func registerInputTools(server *mcp.Server, s *mcpSession) {
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "press_key",
-		Description: "Press a keyboard key. Supports: Enter, Tab, Escape, Backspace, Delete, Space, ArrowUp/Down/Left/Right, Home, End, PageUp/PageDown, F1-F12, or any single character. Modifiers: ctrl, alt, shift, meta (comma-separated).",
+		Description: "Press a keyboard key. Supports: Enter, Tab, Escape, Backspace, Delete, Space, ArrowUp/Down/Left/Right, Home, End, PageUp/PageDown, F1-F12, or any single character. Modifiers: ctrl, alt, shift, meta (comma-separated). Timeout in seconds (default 30).",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input PressKeyInput) (*mcp.CallToolResult, any, error) {
 		actx, cancel := interactionCtx(s.activeCtx(), input.Timeout)
 		defer cancel()
@@ -101,7 +101,7 @@ func registerInputTools(server *mcp.Server, s *mcpSession) {
 
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "hover",
-		Description: "Hover over an element by CSS selector or @ref. Triggers mouseover events.",
+		Description: "Hover over an element by CSS selector or @ref. Triggers mouseover events. Timeout in seconds (default 30).",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, inp HoverInput) (*mcp.CallToolResult, any, error) {
 		actx, cancel := interactionCtx(s.activeCtx(), inp.Timeout)
 		defer cancel()
@@ -128,7 +128,7 @@ func registerInputTools(server *mcp.Server, s *mcpSession) {
 
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "focus",
-		Description: "Focus an element by CSS selector or @ref",
+		Description: "Focus an element by CSS selector or @ref. Timeout in seconds (default 30).",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, inp FocusInput) (*mcp.CallToolResult, any, error) {
 		actx, cancel := interactionCtx(s.activeCtx(), inp.Timeout)
 		defer cancel()
@@ -155,7 +155,7 @@ func registerInputTools(server *mcp.Server, s *mcpSession) {
 
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "drag",
-		Description: "Drag from one element to another. Source and target are CSS selectors or @ref. Steps controls intermediate mouse move events (default 10).",
+		Description: "Drag from one element to another. Source and target are CSS selectors or @ref. Steps controls intermediate mouse move events (default 10). Timeout in seconds (default 30).",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, inp DragInput) (*mcp.CallToolResult, any, error) {
 		steps := inp.Steps
 		if steps <= 0 {

@@ -237,9 +237,12 @@ type WaitForInput struct {
 const defaultInteractionTimeout = 30 * time.Second
 
 // interactionCtx creates a context with a timeout for interaction tools.
+// If timeoutSec > 60, it is treated as milliseconds (agents often pass e.g. 5000 meaning 5s).
 func interactionCtx(actx context.Context, timeoutSec int) (context.Context, context.CancelFunc) {
 	timeout := defaultInteractionTimeout
-	if timeoutSec > 0 {
+	if timeoutSec > 60 {
+		timeout = time.Duration(timeoutSec) * time.Millisecond
+	} else if timeoutSec > 0 {
 		timeout = time.Duration(timeoutSec) * time.Second
 	}
 	return context.WithTimeout(actx, timeout)
@@ -248,7 +251,7 @@ func interactionCtx(actx context.Context, timeoutSec int) (context.Context, cont
 func registerInteractionTools(server *mcp.Server, s *mcpSession) {
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "click",
-		Description: "Click an element by CSS selector or @ref (e.g. @1 from page_snapshot)",
+		Description: "Click an element by CSS selector or @ref (e.g. @1 from page_snapshot). Timeout in seconds (default 30).",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input ClickInput) (*mcp.CallToolResult, any, error) {
 		actx, cancel := interactionCtx(s.activeCtx(), input.Timeout)
 		defer cancel()
@@ -276,7 +279,7 @@ func registerInteractionTools(server *mcp.Server, s *mcpSession) {
 
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "type_text",
-		Description: "Type text into an element by CSS selector or @ref (e.g. @1 from page_snapshot)",
+		Description: "Type text into an element by CSS selector or @ref (e.g. @1 from page_snapshot). Timeout in seconds (default 30).",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input TypeTextInput) (*mcp.CallToolResult, any, error) {
 		text := input.Text
 		if input.Submit {
@@ -308,7 +311,7 @@ func registerInteractionTools(server *mcp.Server, s *mcpSession) {
 
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "wait_for",
-		Description: "Wait for an element to be visible by CSS selector or @ref",
+		Description: "Wait for an element to be visible by CSS selector or @ref. Timeout in seconds (default 30).",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input WaitForInput) (*mcp.CallToolResult, any, error) {
 		actx, cancel := interactionCtx(s.activeCtx(), input.Timeout)
 		defer cancel()
