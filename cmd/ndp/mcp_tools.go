@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
+	"regexp"
 	"strings"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -391,29 +393,134 @@ func registerNDPTools(server *mcp.Server, s *ndpSession) {
 
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "detect_electron",
-		Description: "Check if the connected Node.js process is an Electron app. Returns Electron version, process type (main/renderer/worker), app name, and app path.",
+		Description: "Check if the connected process is an Electron app. Works in both main process (full info) and renderer (nodeIntegration disabled, uses User-Agent fallback).",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input struct{}) (*mcp.CallToolResult, any, error) {
-		expr := `JSON.stringify({
-			electron: process.versions.electron || null,
-			chrome: process.versions.chrome || null,
-			node: process.versions.node || null,
-			type: process.type || null,
-			appName: typeof require !== 'undefined' && require('electron').app ? require('electron').app.getName() : null,
-			appPath: typeof require !== 'undefined' && require('electron').app ? require('electron').app.getAppPath() : null
-		})`
-		result, err := s.runtime.Evaluate(expr, &EvaluateOptions{
-			ReturnByValue: true,
-		})
+		info := detectElectron(s)
+		data, err := json.Marshal(info)
 		if err != nil {
-			return nil, nil, fmt.Errorf("detect_electron: %w", err)
-		}
-		text := formatResult(result)
-		if strings.Contains(text, `"electron":null`) {
-			text = "not an Electron process\n" + text
+			return nil, nil, fmt.Errorf("detect_electron: marshal: %w", err)
 		}
 		return &mcp.CallToolResult{
-			Content: []mcp.Content{&mcp.TextContent{Text: text}},
+			Content: []mcp.Content{&mcp.TextContent{Text: string(data)}},
 		}, nil, nil
 	})
+}
+
+// electronInfo holds the result of Electron detection.
+type electronInfo struct {
+	IsElectron      bool   `json:"is_electron"`
+	ElectronVersion string `json:"electron_version,omitempty"`
+	ChromeVersion   string `json:"chrome_version,omitempty"`
+	NodeVersion     string `json:"node_version,omitempty"`
+	ProcessType     string `json:"process_type,omitempty"`
+	AppName         string `json:"app_name,omitempty"`
+	AppPath         string `json:"app_path,omitempty"`
+	DetectionMethod string `json:"detection_method,omitempty"`
+	Note            string `json:"note,omitempty"`
+}
+
+var electronUARegexp = regexp.MustCompile(`Electron/(\S+)`)
+
+// detectElectron tries multiple strategies to identify an Electron process.
+func detectElectron(s *ndpSession) *electronInfo {
+	// Strategy 1: evaluate process.versions (works when nodeIntegration is on).
+	expr := `JSON.stringify({
+		electron: typeof process !== 'undefined' && process.versions ? (process.versions.electron || null) : null,
+		chrome: typeof process !== 'undefined' && process.versions ? (process.versions.chrome || null) : null,
+		node: typeof process !== 'undefined' && process.versions ? (process.versions.node || null) : null,
+		type: typeof process !== 'undefined' ? (process.type || null) : null,
+		appName: (function() { try { return require('electron').app.getName() } catch(e) { return null } })(),
+		appPath: (function() { try { return require('electron').app.getAppPath() } catch(e) { return null } })()
+	})`
+	result, err := s.runtime.Evaluate(expr, &EvaluateOptions{ReturnByValue: true})
+	if err == nil && result != nil && result.Exception == nil && result.Result != nil {
+		text := formatResult(result)
+		var parsed map[string]interface{}
+		if json.Unmarshal([]byte(text), &parsed) == nil {
+			if v, _ := parsed["electron"].(string); v != "" {
+				info := &electronInfo{
+					IsElectron:      true,
+					ElectronVersion: v,
+					DetectionMethod: "process.versions",
+				}
+				if s, _ := parsed["chrome"].(string); s != "" {
+					info.ChromeVersion = s
+				}
+				if s, _ := parsed["node"].(string); s != "" {
+					info.NodeVersion = s
+				}
+				if s, _ := parsed["type"].(string); s != "" {
+					info.ProcessType = s
+				}
+				if s, _ := parsed["appName"].(string); s != "" {
+					info.AppName = s
+				}
+				if s, _ := parsed["appPath"].(string); s != "" {
+					info.AppPath = s
+				}
+				return info
+			}
+		}
+	}
+
+	// Strategy 2: check /json/version User-Agent for "Electron/X.X.X".
+	if info := detectElectronFromUA(s.client); info != nil {
+		return info
+	}
+
+	// Strategy 3: check if any loaded script URL uses app:// protocol.
+	for _, sc := range s.client.Scripts() {
+		if strings.HasPrefix(sc.URL, "app://") {
+			return &electronInfo{
+				IsElectron:      true,
+				ProcessType:     "renderer (nodeIntegration disabled)",
+				DetectionMethod: "app:// protocol",
+				Note:            "detected via app:// URL scheme; main process APIs unavailable",
+			}
+		}
+	}
+
+	return &electronInfo{IsElectron: false, DetectionMethod: "none", Note: "not an Electron process"}
+}
+
+// detectElectronFromUA fetches /json/version and checks the User-Agent.
+func detectElectronFromUA(client *V8InspectorClient) *electronInfo {
+	url := fmt.Sprintf("http://%s:%s/json/version", client.host, client.port)
+	resp, err := http.Get(url)
+	if err != nil {
+		return nil
+	}
+	defer resp.Body.Close()
+
+	var versionInfo map[string]string
+	if err := json.NewDecoder(resp.Body).Decode(&versionInfo); err != nil {
+		return nil
+	}
+
+	// Check "Browser" field (e.g. "Chrome/120.0.6099.291 Electron/28.1.0").
+	browser := versionInfo["Browser"]
+	if m := electronUARegexp.FindStringSubmatch(browser); len(m) > 1 {
+		return &electronInfo{
+			IsElectron:      true,
+			ElectronVersion: m[1],
+			ProcessType:     "renderer (nodeIntegration disabled)",
+			DetectionMethod: "User-Agent",
+			Note:            "detected via /json/version User-Agent; main process APIs unavailable",
+		}
+	}
+
+	// Check "User-Agent" field as well.
+	ua := versionInfo["User-Agent"]
+	if m := electronUARegexp.FindStringSubmatch(ua); len(m) > 1 {
+		return &electronInfo{
+			IsElectron:      true,
+			ElectronVersion: m[1],
+			ProcessType:     "renderer (nodeIntegration disabled)",
+			DetectionMethod: "User-Agent",
+			Note:            "detected via /json/version User-Agent; main process APIs unavailable",
+		}
+	}
+
+	return nil
 }
