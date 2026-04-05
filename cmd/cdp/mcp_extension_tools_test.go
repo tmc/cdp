@@ -27,3 +27,51 @@ func TestExtractExtensionID(t *testing.T) {
 		})
 	}
 }
+
+func TestValidStorageArea(t *testing.T) {
+	tests := []struct {
+		area string
+		want bool
+	}{
+		{"local", true},
+		{"sync", true},
+		{"session", true},
+		{"managed", true},
+		{"", false},
+		{"invalid", false},
+		{"LOCAL", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.area, func(t *testing.T) {
+			got := validStorageArea(tt.area)
+			if got != tt.want {
+				t.Errorf("validStorageArea(%q) = %v, want %v", tt.area, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestStrFromMap(t *testing.T) {
+	m := map[string]any{
+		"name":    "Test Extension",
+		"version": "1.0",
+		"count":   42,
+	}
+	tests := []struct {
+		key  string
+		want string
+	}{
+		{"name", "Test Extension"},
+		{"version", "1.0"},
+		{"count", ""},  // not a string
+		{"missing", ""}, // not present
+	}
+	for _, tt := range tests {
+		t.Run(tt.key, func(t *testing.T) {
+			got := strFromMap(m, tt.key)
+			if got != tt.want {
+				t.Errorf("strFromMap(m, %q) = %q, want %q", tt.key, got, tt.want)
+			}
+		})
+	}
+}
