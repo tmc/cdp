@@ -52,6 +52,7 @@ func registerMCPTools(server *mcp.Server, session *mcpSession) {
 	registerIPCTools(server, session)
 	registerNetworkTools(server, session)
 	registerWalkTools(server, session)
+	registerReverseTools(server, session)
 }
 
 // --- Navigation tools ---
