@@ -1,6 +1,7 @@
 package main
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -120,5 +121,55 @@ func TestInterceptor_MatchRule(t *testing.T) {
 	r = ic.matchRule("https://example.com/style.css", "response")
 	if r == nil || r.Action != "modify" {
 		t.Errorf("expected modify rule for .css response, got %v", r)
+	}
+}
+
+func TestInterceptor_AppendSourcemapRule(t *testing.T) {
+	ic := newInterceptor()
+
+	bundleURL := "https://example.com/_next/static/chunks/main-abc123.js"
+	mapURL := bundleURL + ".map"
+	comment := "\n//# sourceMappingURL=" + mapURL + "\n"
+
+	// Install both rules as serve_sourcemap would.
+	ic.addRule(interceptRule{
+		URLPattern: mapURL,
+		Stage:      "request",
+		Action:     "fulfill",
+		StatusCode: 200,
+		Body:       `{"version":3}`,
+	})
+	ic.addRule(interceptRule{
+		URLPattern: bundleURL,
+		Stage:      "response",
+		Action:     "append-sourcemap",
+		Body:       comment,
+		Headers:    map[string]string{"SourceMap": mapURL},
+	})
+
+	// .map request should match the fulfill rule.
+	r := ic.matchRule(mapURL, "request")
+	if r == nil || r.Action != "fulfill" {
+		t.Errorf("expected fulfill rule for .map request, got %v", r)
+	}
+
+	// Bundle response should match the append-sourcemap rule.
+	r = ic.matchRule(bundleURL, "response")
+	if r == nil || r.Action != "append-sourcemap" {
+		t.Errorf("expected append-sourcemap rule for bundle response, got %v", r)
+	}
+	if r != nil {
+		if !strings.Contains(r.Body, "sourceMappingURL") {
+			t.Errorf("append-sourcemap body missing sourceMappingURL: %s", r.Body)
+		}
+		if r.Headers["SourceMap"] != mapURL {
+			t.Errorf("SourceMap header = %q, want %q", r.Headers["SourceMap"], mapURL)
+		}
+	}
+
+	// Bundle request should NOT match (wrong stage).
+	r = ic.matchRule(bundleURL, "request")
+	if r != nil {
+		t.Errorf("expected no match for bundle request stage, got %v", r)
 	}
 }

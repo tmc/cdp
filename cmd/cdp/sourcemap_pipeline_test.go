@@ -500,6 +500,63 @@ func TestSourcemapPipeline_EndToEnd(t *testing.T) {
 		t.Logf("delta lcov: %d bytes", len(deltaLcov))
 	})
 
+	// --- Step 8: Test sourcemap activation via Fetch intercept + reload ---
+	t.Run("SourcemapActivation", func(t *testing.T) {
+		ic := newInterceptor()
+		ic.enabled = true // pretend Fetch domain is active
+
+		session := &mcpSession{
+			browserCtx: browserCtx,
+			ctx:        browserCtx,
+			intercepts: ic,
+		}
+
+		mapURL := bundleURL + ".map"
+		mapJSON := []byte(`{"version":3,"sources":["src/main.js"],"mappings":"AAAA"}`)
+
+		// Install .map fulfill rule (as serve_sourcemap does).
+		ic.addRule(interceptRule{
+			URLPattern:  mapURL,
+			Stage:       "request",
+			Action:      "fulfill",
+			StatusCode:  200,
+			Body:        string(mapJSON),
+			ContentType: "application/json",
+			Headers:     map[string]string{"Access-Control-Allow-Origin": "*"},
+		})
+
+		// Call activateSourcemap — installs bundle response intercept + reloads.
+		msg := activateSourcemap(session, bundleURL, mapURL)
+		t.Logf("activate result: %s", msg)
+
+		// Verify the append-sourcemap rule was installed.
+		rules := ic.getRules()
+		var appendRule *interceptRule
+		for i := range rules {
+			if rules[i].Action == "append-sourcemap" {
+				appendRule = &rules[i]
+				break
+			}
+		}
+		if appendRule == nil {
+			t.Fatal("expected append-sourcemap rule to be installed")
+		}
+		if !strings.Contains(appendRule.Body, "sourceMappingURL") {
+			t.Errorf("append rule body missing sourceMappingURL: %s", appendRule.Body)
+		}
+		if appendRule.Headers["SourceMap"] != mapURL {
+			t.Errorf("SourceMap header = %q, want %q", appendRule.Headers["SourceMap"], mapURL)
+		}
+		if appendRule.Stage != "response" {
+			t.Errorf("append rule stage = %q, want response", appendRule.Stage)
+		}
+
+		// Verify the page was reloaded (message should indicate success).
+		if !strings.Contains(msg, "reloaded") {
+			t.Errorf("expected 'reloaded' in message, got: %s", msg)
+		}
+	})
+
 	// Stop coverage.
 	if err := cov.Stop(); err != nil {
 		t.Fatalf("stop coverage: %v", err)
@@ -635,6 +692,46 @@ func TestSourcemapPipeline_NoChrome(t *testing.T) {
 			if got != tt.want {
 				t.Errorf("stripCodeFences(%q) = %q, want %q", tt.input, got, tt.want)
 			}
+		}
+	})
+
+	t.Run("ActivateSourcemapInterceptSetup", func(t *testing.T) {
+		// Test that activateSourcemap installs the right intercept rules.
+		// We can't test the reload without a browser, but we can verify
+		// the interceptor state.
+		bundleURL := "https://example.com/_next/static/chunks/main-abc123.js"
+		mapURL := bundleURL + ".map"
+		ic := newInterceptor()
+
+		session := &mcpSession{
+			intercepts: ic,
+		}
+
+		// activateSourcemap will fail on reload (no browser context) but
+		// should still install the intercept rule.
+		msg := activateSourcemap(session, bundleURL, mapURL)
+
+		// Should mention the reload failure (no browser).
+		if !strings.Contains(msg, "reload") {
+			t.Errorf("expected reload mention in message, got: %s", msg)
+		}
+
+		// Should have installed the append-sourcemap rule.
+		rules := ic.getRules()
+		var foundAppend bool
+		for _, r := range rules {
+			if r.Action == "append-sourcemap" && r.Stage == "response" {
+				foundAppend = true
+				if !strings.Contains(r.Body, "sourceMappingURL") {
+					t.Errorf("append-sourcemap body missing sourceMappingURL: %s", r.Body)
+				}
+				if r.Headers["SourceMap"] != mapURL {
+					t.Errorf("SourceMap header = %q, want %q", r.Headers["SourceMap"], mapURL)
+				}
+			}
+		}
+		if !foundAppend {
+			t.Error("expected append-sourcemap rule to be installed")
 		}
 	})
 }

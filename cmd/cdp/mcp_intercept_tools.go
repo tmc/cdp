@@ -233,6 +233,49 @@ func (ic *interceptor) handleRequestPaused(ctx context.Context, ev *fetch.EventR
 			}
 		}
 
+	case "append-sourcemap":
+		// Get the original response body, append the sourcemap comment, and fulfill.
+		// Only works at the response stage (we need the body from the server).
+		if stage != "response" {
+			if err := fetch.ContinueRequest(ev.RequestID).Do(ctx); err != nil {
+				log.Printf("intercept: append-sourcemap: continue request: %v", err)
+			}
+			return
+		}
+		body, err := fetch.GetResponseBody(ev.RequestID).Do(ctx)
+		if err != nil {
+			log.Printf("intercept: append-sourcemap: get body: %v", err)
+			// Can't get body — continue unmodified.
+			if err := fetch.ContinueResponse(ev.RequestID).Do(ctx); err != nil {
+				log.Printf("intercept: append-sourcemap: continue: %v", err)
+			}
+			return
+		}
+		// Append the sourceMappingURL comment.
+		modified := string(body) + rule.Body
+		// Build response headers: start with original, add/override with rule headers.
+		headerMap := make(map[string]string)
+		for _, h := range ev.ResponseHeaders {
+			headerMap[h.Name] = h.Value
+		}
+		for k, v := range rule.Headers {
+			headerMap[k] = v
+		}
+		var headers []*fetch.HeaderEntry
+		for k, v := range headerMap {
+			headers = append(headers, &fetch.HeaderEntry{Name: k, Value: v})
+		}
+		code := ev.ResponseStatusCode
+		if code == 0 {
+			code = 200
+		}
+		encodedBody := base64.StdEncoding.EncodeToString([]byte(modified))
+		if err := fetch.FulfillRequest(ev.RequestID, int64(code)).
+			WithResponseHeaders(headers).
+			WithBody(encodedBody).Do(ctx); err != nil {
+			log.Printf("intercept: append-sourcemap: fulfill: %v", err)
+		}
+
 	default:
 		if err := fetch.ContinueRequest(ev.RequestID).Do(ctx); err != nil {
 			log.Printf("intercept: continue request: %v", err)
