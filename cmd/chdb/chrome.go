@@ -17,6 +17,7 @@ import (
 	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/cdproto/page"
 	cdpruntime "github.com/chromedp/cdproto/runtime"
+	cdptarget "github.com/chromedp/cdproto/target"
 	"github.com/chromedp/chromedp"
 	"github.com/pkg/errors"
 )
@@ -71,6 +72,28 @@ func (cd *ChromeDebugger) ListTargets(ctx context.Context) ([]ChromeTarget, erro
 	return targets, nil
 }
 
+// getBrowserWSURL fetches the browser-level WebSocket URL from /json/version.
+func (cd *ChromeDebugger) getBrowserWSURL() (string, error) {
+	url := fmt.Sprintf("http://localhost:%s/json/version", cd.port)
+	client := &http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Get(url)
+	if err != nil {
+		return "", errors.Wrap(err, "failed to get /json/version")
+	}
+	defer resp.Body.Close()
+
+	var info struct {
+		WebSocketDebuggerURL string `json:"webSocketDebuggerUrl"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&info); err != nil {
+		return "", errors.Wrap(err, "failed to parse /json/version")
+	}
+	if info.WebSocketDebuggerURL == "" {
+		return "", errors.New("no webSocketDebuggerUrl in /json/version")
+	}
+	return info.WebSocketDebuggerURL, nil
+}
+
 // Connect connects to a Chrome target
 func (cd *ChromeDebugger) Connect(ctx context.Context, targetID string) error {
 	targets, err := cd.ListTargets(ctx)
@@ -93,36 +116,31 @@ func (cd *ChromeDebugger) Connect(ctx context.Context, targetID string) error {
 	// Store the parent context
 	cd.context = ctx
 
-	// Create Chrome context
-	var wsURL string
-	if target.WebSocketURL != "" {
-		wsURL = target.WebSocketURL
-	} else {
-		wsURL = fmt.Sprintf("ws://localhost:%s/devtools/page/%s", cd.port, target.ID)
+	// Connect via browser-level WebSocket and attach to the specific target.
+	// This works with Electron apps that don't support Target.createTarget.
+	browserWSURL, err := cd.getBrowserWSURL()
+	if err != nil {
+		return err
 	}
 
 	if cd.verbose {
-		log.Printf("Connecting to target ID=%s wsURL=%s", target.ID, wsURL)
+		log.Printf("Connecting via browser WS=%s target ID=%s", browserWSURL, target.ID)
 	}
 
-	// Use the parent context directly for the allocator
-	allocCtx, allocCancel := chromedp.NewRemoteAllocator(ctx, wsURL)
+	allocCtx, allocCancel := chromedp.NewRemoteAllocator(ctx, browserWSURL)
 	cd.cancel = allocCancel
 
 	var opts []chromedp.ContextOption
 	if cd.verbose {
 		opts = append(opts, chromedp.WithLogf(log.Printf))
 	}
-
-	// Explicitly target the tabs ID (Hybrid strategy)
-	// opts = append(opts, chromedp.WithTargetID(cdptarget.ID(target.ID)))
+	opts = append(opts, chromedp.WithTargetID(cdptarget.ID(target.ID)))
 
 	chromeCtx, chromeCancel := chromedp.NewContext(allocCtx, opts...)
 	cd.chromeCtx = chromeCtx
 	cd.chromeCancel = chromeCancel
 
-	// Test connection - DO NOT use a child context as it causes issues
-	// Just test the chrome context directly
+	// Test connection
 	if err := chromedp.Run(chromeCtx, chromedp.Evaluate("1+1", nil)); err != nil {
 		cd.Close()
 		return errors.Wrap(err, "failed to connect to target")
