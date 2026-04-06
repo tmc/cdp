@@ -51,6 +51,7 @@ func registerMCPTools(server *mcp.Server, session *mcpSession) {
 	registerActionDiffTool(server, session)
 	registerIPCTools(server, session)
 	registerNetworkTools(server, session)
+	registerWalkTools(server, session)
 }
 
 // --- Navigation tools ---
