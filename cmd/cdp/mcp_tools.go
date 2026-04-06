@@ -510,9 +510,27 @@ func registerTabTools(server *mcp.Server, s *mcpSession) {
 		Name:        "switch_tab",
 		Description: "Switch to a browser tab by target ID",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input SwitchTabInput) (*mcp.CallToolResult, TabOutput, error) {
-		// Validate target exists before attempting attach.
-		if err := validateTarget(s.browserCtx, input.ID); err != nil {
-			return nil, TabOutput{}, fmt.Errorf("switch_tab: %w", err)
+		// Validate target exists and check its type before attempting attach.
+		targets, err := chromedp.Targets(s.browserCtx)
+		if err != nil {
+			return nil, TabOutput{}, fmt.Errorf("switch_tab: list targets: %w", err)
+		}
+		var found *target.Info
+		for _, t := range targets {
+			if string(t.TargetID) == input.ID {
+				found = t
+				break
+			}
+		}
+		if found == nil {
+			return nil, TabOutput{}, fmt.Errorf("switch_tab: target %q not found", input.ID)
+		}
+		if found.Type != "page" && found.Type != "background_page" {
+			return &mcp.CallToolResult{
+				Content: []mcp.Content{&mcp.TextContent{
+					Text: fmt.Sprintf("warning: target type %q may not support full interaction (Runtime.evaluate may timeout); use list_tabs to find page targets", found.Type),
+				}},
+			}, TabOutput{ID: input.ID}, nil
 		}
 		tabCtx, tabCancel := chromedp.NewContext(s.browserCtx, chromedp.WithTargetID(target.ID(input.ID)))
 		// Run a no-op to ensure the context attaches to the target.
