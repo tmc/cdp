@@ -1,6 +1,6 @@
 # cdp / ndp — Next Steps
 
-Status: 74 cdp MCP tools, 0 ndp MCP tools (2026-04-05).
+Status: 98 cdp MCP tools, 20 ndp MCP tools = 118 total (2026-04-05).
 
 ## Done (2026-04-04/05)
 
@@ -10,17 +10,30 @@ Status: 74 cdp MCP tools, 0 ndp MCP tools (2026-04-05).
 - ~~DevTools coverage extension~~ — MV3 extension at extension/coverage/ with coverage HTTP API
 - ~~Coverage JSON tags~~ — all coverage structs have json tags, Source excluded from API
 - ~~coverageProvider interface~~ — coverage API decoupled from mcpSession for ndp reuse
+- ~~Extension tools JS fallbacks~~ — list/install/uninstall use developerPrivate + SW target fallbacks (782dc36c)
+- ~~Extension storage tools~~ — get/set/clear via evalInExtensionSW(), supports local/sync/session/managed (782dc36c)
+- ~~Coverage extension SW~~ — background.js added, creates CDP-visible target (782dc36c)
+- ~~ndp MCP server Phase 1~~ — 15 tools: evaluate, sources, coverage, profiler, console, targets (aa6441e6)
+- ~~Shared coverage infrastructure~~ — coverage.Store interface + coverage.StartAPI() used by both cdp and ndp (3f9ade5a)
+- ~~Embedded extension distribution~~ — go:embed + extract to ~/.cdp/extensions/, auto-loads on MCP startup (da4b55c5)
+- ~~Coverage page-reload fix~~ — outerCtx pattern survives navigation (6e7bc33e)
+- ~~Inspect tools~~ — inspect_ipc_start/log, inspect_walk, inspect_fingerprint gated behind --enable-inspect
+- ~~walk_object tool~~ — deep recursive JS object exploration (9abd5c3f)
+- ~~Network capture tools~~ — start_network_log / get_network_log for live capture
+- ~~remote-allow-origins flag~~ — auto-include for Electron CDP compatibility
+- ~~Worker target type checking~~ — switch_tab warns on non-page targets
+- ~~ndp target selection~~ — --target-title / --target-url for multi-window Electron
+- ~~connect tool~~ — mid-session CDP port switching
 
 ## Workstreams
 
 ### 1. chrome-devtools-mcp Parity (~7 tools, ~500 lines)
 
-Close the gaps vs Google's official chrome-devtools-mcp (28 tools). See [/tmp/collab-B140.md] for full analysis. E794 aligned on approach.
+Close the gaps vs Google's official chrome-devtools-mcp (28 tools). See [/tmp/collab-B140.md] for full analysis.
 
 | Tool | Priority | Effort | File |
 |------|----------|--------|------|
 | `set_throttling` (network + CPU) | High | ~60 lines | mcp_emulation_tools.go |
-| `close_tab` | Medium | ~30 lines | mcp_tools.go |
 | `analyze_trace` (CWV: LCP/INP/CLS) | Medium | ~200 lines | mcp_trace_tools.go + internal/traceinsight/ |
 | `trace_insight` (per-metric drill-down) | Medium | ~80 lines | mcp_trace_tools.go |
 | `drag` | Low | ~50 lines | mcp_input_tools.go |
@@ -29,18 +42,17 @@ Close the gaps vs Google's official chrome-devtools-mcp (28 tools). See [/tmp/co
 
 Key decision: extract CWV from raw trace events directly (LargestContentfulPaint::Candidate, EventTiming, LayoutShift) instead of importing Chrome DevTools Frontend's TraceEngine.
 
-### 2. Node.js & Electron MCP Tools (~15 ndp tools)
+### 2. Node.js & Electron MCP Tools
 
-Add `ndp --mcp` server for V8 debugging. See [node-electron-mcp.md](node-electron-mcp.md) for full design.
-
-**Phase 1**: ndp MCP server — evaluate, coverage, sources, profiler, console, list_targets
-**Phase 2**: Share coverage infrastructure via coverageProvider interface (already prepped)
-**Phase 3**: Sourcemap pipeline for Node (bundled server code, compiled TS)
-**Phase 4**: Electron two-server pattern (ndp for main, cdp for renderer)
+~~**Phase 1**: ndp MCP server — 15 tools done (aa6441e6)~~
+~~**Phase 2**: Shared coverage infrastructure via Store interface (3f9ade5a)~~
+~~**Phase 3**: Sourcemap pipeline for Node — 4 tools (516ce309)~~
+~~**Phase 4**: Electron support — detect_electron tool + docs (f963740e)~~
+~~**Phase 5**: Target selection — --target-title/--target-url for multi-window Electron~~
 
 ### 3. ToolRegistry Abstraction
 
-Single `ToolDef` struct → auto-generates CLI + cdpscript + MCP surfaces. Architectural cleanup that reduces the 74-tool maintenance surface from 3x duplication to 1x. Not urgent; blocked on getting tool surface stable first.
+Single `ToolDef` struct → auto-generates CLI + cdpscript + MCP surfaces. Architectural cleanup that reduces the tool maintenance surface from 3x duplication to 1x. Not urgent; blocked on getting tool surface stable first.
 
 ### 4. Polish & Harden
 
