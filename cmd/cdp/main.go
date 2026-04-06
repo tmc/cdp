@@ -2376,6 +2376,7 @@ func main() {
 				chromedp.Flag("disable-popup-blocking", true),
 				chromedp.Flag("disable-sync", true),
 				chromedp.Flag("enable-unsafe-extension-debugging", true),
+			chromedp.Flag("remote-allow-origins", "*"),
 			}
 			if loadExtensions != "" {
 				opts = append(opts, chromedp.Flag("load-extension", loadExtensions))
