@@ -41,6 +41,7 @@ func annotateScreenshot(ctx context.Context, imgData []byte, refs *refRegistry) 
 	draw.Draw(canvas, bounds, src, bounds.Min, draw.Src)
 
 	// Get AX tree for interactive elements.
+	ensureAccessibility(ctx)
 	nodes, err := accessibility.GetFullAXTree().Do(ctx)
 	if err != nil {
 		return nil, nil, fmt.Errorf("get ax tree: %w", err)

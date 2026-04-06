@@ -118,14 +118,28 @@ func axPropertyString(props []*accessibility.Property, name accessibility.Proper
 	return ""
 }
 
+// ensureAccessibility enables the Accessibility domain if not already active.
+// Safe to call multiple times — the CDP side is idempotent.
+func ensureAccessibility(ctx context.Context) {
+	_ = accessibility.Enable().Do(ctx)
+}
+
 // buildAXSnapshot fetches the full AX tree, assigns @refs to interactive
 // elements, and returns an indented text representation.
+// If the CDP Accessibility domain is unavailable (e.g. some Electron targets),
+// it falls back to a JS-based extraction.
 func buildAXSnapshot(ctx context.Context, refs *refRegistry) (string, error) {
 	refs.reset()
 
+	ensureAccessibility(ctx)
 	nodes, err := accessibility.GetFullAXTree().Do(ctx)
 	if err != nil {
-		return "", fmt.Errorf("get ax tree: %w", err)
+		// Fallback: JS-based snapshot for environments where the AX domain fails.
+		result, jsErr := buildJSSnapshot(ctx, refs)
+		if jsErr != nil {
+			return "", fmt.Errorf("get ax tree: %w (js fallback also failed: %v)", err, jsErr)
+		}
+		return result, nil
 	}
 
 	// Build a lookup from NodeID → *Node and a children map.
@@ -300,6 +314,7 @@ func resolveRefWithRecovery(ctx context.Context, refs *refRegistry, selector str
 // recoverRef searches the AX tree for a node matching the given role and name,
 // updates the ref entry, and returns the new BackendNodeID.
 func recoverRef(ctx context.Context, refs *refRegistry, ref int, entry refEntry) (cdp.BackendNodeID, error) {
+	ensureAccessibility(ctx)
 	nodes, err := accessibility.GetFullAXTree().Do(ctx)
 	if err != nil {
 		return 0, fmt.Errorf("recovery ax tree: %w", err)
@@ -380,4 +395,90 @@ func resolveNodeToRemoteObject(ctx context.Context, backendID cdp.BackendNodeID)
 		return "", fmt.Errorf("resolve node: %w", err)
 	}
 	return obj.ObjectID, nil
+}
+
+// buildJSSnapshot extracts an accessibility-like snapshot using JavaScript
+// when the CDP Accessibility domain is unavailable.
+func buildJSSnapshot(ctx context.Context, refs *refRegistry) (string, error) {
+	const script = `(function() {
+		const interactive = new Set([
+			'A', 'BUTTON', 'INPUT', 'SELECT', 'TEXTAREA', 'DETAILS', 'SUMMARY',
+			'[role=button]', '[role=link]', '[role=textbox]', '[role=combobox]',
+			'[role=checkbox]', '[role=radio]', '[role=tab]', '[role=menuitem]',
+			'[role=switch]', '[role=slider]', '[role=option]', '[role=searchbox]'
+		]);
+		const roleMap = {
+			'A': 'link', 'BUTTON': 'button', 'INPUT': 'textbox',
+			'SELECT': 'combobox', 'TEXTAREA': 'textbox',
+			'DETAILS': 'group', 'SUMMARY': 'button'
+		};
+		function walk(el, depth) {
+			if (!el || el.nodeType !== 1) return '';
+			const tag = el.tagName;
+			const role = el.getAttribute('role') || roleMap[tag] || tag.toLowerCase();
+			const name = el.getAttribute('aria-label') || el.getAttribute('title')
+				|| el.getAttribute('alt') || el.getAttribute('placeholder') || '';
+			const text = (el.childNodes.length === 1 && el.childNodes[0].nodeType === 3)
+				? el.childNodes[0].textContent.trim().slice(0, 100) : '';
+			const indent = '  '.repeat(depth);
+			let line = indent + role;
+			const label = name || text;
+			if (label) line += ' "' + label.replace(/"/g, '\\"') + '"';
+			const val = el.value;
+			if (val !== undefined && val !== '') line += ' value="' + String(val).slice(0, 50) + '"';
+			if (el.disabled) line += ' [disabled]';
+			if (el.checked) line += ' [checked]';
+			// Mark interactive elements
+			let isInteractive = false;
+			if (interactive.has(tag) || el.getAttribute('role')) {
+				const r = el.getBoundingClientRect();
+				if (r.width > 0 && r.height > 0) isInteractive = true;
+			}
+			if (isInteractive) line += ' {{INTERACTIVE:' + role + ':' + (label||'') + '}}';
+			let result = line + '\n';
+			for (const child of el.children) {
+				result += walk(child, depth + 1);
+			}
+			return result;
+		}
+		return walk(document.body, 0);
+	})()`
+
+	var result string
+	if err := chromedp.Run(ctx, chromedp.Evaluate(script, &result)); err != nil {
+		return "", fmt.Errorf("js snapshot: %w", err)
+	}
+
+	// Post-process: replace {{INTERACTIVE:role:name}} markers with @ref numbers.
+	var b strings.Builder
+	for _, line := range strings.Split(result, "\n") {
+		if idx := strings.Index(line, " {{INTERACTIVE:"); idx >= 0 {
+			marker := line[idx+len(" {{INTERACTIVE:"):]
+			line = line[:idx]
+			// Parse role:name from marker.
+			end := strings.Index(marker, "}}")
+			if end > 0 {
+				parts := strings.SplitN(marker[:end], ":", 2)
+				role := parts[0]
+				name := ""
+				if len(parts) > 1 {
+					name = parts[1]
+				}
+				// We can't get BackendNodeID from JS, so store with ID=0.
+				// The ref is still useful for display but can't be used for interaction.
+				ref := refs.add(refEntry{
+					BackendNodeID: 0,
+					Role:          role,
+					Name:          name,
+				})
+				line += fmt.Sprintf(" @%d", ref)
+			}
+		}
+		if line != "" {
+			b.WriteString(line)
+			b.WriteByte('\n')
+		}
+	}
+
+	return "[JS fallback — @refs cannot be used for interaction, use CSS selectors instead]\n" + b.String(), nil
 }
