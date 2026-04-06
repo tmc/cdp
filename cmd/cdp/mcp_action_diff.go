@@ -10,6 +10,7 @@ import (
 	"image/draw"
 	"image/png"
 	"math"
+	"time"
 
 	"github.com/chromedp/cdproto/page"
 	"github.com/chromedp/chromedp"
@@ -55,8 +56,9 @@ Params is a JSON string, e.g. {"selector": "@1"} or {"url": "https://example.com
 			return nil, nil, fmt.Errorf("action_diff: before screenshot: %w", err)
 		}
 
-		// Execute the action.
-		if err := executeAction(actx, s, input.Action, params); err != nil {
+		// Execute the action with a timeout to prevent hanging on
+		// hidden/inaccessible elements (e.g. VS Code's shadow DOM).
+		if err := executeActionWithTimeout(actx, s, input.Action, params, 10*time.Second); err != nil {
 			return nil, nil, fmt.Errorf("action_diff: %s: %w", input.Action, err)
 		}
 
@@ -103,6 +105,20 @@ func captureViewportPNG(ctx context.Context) ([]byte, error) {
 		return nil, err
 	}
 	return buf, nil
+}
+
+// executeActionWithTimeout wraps executeAction with a deadline.
+func executeActionWithTimeout(ctx context.Context, s *mcpSession, action string, params actionDiffParams, timeout time.Duration) error {
+	done := make(chan error, 1)
+	go func() {
+		done <- executeAction(ctx, s, action, params)
+	}()
+	select {
+	case err := <-done:
+		return err
+	case <-time.After(timeout):
+		return fmt.Errorf("timed out after %s", timeout)
+	}
 }
 
 // executeAction runs the specified action.
