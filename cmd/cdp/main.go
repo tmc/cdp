@@ -1268,17 +1268,26 @@ func main() {
 
 	// MCP server mode — run as MCP server and exit
 	if mcpMode {
+		// Check if --debug-port was explicitly set on the command line.
+		debugPortExplicit := false
+		flag.Visit(func(f *flag.Flag) {
+			if f.Name == "debug-port" {
+				debugPortExplicit = true
+			}
+		})
 		mcpCfg := mcpConfig{
-			Headless:       headless,
-			Verbose:        verbose,
-			OutputDir:      outputDir,
-			URL:            url,
-			DebugPort:      debugPort,
-			ToolsDir:       toolsDir,
-			SaveSources:    saveSources,
-			NoScrub:        noScrub,
-			APIPort:        apiPort,
-			LoadExtensions: loadExtensions,
+			Headless:          headless,
+			Verbose:           verbose,
+			OutputDir:         outputDir,
+			URL:               url,
+			DebugPort:         debugPort,
+			DebugPortExplicit: debugPortExplicit,
+			ConnectExisting:   connectExisting,
+			ToolsDir:          toolsDir,
+			SaveSources:       saveSources,
+			NoScrub:           noScrub,
+			APIPort:           apiPort,
+			LoadExtensions:    loadExtensions,
 		}
 		if err := runMCP(mcpCfg); err != nil {
 			exitWithError(ExitGeneralError, ErrorTypeGeneral, "MCP server: %v", err)
@@ -4250,19 +4259,21 @@ func handleEnhancedMode(command string, interactive bool, cfg fullCaptureConfig)
 
 // fullCaptureConfig holds configuration for full-capture mode browser setup.
 type fullCaptureConfig struct {
-	Verbose         bool
-	Headless        bool
-	ChromePath      string
-	ShowChromeFlags bool
-	UseProfile      string
-	CookieDomains   string
-	DebugPort       int
-	OutputDir       string
-	ToolsDir        string
-	SaveSources     bool
-	NoScrub         bool
-	APIPort         int
-	LoadExtensions  string
+	Verbose           bool
+	Headless          bool
+	ChromePath        string
+	ShowChromeFlags   bool
+	UseProfile        string
+	CookieDomains     string
+	DebugPort         int
+	DebugPortExplicit bool // true when --debug-port was explicitly set
+	ConnectExisting   bool // true when --connect-existing was set
+	OutputDir         string
+	ToolsDir          string
+	SaveSources       bool
+	NoScrub           bool
+	APIPort           int
+	LoadExtensions    string
 }
 
 // resolveDebugPort checks if the desired port is available. If it's in use
@@ -4318,20 +4329,30 @@ func setupChromeForEnhanced(ctx context.Context, cfg fullCaptureConfig) (context
 		debugPort = 9222
 	}
 
-	// Auto-discover browser — prefer connecting to a running instance with debug port.
-	// When a running browser is found, its actual debug port overrides debugPort above,
-	// since we're connecting to it rather than launching a new one.
+	// When --connect-existing is used with an explicit --debug-port, connect
+	// directly to that port instead of auto-discovering a different browser.
 	var remoteHost string
 	var remotePort int
-	candidates, err := discoverBrowsers(verbose)
-	if err == nil && len(candidates) > 0 {
-		best := selectBestBrowser(candidates, verbose)
-		if best != nil {
-			if best.IsRunning && best.DebugPort > 0 {
-				remoteHost = "localhost"
-				remotePort = best.DebugPort
-			} else if best.Path != "" {
-				selectedPath = best.Path
+	if cfg.ConnectExisting && cfg.DebugPortExplicit {
+		remoteHost = "localhost"
+		remotePort = debugPort
+		if verbose {
+			log.Printf("--connect-existing with explicit --debug-port %d: connecting directly", debugPort)
+		}
+	} else {
+		// Auto-discover browser — prefer connecting to a running instance with debug port.
+		// When a running browser is found, its actual debug port overrides debugPort above,
+		// since we're connecting to it rather than launching a new one.
+		candidates, err := discoverBrowsers(verbose)
+		if err == nil && len(candidates) > 0 {
+			best := selectBestBrowser(candidates, verbose)
+			if best != nil {
+				if best.IsRunning && best.DebugPort > 0 {
+					remoteHost = "localhost"
+					remotePort = best.DebugPort
+				} else if best.Path != "" {
+					selectedPath = best.Path
+				}
 			}
 		}
 	}
@@ -4343,6 +4364,8 @@ func setupChromeForEnhanced(ctx context.Context, cfg fullCaptureConfig) (context
 			log.Printf("Connecting to running browser at %s", remoteURL)
 		}
 		allocCtx, allocCancel := chromedp.NewRemoteAllocator(ctx, remoteURL)
+
+		// First try creating a new target (works for Chrome/Brave).
 		browserCtx, browserCancel := chromedp.NewContext(allocCtx,
 			chromedp.WithErrorf(filteredErrorf),
 		)
@@ -4350,11 +4373,57 @@ func setupChromeForEnhanced(ctx context.Context, cfg fullCaptureConfig) (context
 		// Verify the connection works using the browser context directly.
 		// Do NOT use context.WithTimeout derived from a chromedp context,
 		// as cancelling such a derived context kills the browser target.
-		if err := chromedp.Run(browserCtx, chromedp.Navigate("about:blank")); err != nil {
+		// Use a minimal Evaluate instead of Navigate("about:blank") because
+		// Electron apps may not support navigating away from their app:// URL.
+		if err := chromedp.Run(browserCtx, chromedp.Evaluate("1", nil)); err != nil {
 			browserCancel()
 			allocCancel()
 			if verbose {
-				log.Printf("Remote connection failed: %v, launching new browser", err)
+				log.Printf("Remote connection failed: %v, trying existing target", err)
+			}
+
+			// Electron apps don't support Target.createTarget. Find the first
+			// page target via /json/list and attach to it directly.
+			tabs, listErr := browser.ListTabs(remoteHost, remotePort)
+			if listErr == nil && len(tabs) > 0 {
+				// Prefer "page" type targets.
+				var targetTab *browser.ChromeTab
+				for i := range tabs {
+					if tabs[i].Type == "page" {
+						targetTab = &tabs[i]
+						break
+					}
+				}
+				if targetTab == nil {
+					targetTab = &tabs[0]
+				}
+				if verbose {
+					log.Printf("Attaching to existing target: %s (%s)", targetTab.Title, targetTab.ID)
+				}
+
+				allocCtx2, allocCancel2 := chromedp.NewRemoteAllocator(ctx, fmt.Sprintf("ws://%s:%d", remoteHost, remotePort))
+				browserCtx2, browserCancel2 := chromedp.NewContext(allocCtx2,
+					chromedp.WithErrorf(filteredErrorf),
+					chromedp.WithTargetID(target.ID(targetTab.ID)),
+				)
+				if err := chromedp.Run(browserCtx2, chromedp.Evaluate("1", nil)); err != nil {
+					browserCancel2()
+					allocCancel2()
+					if verbose {
+						log.Printf("Target attach also failed: %v, launching new browser", err)
+					}
+				} else {
+					if verbose {
+						log.Printf("Connected to running browser on port %d (target: %s)", remotePort, targetTab.Title)
+					}
+					cancel := func() {
+						browserCancel2()
+						allocCancel2()
+					}
+					return browserCtx2, cancel, false, nil
+				}
+			} else if verbose {
+				log.Printf("Failed to list targets: %v, launching new browser", listErr)
 			}
 		} else {
 			if verbose {

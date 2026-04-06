@@ -193,16 +193,18 @@ func (s *mcpSession) contextPath() string {
 
 // mcpConfig holds configuration for the MCP server mode.
 type mcpConfig struct {
-	Headless       bool
-	Verbose        bool
-	OutputDir      string
-	URL            string
-	DebugPort      int
-	ToolsDir       string
-	SaveSources    bool
-	NoScrub        bool
-	APIPort        int
-	LoadExtensions string
+	Headless           bool
+	Verbose            bool
+	OutputDir          string
+	URL                string
+	DebugPort          int
+	DebugPortExplicit  bool // true when --debug-port was explicitly set on the command line
+	ConnectExisting    bool // true when --connect-existing was set
+	ToolsDir           string
+	SaveSources        bool
+	NoScrub            bool
+	APIPort            int
+	LoadExtensions     string
 }
 
 // runMCP starts the MCP server with browser session tools on stdio.
@@ -288,11 +290,13 @@ func runMCP(cfg mcpConfig) error {
 		defer close(browserReady)
 
 		fcfg := fullCaptureConfig{
-			Verbose:        cfg.Verbose,
-			Headless:       cfg.Headless,
-			DebugPort:      cfg.DebugPort,
-			OutputDir:      cfg.OutputDir,
-			LoadExtensions: cfg.LoadExtensions,
+			Verbose:           cfg.Verbose,
+			Headless:          cfg.Headless,
+			DebugPort:         cfg.DebugPort,
+			DebugPortExplicit: cfg.DebugPortExplicit,
+			ConnectExisting:   cfg.ConnectExisting,
+			OutputDir:         cfg.OutputDir,
+			LoadExtensions:    cfg.LoadExtensions,
 		}
 		browserCtx, browserCancel, _, err := setupChromeForEnhanced(ctx, fcfg)
 		if err != nil {
