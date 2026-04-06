@@ -24,6 +24,7 @@ func registerMCPTools(server *mcp.Server, session *mcpSession, cfg mcpConfig) {
 	registerInteractionTools(server, session)
 	registerJavaScriptTools(server, session)
 	registerTabTools(server, session)
+	registerConnectTool(server, session)
 	registerContextTools(server, session)
 	registerHARTools(server, session)
 	registerCookieTools(server, session)
@@ -588,6 +589,83 @@ func registerTabTools(server *mcp.Server, s *mcpSession) {
 		return &mcp.CallToolResult{
 			Content: []mcp.Content{&mcp.TextContent{Text: "closed tab " + tid}},
 		}, nil, nil
+	})
+}
+
+// --- Connect tool ---
+
+type ConnectInput struct {
+	Port int    `json:"port"`
+	Host string `json:"host,omitempty"`
+}
+
+type ConnectOutput struct {
+	Title string `json:"title"`
+	URL   string `json:"url"`
+	Port  int    `json:"port"`
+}
+
+func registerConnectTool(server *mcp.Server, s *mcpSession) {
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "connect",
+		Description: "Connect to a different CDP endpoint. Tears down current browser context and connects to the new target. Use this to switch between browsers (e.g. Brave on 9222 to Electron on 9223).",
+	}, func(ctx context.Context, req *mcp.CallToolRequest, input ConnectInput) (*mcp.CallToolResult, ConnectOutput, error) {
+		if input.Port <= 0 {
+			return nil, ConnectOutput{}, fmt.Errorf("connect: port must be positive")
+		}
+		host := input.Host
+		if host == "" {
+			host = "localhost"
+		}
+
+		// Tear down existing browser context.
+		s.mu.Lock()
+		if s.tabCancel != nil {
+			s.tabCancel()
+			s.tabCancel = nil
+		}
+		if s.cancel != nil {
+			s.cancel()
+			s.cancel = nil
+		}
+		s.mu.Unlock()
+
+		// Connect to new endpoint.
+		remoteURL := fmt.Sprintf("ws://%s:%d", host, input.Port)
+		bgCtx := context.Background()
+		allocCtx, allocCancel := chromedp.NewRemoteAllocator(bgCtx, remoteURL)
+
+		browserCtx, browserCancel := chromedp.NewContext(allocCtx)
+
+		// Verify connection with a quick evaluate.
+		var result any
+		if err := runWithTimeout(browserCtx, 10*time.Second, chromedp.Evaluate("1", &result)); err != nil {
+			browserCancel()
+			allocCancel()
+			return nil, ConnectOutput{}, fmt.Errorf("connect: failed to reach %s:%d: %w", host, input.Port, err)
+		}
+
+		// Get target info.
+		var out ConnectOutput
+		out.Port = input.Port
+		_ = chromedp.Run(browserCtx, chromedp.Title(&out.Title), chromedp.Location(&out.URL))
+
+		// Update session.
+		s.mu.Lock()
+		s.browserCtx = browserCtx
+		s.ctx = browserCtx
+		s.cancel = func() {
+			browserCancel()
+			allocCancel()
+		}
+		s.tabCancel = nil
+		// Reset per-connection state.
+		s.refs = newRefRegistry()
+		s.console = enableConsoleCapture(browserCtx)
+		s.dialogs = enableDialogCapture(browserCtx)
+		s.mu.Unlock()
+
+		return nil, out, nil
 	})
 }
 
