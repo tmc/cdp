@@ -26,3 +26,15 @@ testdata/har-files/**/*.proxymanlogv2
 /chdb
 /aistudio
 /cdp-proxy
+/ndp
+# Logs
+logs/
+logs-old/
+logs-bak/
+logs-prev2/
+# Temp/test artifacts
+tmp/
+test_output_dir/
+*.heapsnapshot
+unminified/
+$ARG1
