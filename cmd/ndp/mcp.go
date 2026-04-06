@@ -7,6 +7,7 @@ import (
 	"log"
 	"net"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -56,9 +57,11 @@ type consoleErr struct {
 }
 
 type mcpConfig struct {
-	NodePort string
-	APIPort  int
-	Verbose  bool
+	NodePort    string
+	APIPort     int
+	Verbose     bool
+	TargetTitle string
+	TargetURL   string
 }
 
 func runMCP(cfg mcpConfig) error {
@@ -70,10 +73,35 @@ func runMCP(cfg mcpConfig) error {
 	// Connect to Node.js inspector.
 	client := NewV8InspectorClient("localhost", cfg.NodePort, cfg.Verbose)
 
-	if err := client.ConnectByPort(ctx, cfg.NodePort); err != nil {
-		return fmt.Errorf("connect to Node.js on port %s: %w", cfg.NodePort, err)
+	if cfg.TargetTitle != "" || cfg.TargetURL != "" {
+		targets, err := client.DiscoverTargets(ctx)
+		if err != nil {
+			return fmt.Errorf("discover targets on port %s: %w", cfg.NodePort, err)
+		}
+		var matched *V8Target
+		for _, t := range targets {
+			if cfg.TargetTitle != "" && !strings.Contains(t.Title, cfg.TargetTitle) {
+				continue
+			}
+			if cfg.TargetURL != "" && !strings.Contains(t.URL, cfg.TargetURL) {
+				continue
+			}
+			matched = t
+			break
+		}
+		if matched == nil {
+			return fmt.Errorf("no target matching title=%q url=%q on port %s", cfg.TargetTitle, cfg.TargetURL, cfg.NodePort)
+		}
+		if err := client.Connect(ctx, matched); err != nil {
+			return fmt.Errorf("connect to target %q: %w", matched.Title, err)
+		}
+		log.Printf("Connected to target %q (%s) on port %s", matched.Title, matched.URL, cfg.NodePort)
+	} else {
+		if err := client.ConnectByPort(ctx, cfg.NodePort); err != nil {
+			return fmt.Errorf("connect to Node.js on port %s: %w", cfg.NodePort, err)
+		}
+		log.Printf("Connected to Node.js on port %s", cfg.NodePort)
 	}
-	log.Printf("Connected to Node.js on port %s", cfg.NodePort)
 
 	rt := NewV8Runtime(client)
 	dbg := NewV8Debugger(client)

@@ -19,12 +19,14 @@ import (
 )
 
 var (
-	verbose  bool
-	timeout  int
-	config   string
-	mcpMode  bool
-	nodePort string
-	apiPort  int
+	verbose     bool
+	timeout     int
+	config      string
+	mcpMode     bool
+	nodePort    string
+	apiPort     int
+	targetTitle string
+	targetURL   string
 )
 
 var rootCmd = &cobra.Command{
@@ -49,9 +51,11 @@ Electron usage:
 	Run: func(cmd *cobra.Command, args []string) {
 		if mcpMode {
 			if err := runMCP(mcpConfig{
-				NodePort: nodePort,
-				APIPort:  apiPort,
-				Verbose:  verbose,
+				NodePort:    nodePort,
+				APIPort:     apiPort,
+				Verbose:     verbose,
+				TargetTitle: targetTitle,
+				TargetURL:   targetURL,
 			}); err != nil {
 				log.Fatalf("MCP server: %v", err)
 			}
@@ -177,6 +181,8 @@ func init() {
 	rootCmd.Flags().BoolVar(&mcpMode, "mcp", false, "Run as MCP server (stdio transport)")
 	rootCmd.Flags().StringVar(&nodePort, "node-port", "9229", "Node.js inspector port")
 	rootCmd.Flags().IntVar(&apiPort, "api-port", 0, "Coverage API port (0 = auto-assign)")
+	rootCmd.Flags().StringVar(&targetTitle, "target-title", "", "Connect to target whose title contains this string")
+	rootCmd.Flags().StringVar(&targetURL, "target-url", "", "Connect to target whose URL contains this string")
 
 	// Add subcommands
 	rootCmd.AddCommand(nodeCmd)
