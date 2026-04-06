@@ -206,6 +206,7 @@ type mcpConfig struct {
 	NoScrub            bool
 	APIPort            int
 	LoadExtensions     string
+	EnableInspect      bool
 }
 
 // runMCP starts the MCP server with browser session tools on stdio.
@@ -258,7 +259,7 @@ func runMCP(cfg mcpConfig) error {
 		Version: "0.1.0",
 	}, nil)
 
-	registerMCPTools(server, session)
+	registerMCPTools(server, session, cfg)
 
 	if cfg.ToolsDir != "" {
 		if err := loadAndRegisterCustomTools(server, session, cfg.ToolsDir); err != nil {

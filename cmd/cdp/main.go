@@ -1167,6 +1167,7 @@ func main() {
 
 		// MCP server mode
 		mcpMode        bool
+		enableInspect  bool
 		toolsDir       string
 		apiPort        int
 		loadExtensions string
@@ -1256,6 +1257,7 @@ func main() {
 
 	// MCP server mode
 	flag.BoolVar(&mcpMode, "mcp", false, "Run as MCP server (stdio transport)")
+	flag.BoolVar(&enableInspect, "enable-inspect", false, "Enable inspection/reversing tools in MCP mode (inspect_fingerprint, inspect_walk, inspect_ipc_*)")
 	flag.StringVar(&toolsDir, "tools-dir", "", "Directory of .cdp tool definitions for MCP and shell")
 	flag.IntVar(&apiPort, "api-port", 0, "Port for coverage API server (DevTools extension); 0 to disable")
 	flag.StringVar(&loadExtensions, "load-extension", "", "Comma-separated paths to unpacked extensions to load at browser start")
@@ -1288,6 +1290,7 @@ func main() {
 			NoScrub:           noScrub,
 			APIPort:           apiPort,
 			LoadExtensions:    loadExtensions,
+			EnableInspect:     enableInspect,
 		}
 		if err := runMCP(mcpCfg); err != nil {
 			exitWithError(ExitGeneralError, ErrorTypeGeneral, "MCP server: %v", err)

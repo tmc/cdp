@@ -18,7 +18,7 @@ import (
 )
 
 // registerMCPTools registers all MCP tool handlers on the given server.
-func registerMCPTools(server *mcp.Server, session *mcpSession) {
+func registerMCPTools(server *mcp.Server, session *mcpSession, cfg mcpConfig) {
 	registerNavigationTools(server, session)
 	registerObservationTools(server, session)
 	registerInteractionTools(server, session)
@@ -49,10 +49,10 @@ func registerMCPTools(server *mcp.Server, session *mcpSession) {
 	registerWebMCPTools(server, session)
 	registerExtensionTools(server, session)
 	registerActionDiffTool(server, session)
-	registerIPCTools(server, session)
 	registerNetworkTools(server, session)
-	registerWalkTools(server, session)
-	registerReverseTools(server, session)
+	if cfg.EnableInspect {
+		registerInspectTools(server, session)
+	}
 }
 
 // --- Navigation tools ---
