@@ -1232,7 +1232,7 @@ func main() {
 	var outputFormat string
 	flag.StringVar(&useProfile, "use-profile", "", "Use Chrome profile with cookies and session data")
 	flag.StringVar(&profileDir, "profile-dir", "", "Custom profile directory (overrides default locations)")
-	flag.StringVar(&cookieDomains, "cookie-domains", "", "Comma-separated list of domains to include cookies from")
+	flag.StringVar(&cookieDomains, "cookie-domains", "", "Comma-separated list of domains to include cookies from (requires sqlite3 in PATH)")
 	flag.BoolVar(&listProfiles, "list-profiles", false, "List available Chrome profiles and exit")
 	flag.BoolVar(&connectExisting, "connect-existing", false, "Prefer connecting to existing Chrome sessions")
 

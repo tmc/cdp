@@ -56,7 +56,8 @@ Session & Profile Flags:
 	-profile-dir <dir>
 	    Custom profile directory (overrides default locations).
 	-cookie-domains <domains>
-	    Comma-separated list of domains to include cookies from.
+	    Comma-separated list of domains to include cookies from
+	    (requires sqlite3 in PATH).
 	-list-profiles
 	    List available Chrome profiles and exit.
 

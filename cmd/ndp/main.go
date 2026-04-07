@@ -614,6 +614,7 @@ func main() {
 	chromeConsoleCmd.Flags().String("tab", "", "Target tab ID")
 
 	replCmd.Flags().StringP("target", "t", "", "Target to attach to")
+	tuiCmd.Flags().StringP("target", "t", "", "Target to attach to")
 
 	rootCmd.AddCommand(tuiCmd)
 

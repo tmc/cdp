@@ -219,7 +219,7 @@ func main() {
 	flag.StringVar(&opts.urlPattern, "urls", "", "Regular expression to filter URLs")
 	flag.StringVar(&opts.blockPattern, "block", "", "Regular expression of URLs to block from loading")
 	flag.StringVar(&opts.omitPattern, "omit", "", "Regular expression of URLs to omit from HAR output")
-	flag.StringVar(&opts.cookieDomains, "cookie-domains", "", "Comma-separated list of domains to include cookies from")
+	flag.StringVar(&opts.cookieDomains, "cookie-domains", "", "Comma-separated list of domains to include cookies from (requires sqlite3 in PATH)")
 	flag.BoolVar(&opts.listProfiles, "list-profiles", false, "List available Chrome profiles")
 	flag.BoolVar(&opts.restoreSession, "restore-session", false, "Restore previous session on startup")
 	flag.BoolVar(&opts.streaming, "stream", false, "Stream HAR entries as they are captured (outputs NDJSON)")

@@ -1,11 +1,13 @@
 package chromeprofiles
 
 import (
-	"database/sql"
+	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"log"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -13,7 +15,6 @@ import (
 
 	"github.com/tmc/misc/chrome-to-har/internal/secureio"
 	"github.com/tmc/misc/chrome-to-har/internal/validation"
-	_ "modernc.org/sqlite"
 )
 
 type profileManager struct {
@@ -246,47 +247,65 @@ func (pm *profileManager) CopyCookiesWithDomains(srcDir, dstDir string, domains 
 	srcDB := filepath.Join(srcDir, "Cookies")
 	dstDB := filepath.Join(dstDir, "Cookies")
 
-	// Open source database
-	src, err := sql.Open("sqlite", srcDB+"?mode=ro")
-	if err != nil {
-		return withField(profileCopy("failed to open source cookies database", err), "database", srcDB)
-	}
-	defer src.Close()
-
 	// Create destination database
 	if err := copyFile(srcDB, dstDB); err != nil {
 		return withField(fileOpError("copy", srcDB, err), "operation", "copy_cookies_database")
 	}
 
-	dst, err := sql.Open("sqlite", dstDB)
+	query, err := buildCookieFilterQuery(domains)
 	if err != nil {
-		return withField(profileCopy("failed to open destination cookies database", err), "database", dstDB)
+		return withField(profileCopy("failed to build cookie filter query", err), "domains", domains)
 	}
-	defer dst.Close()
-
-	// Begin transaction
-	tx, err := dst.Begin()
-	if err != nil {
-		return profileCopy("failed to begin database transaction", err)
-	}
-	defer tx.Rollback()
-
-	// Delete cookies that don't match domains
-	var whereClause strings.Builder
-	whereClause.WriteString("host_key NOT LIKE '%")
-	whereClause.WriteString(strings.Join(domains, "%' AND host_key NOT LIKE '%"))
-	whereClause.WriteString("%'")
-
-	_, err = tx.Exec("DELETE FROM cookies WHERE " + whereClause.String())
-	if err != nil {
+	if err := runSQLite(dstDB, query); err != nil {
 		return withField(profileCopy("failed to filter cookies by domain", err), "domains", domains)
 	}
 
-	if err := tx.Commit(); err != nil {
-		return profileCopy("failed to commit database changes", err)
+	pm.logf("Copied and filtered cookies for domains: %v", domains)
+	return nil
+}
+
+func buildCookieFilterQuery(domains []string) (string, error) {
+	if len(domains) == 0 {
+		return "", errors.New("no domains provided")
 	}
 
-	pm.logf("Copied and filtered cookies for domains: %v", domains)
+	clauses := make([]string, 0, len(domains))
+	for _, domain := range domains {
+		normalized, err := normalizeCookieDomain(domain)
+		if err != nil {
+			return "", err
+		}
+		escaped := strings.ReplaceAll(normalized, "'", "''")
+		clauses = append(clauses, fmt.Sprintf("host_key LIKE '%%%s%%'", escaped))
+	}
+
+	return "PRAGMA busy_timeout=5000; DELETE FROM cookies WHERE NOT (" + strings.Join(clauses, " OR ") + ");", nil
+}
+
+func normalizeCookieDomain(domain string) (string, error) {
+	domain = strings.TrimSpace(domain)
+	domain = strings.TrimPrefix(domain, ".")
+	if err := validation.ValidateHostname(domain); err != nil {
+		return "", fmt.Errorf("invalid cookie domain %q: %w", domain, err)
+	}
+	return domain, nil
+}
+
+func runSQLite(dbPath, query string) error {
+	if _, err := exec.LookPath("sqlite3"); err != nil {
+		return fmt.Errorf("sqlite3 not found in PATH: %w", err)
+	}
+
+	cmd := exec.Command("sqlite3", dbPath, query)
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		msg := strings.TrimSpace(stderr.String())
+		if msg != "" {
+			return fmt.Errorf("%s: %w", msg, err)
+		}
+		return err
+	}
 	return nil
 }
 

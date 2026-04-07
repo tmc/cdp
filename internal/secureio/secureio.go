@@ -3,7 +3,6 @@ package secureio
 
 import (
 	"crypto/rand"
-	"database/sql"
 	"encoding/hex"
 	"fmt"
 	"io"
@@ -304,42 +303,6 @@ func (l *LockFile) Unlock() error {
 
 	l.file = nil
 	return nil
-}
-
-// SecureSQLQuery executes SQL queries with proper parameterization to prevent SQL injection
-func SecureSQLQuery(db *sql.DB, query string, args ...interface{}) (*sql.Rows, error) {
-	// Prepare statement to prevent SQL injection
-	stmt, err := db.Prepare(query)
-	if err != nil {
-		return nil, fmt.Errorf("preparing statement: %w", err)
-	}
-	defer stmt.Close()
-
-	// Execute with parameters
-	rows, err := stmt.Query(args...)
-	if err != nil {
-		return nil, fmt.Errorf("executing query: %w", err)
-	}
-
-	return rows, nil
-}
-
-// SecureSQLExec executes SQL statements with proper parameterization
-func SecureSQLExec(db *sql.DB, query string, args ...interface{}) (sql.Result, error) {
-	// Prepare statement to prevent SQL injection
-	stmt, err := db.Prepare(query)
-	if err != nil {
-		return nil, fmt.Errorf("preparing statement: %w", err)
-	}
-	defer stmt.Close()
-
-	// Execute with parameters
-	result, err := stmt.Exec(args...)
-	if err != nil {
-		return nil, fmt.Errorf("executing statement: %w", err)
-	}
-
-	return result, nil
 }
 
 // BuildDomainFilterQuery builds a secure SQL query for domain filtering
