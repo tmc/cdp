@@ -1,5 +1,5 @@
-// Package scriptengine provides a CDP script engine based on rsc.io/script.
-package scriptengine
+// Package cdpscript provides a CDP script engine based on rsc.io/script.
+package cdpscript
 
 import (
 	"bufio"

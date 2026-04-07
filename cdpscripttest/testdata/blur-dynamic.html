@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html>
+<head><title>Blur Test</title>
+<style>
+body { font-family: monospace; padding: 20px; background: #fff; }
+.card { border: 1px solid #ccc; padding: 16px; width: 300px; }
+.label { font-weight: bold; margin-bottom: 8px; }
+.dynamic { color: #666; font-size: 12px; }
+.stable { color: #333; font-size: 16px; margin-top: 12px; }
+</style>
+</head>
+<body>
+<div class="card" id="card">
+  <div class="label">User Profile</div>
+  <div class="dynamic" id="session-id"></div>
+  <div class="dynamic" id="timestamp"></div>
+  <div class="stable" id="content">Status: active</div>
+</div>
+<script>
+document.getElementById('session-id').textContent = 'Session: ' + Math.random().toString(36).slice(2, 10);
+document.getElementById('timestamp').textContent = 'Updated: ' + new Date().toISOString();
+</script>
+</body>
+</html>

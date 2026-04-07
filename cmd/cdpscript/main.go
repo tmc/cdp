@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"os"
 
 	"github.com/tmc/misc/chrome-to-har/cdpscript"
 )
@@ -19,7 +20,7 @@ type scriptCmd struct {
 
 func newScriptCmd() *scriptCmd {
 	c := &scriptCmd{
-		fs: flag.NewFlagSet("run", flag.ExitOnError),
+		fs: flag.NewFlagSet("cdpscript", flag.ContinueOnError),
 	}
 	c.fs.BoolVar(&c.verbose, "verbose", false, "Enable verbose logging")
 	c.fs.BoolVar(&c.verbose, "v", false, "Enable verbose logging (short)")
@@ -30,11 +31,24 @@ func newScriptCmd() *scriptCmd {
 	return c
 }
 
+func main() {
+	cmd := newScriptCmd()
+	if err := cmd.run(os.Args[1:]); err != nil {
+		if err == flag.ErrHelp {
+			return
+		}
+		fmt.Fprintf(os.Stderr, "cdpscript: %v\n", err)
+		os.Exit(1)
+	}
+}
+
 func (c *scriptCmd) run(args []string) error {
-	c.fs.Parse(args)
+	if err := c.fs.Parse(args); err != nil {
+		return err
+	}
 
 	if c.fs.NArg() < 1 {
-		return fmt.Errorf("usage: cdp run [options] <script.txtar>")
+		return fmt.Errorf("usage: cdpscript [options] <script.txtar>")
 	}
 
 	scriptPath := c.fs.Arg(0)

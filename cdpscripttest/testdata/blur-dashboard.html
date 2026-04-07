@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html>
+<head><title>Dashboard</title>
+<style>
+body { font-family: -apple-system, sans-serif; padding: 20px; background: #f5f5f5; margin: 0; }
+.dashboard { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; max-width: 600px; }
+.card { background: #fff; border-radius: 8px; padding: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+.card h3 { margin: 0 0 12px; font-size: 14px; color: #666; text-transform: uppercase; letter-spacing: 0.5px; }
+.metric { font-size: 28px; font-weight: 700; color: #111; }
+.sublabel { font-size: 12px; color: #999; margin-top: 4px; }
+.status-row { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: #22c55e; }
+.dot.warn { background: #f59e0b; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+td, th { padding: 6px 8px; text-align: left; border-bottom: 1px solid #eee; }
+th { color: #666; font-weight: 600; }
+.tag { background: #e0f2fe; color: #0369a1; padding: 2px 6px; border-radius: 4px; font-size: 11px; }
+</style>
+</head>
+<body>
+<div class="dashboard" id="dashboard">
+  <div class="card">
+    <h3>Active Users</h3>
+    <div class="metric" id="users"></div>
+    <div class="sublabel">currently online</div>
+  </div>
+  <div class="card">
+    <h3>Uptime</h3>
+    <div class="metric">99.97%</div>
+    <div class="status-row"><div class="dot"></div><span>All systems operational</span></div>
+  </div>
+  <div class="card">
+    <h3>Requests / sec</h3>
+    <div class="metric" id="rps"></div>
+    <div class="sublabel" id="latency"></div>
+  </div>
+  <div class="card">
+    <h3>Recent Events</h3>
+    <table>
+      <tr><th>Event</th><th>Time</th></tr>
+      <tr><td>Deploy <span class="tag">v2.4.1</span></td><td id="evt1"></td></tr>
+      <tr><td>Alert cleared</td><td id="evt2"></td></tr>
+      <tr><td>Scale up</td><td id="evt3"></td></tr>
+    </table>
+  </div>
+</div>
+<script>
+// Dynamic values that change on every load.
+document.getElementById('users').textContent = (100 + Math.floor(Math.random() * 900)).toLocaleString();
+document.getElementById('rps').textContent = (1000 + Math.floor(Math.random() * 4000)).toLocaleString();
+document.getElementById('latency').textContent = 'p99: ' + (5 + Math.floor(Math.random() * 45)) + 'ms';
+
+function ago(mins) {
+  var d = new Date(Date.now() - mins * 60000);
+  return d.toLocaleTimeString();
+}
+document.getElementById('evt1').textContent = ago(3 + Math.floor(Math.random() * 10));
+document.getElementById('evt2').textContent = ago(15 + Math.floor(Math.random() * 30));
+document.getElementById('evt3').textContent = ago(45 + Math.floor(Math.random() * 60));
+</script>
+</body>
+</html>

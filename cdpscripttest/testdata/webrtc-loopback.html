@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html>
+<head><title>WebRTC Loopback Test</title></head>
+<body>
+<h1>WebRTC Loopback</h1>
+<div id="status">connecting...</div>
+<video id="remote-video" autoplay playsinline></video>
+<script>
+(function() {
+  'use strict';
+
+  var statusEl = document.getElementById('status');
+  var remoteVideo = document.getElementById('remote-video');
+
+  // Create media tracks once and reuse across retries.
+  var canvas = document.createElement('canvas');
+  canvas.width = 320;
+  canvas.height = 240;
+  var ctx = canvas.getContext('2d');
+
+  function drawFrame() {
+    ctx.fillStyle = '#0066ff';
+    ctx.fillRect(0, 0, 320, 240);
+    ctx.fillStyle = '#ffffff';
+    ctx.font = '16px monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(new Date().toISOString(), 160, 120);
+    requestAnimationFrame(drawFrame);
+  }
+  drawFrame();
+
+  var videoStream = canvas.captureStream(15);
+  var videoTrack = videoStream.getVideoTracks()[0];
+
+  var audioCtx = new AudioContext();
+  var osc = audioCtx.createOscillator();
+  osc.frequency.value = 440;
+  var dest = audioCtx.createMediaStreamDestination();
+  osc.connect(dest);
+  osc.start();
+  var audioTrack = dest.stream.getAudioTracks()[0];
+
+  function setupConnection() {
+    var pc1 = new RTCPeerConnection();
+    var pc2 = new RTCPeerConnection();
+
+    // Exchange ICE candidates.
+    pc1.onicecandidate = function(e) {
+      if (e.candidate) pc2.addIceCandidate(e.candidate);
+    };
+    pc2.onicecandidate = function(e) {
+      if (e.candidate) pc1.addIceCandidate(e.candidate);
+    };
+
+    // Update status when both peer connections reach "connected".
+    function updateStatus() {
+      if (pc1.connectionState === 'connected' && pc2.connectionState === 'connected') {
+        statusEl.textContent = 'connected';
+      } else if (pc1.connectionState === 'failed' || pc2.connectionState === 'failed') {
+        statusEl.textContent = 'failed - retrying...';
+        pc1.close();
+        pc2.close();
+        setTimeout(setupConnection, 200);
+      }
+    }
+    pc1.onconnectionstatechange = updateStatus;
+    pc2.onconnectionstatechange = updateStatus;
+
+    // Show remote video on pc2's incoming track.
+    pc2.ontrack = function(e) {
+      if (remoteVideo.srcObject !== e.streams[0]) {
+        remoteVideo.srcObject = e.streams[0];
+      }
+    };
+
+    // Create a data channel on pc1.
+    var dc1 = pc1.createDataChannel('test-dc');
+    dc1.onopen = function() {};
+    dc1.onclose = function() {};
+
+    // pc2 receives the data channel and echoes messages back.
+    pc2.ondatachannel = function(e) {
+      var dc2 = e.channel;
+      dc2.onmessage = function(msg) {
+        dc2.send('echo:' + msg.data);
+      };
+    };
+
+    // Add tracks to pc1.
+    pc1.addTrack(videoTrack, videoStream);
+    pc1.addTrack(audioTrack, dest.stream);
+
+    // Perform the offer/answer exchange.
+    pc1.createOffer().then(function(offer) {
+      return pc1.setLocalDescription(offer);
+    }).then(function() {
+      return pc2.setRemoteDescription(pc1.localDescription);
+    }).then(function() {
+      return pc2.createAnswer();
+    }).then(function(answer) {
+      return pc2.setLocalDescription(answer);
+    }).then(function() {
+      return pc1.setRemoteDescription(pc2.localDescription);
+    }).catch(function(err) {
+      statusEl.textContent = 'error: ' + err.message;
+    });
+  }
+
+  setupConnection();
+})();
+</script>
+</body>
+</html>
