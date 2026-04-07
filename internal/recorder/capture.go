@@ -62,15 +62,18 @@ func (r *Recorder) HandleConsoleCapture(ev *runtime.EventConsoleAPICalled) bool 
 
 func (r *Recorder) handleGRPCCapture(payload string) {
 	var ev struct {
-		Type     string `json:"type"`
-		URL      string `json:"url"`
-		Method   string `json:"method"`
-		Headers  string `json:"headers"`
-		Body     string `json:"body"`
-		ChunkIdx int    `json:"chunkIdx"`
-		Chunk    string `json:"chunk"`
-		Status   int    `json:"status"`
-		Full     string `json:"full"`
+		Type            string `json:"type"`
+		URL             string `json:"url"`
+		Method          string `json:"method"`
+		Headers         string `json:"headers"`
+		RespHeaders     string `json:"respHeaders"`
+		RespContentType string `json:"respContentType"`
+		Body            string `json:"body"`
+		ChunkIdx        int    `json:"chunkIdx"`
+		Chunk           string `json:"chunk"`
+		Status          int    `json:"status"`
+		StatusText      string `json:"statusText"`
+		Full            string `json:"full"`
 	}
 	if err := json.Unmarshal([]byte(payload), &ev); err != nil {
 		if r.verbose {
@@ -125,6 +128,14 @@ func (r *Recorder) handleGRPCCapture(payload string) {
 
 		// Also emit a synthetic HAR entry so it appears in domain JSONL.
 		if r.streaming {
+			respMIME := ev.RespContentType
+			if respMIME == "" {
+				respMIME = "application/octet-stream"
+			}
+			statusText := ev.StatusText
+			if statusText == "" {
+				statusText = "OK"
+			}
 			entry := &har.Entry{
 				StartedDateTime: time.Now().Format(time.RFC3339),
 				Comment:         "captured-via-fetch-wrapper",
@@ -132,20 +143,30 @@ func (r *Recorder) handleGRPCCapture(payload string) {
 					Method:      ev.Method,
 					URL:         ev.URL,
 					HTTPVersion: "HTTP/1.1",
+					Headers:     parseHeaderString(ev.Headers),
 				},
 				Response: &har.Response{
 					Status:     int64(ev.Status),
-					StatusText: "OK",
+					StatusText: statusText,
+					Headers:    parseHeaderString(ev.RespHeaders),
 					Content: &har.Content{
-						MimeType: "application/x-protobuf", // gRPC-Web content type
+						MimeType: respMIME,
 						Size:     int64(len(ev.Full)),
 						Text:     ev.Full,
 					},
 				},
 			}
 			if ev.Body != "" {
+				reqMIME := "application/x-www-form-urlencoded"
+				// Use request content-type header if available.
+				for _, h := range entry.Request.Headers {
+					if strings.EqualFold(h.Name, "content-type") {
+						reqMIME = h.Value
+						break
+					}
+				}
 				entry.Request.PostData = &har.PostData{
-					MimeType: "application/x-www-form-urlencoded",
+					MimeType: reqMIME,
 					Text:     ev.Body,
 				}
 			}
@@ -190,18 +211,92 @@ func (r *Recorder) handleDataChannelCapture(payload string) {
 		}
 		r.writeCaptureEvent(ce)
 
+		// Synthesize a HAR entry so DataChannel messages appear in HARL output.
+		if r.streaming {
+			mimeType := "application/x-protobuf"
+			if !ev.Binary {
+				mimeType = "text/plain"
+			}
+			method := "RECEIVE"
+			if ev.Dir == "outgoing" {
+				method = "SEND"
+			}
+			entry := &har.Entry{
+				StartedDateTime: time.Now().Format(time.RFC3339),
+				Comment:         fmt.Sprintf("datachannel:%s", ev.Label),
+				Request: &har.Request{
+					Method:      method,
+					URL:         fmt.Sprintf("datachannel://webrtc-datachannel/%s/%s", ev.Label, ev.Dir),
+					HTTPVersion: "webrtc",
+				},
+				Response: &har.Response{
+					Status:     200,
+					StatusText: ev.Dir,
+					Content: &har.Content{
+						MimeType: mimeType,
+						Size:     int64(len(ev.Data)),
+						Text:     ev.Data,
+					},
+				},
+			}
+			r.scrubEntry(entry)
+			r.streamEntry(entry)
+		}
+
 	case "sdp-local", "sdp-remote":
 		if r.verbose {
 			log.Printf("capture: SDP %s (%s)", ev.Type, ev.SDPType)
 		}
+		dir := strings.TrimPrefix(ev.Type, "sdp-")
 		ce := &CaptureEvent{
 			Type:      "sdp",
 			Timestamp: time.Now(),
-			Direction: strings.TrimPrefix(ev.Type, "sdp-"),
+			Direction: dir,
 			Data:      ev.SDP,
 		}
 		r.writeCaptureEvent(ce)
+
+		// Synthesize a HAR entry for SDP exchange.
+		if r.streaming {
+			entry := &har.Entry{
+				StartedDateTime: time.Now().Format(time.RFC3339),
+				Comment:         fmt.Sprintf("sdp:%s:%s", dir, ev.SDPType),
+				Request: &har.Request{
+					Method:      "SDP",
+					URL:         fmt.Sprintf("webrtc://webrtc-signaling/sdp/%s/%s", dir, ev.SDPType),
+					HTTPVersion: "webrtc",
+				},
+				Response: &har.Response{
+					Status:     200,
+					StatusText: ev.SDPType,
+					Content: &har.Content{
+						MimeType: "application/sdp",
+						Size:     int64(len(ev.SDP)),
+						Text:     ev.SDP,
+					},
+				},
+			}
+			r.streamEntry(entry)
+		}
 	}
+}
+
+// parseHeaderString converts a newline-separated "Name: Value" string into
+// HAR name-value pairs.
+func parseHeaderString(s string) []*har.NameValuePair {
+	if s == "" {
+		return nil
+	}
+	var pairs []*har.NameValuePair
+	for _, line := range strings.Split(s, "\n") {
+		if i := strings.IndexByte(line, ':'); i > 0 {
+			pairs = append(pairs, &har.NameValuePair{
+				Name:  strings.TrimSpace(line[:i]),
+				Value: strings.TrimSpace(line[i+1:]),
+			})
+		}
+	}
+	return pairs
 }
 
 // writeCaptureEvent writes a capture event to the _capture.jsonl file in the

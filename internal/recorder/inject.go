@@ -82,11 +82,22 @@ const FetchCaptureScript = `(function() {
       return resp;
     }
 
+    // Capture response headers for the complete event.
+    let respContentType = '';
+    let respHeaderPairs = [];
+    try {
+      resp.headers.forEach((v, k) => {
+        respHeaderPairs.push(k + ': ' + v);
+        if (k.toLowerCase() === 'content-type') respContentType = v;
+      });
+    } catch(e) {}
+
     // Tee the stream: one for the page, one for capture.
     const [s1, s2] = resp.body.tee();
     const reader = s2.getReader();
     const decoder = new TextDecoder();
     const status = resp.status;
+    const statusText = resp.statusText || '';
     const method = init.method || 'GET';
 
     // Read capture stream in background.
@@ -115,8 +126,12 @@ const FetchCaptureScript = `(function() {
         type: 'complete',
         url: url,
         method: method,
+        headers: reqHeaders,
+        respHeaders: respHeaderPairs.join('\\n'),
+        respContentType: respContentType,
         body: reqBody,
         status: status,
+        statusText: statusText,
         full: chunks.join(''),
       }));
     })();
