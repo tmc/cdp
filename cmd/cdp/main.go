@@ -28,6 +28,7 @@ import (
 
 	"github.com/chromedp/cdproto/fetch"
 	"github.com/chromedp/cdproto/network"
+	"github.com/chromedp/cdproto/page"
 	"github.com/chromedp/cdproto/runtime"
 	"github.com/chromedp/cdproto/target"
 	"github.com/chromedp/chromedp"
@@ -1819,6 +1820,46 @@ func main() {
 					// Set up network event listeners based on mode
 					if harMode == "enhanced" {
 						chromedp.ListenTarget(browserCtx, enhancedRecorder.HandleNetworkEvent(browserCtx))
+
+						// Enable Fetch domain interception for shell mode.
+						if err := chromedp.Run(browserCtx, fetch.Enable().WithPatterns([]*fetch.RequestPattern{
+							{URLPattern: "*", RequestStage: fetch.RequestStageResponse},
+						})); err != nil {
+							if verbose {
+								log.Printf("Warning: failed to enable Fetch domain: %v", err)
+							}
+						} else {
+							chromedp.ListenTarget(browserCtx, enhancedRecorder.HandleFetchEvent(browserCtx))
+							if verbose {
+								log.Printf("Fetch domain interception enabled for response body capture")
+							}
+						}
+
+						// Inject JS capture scripts for gRPC-Web streaming and
+						// WebRTC DataChannel traffic.
+						for name, script := range map[string]string{
+							"fetch-capture":  harrecorder.FetchCaptureScript,
+							"webrtc-capture": harrecorder.WebRTCCaptureScript,
+						} {
+							if err := chromedp.Run(browserCtx, chromedp.ActionFunc(func(ctx context.Context) error {
+								_, err := page.AddScriptToEvaluateOnNewDocument(script).Do(ctx)
+								return err
+							})); err != nil {
+								if verbose {
+									log.Printf("Warning: failed to inject %s script: %v", name, err)
+								}
+							} else if verbose {
+								log.Printf("Injected %s script for enhanced capture", name)
+							}
+						}
+
+						// Route structured capture console messages to recorder.
+						chromedp.ListenTarget(browserCtx, func(ev interface{}) {
+							if ce, ok := ev.(*runtime.EventConsoleAPICalled); ok {
+								enhancedRecorder.HandleConsoleCapture(ce)
+							}
+						})
+
 						if harFile != "" {
 							fmt.Printf("Recording network traffic to: %s (enhanced mode)\n", harFile)
 						}
@@ -2644,6 +2685,31 @@ func main() {
 							log.Printf("Fetch domain interception enabled for response body capture")
 						}
 					}
+
+					// Inject JS capture scripts for gRPC-Web streaming and
+					// WebRTC DataChannel traffic that CDP cannot observe natively.
+					for name, script := range map[string]string{
+						"fetch-capture":  harrecorder.FetchCaptureScript,
+						"webrtc-capture": harrecorder.WebRTCCaptureScript,
+					} {
+						if err := chromedp.Run(browserCtx, chromedp.ActionFunc(func(ctx context.Context) error {
+							_, err := page.AddScriptToEvaluateOnNewDocument(script).Do(ctx)
+							return err
+						})); err != nil {
+							if verbose {
+								log.Printf("Warning: failed to inject %s script: %v", name, err)
+							}
+						} else if verbose {
+							log.Printf("Injected %s script for enhanced capture", name)
+						}
+					}
+
+					// Route structured capture console messages to recorder.
+					chromedp.ListenTarget(browserCtx, func(ev interface{}) {
+						if ce, ok := ev.(*runtime.EventConsoleAPICalled); ok {
+							enhancedRecorder.HandleConsoleCapture(ce)
+						}
+					})
 				}
 
 				if harFile != "" {
