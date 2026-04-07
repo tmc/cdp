@@ -8,8 +8,6 @@ import (
 	"os"
 	"strings"
 	"time"
-
-	"github.com/pkg/errors"
 )
 
 // ReportFormat represents the format of the diff report
@@ -90,11 +88,11 @@ func (rg *ReportGenerator) generateJSONReport(result *DiffResult, options *Repor
 	}
 
 	if err != nil {
-		return errors.Wrap(err, "marshaling JSON report")
+		return fmt.Errorf("marshaling JSON report: %w", err)
 	}
 
 	if err := os.WriteFile(options.OutputPath, jsonBytes, 0644); err != nil {
-		return errors.Wrap(err, "writing JSON report")
+		return fmt.Errorf("writing JSON report: %w", err)
 	}
 
 	return nil
@@ -128,11 +126,11 @@ func (rg *ReportGenerator) generateHTMLReport(result *DiffResult, options *Repor
 	}
 
 	if err := tmpl.Execute(&buf, data); err != nil {
-		return errors.Wrap(err, "executing HTML template")
+		return fmt.Errorf("executing HTML template: %w", err)
 	}
 
 	if err := os.WriteFile(options.OutputPath, buf.Bytes(), 0644); err != nil {
-		return errors.Wrap(err, "writing HTML report")
+		return fmt.Errorf("writing HTML report: %w", err)
 	}
 
 	return nil
@@ -281,7 +279,7 @@ func (rg *ReportGenerator) generateTextReport(result *DiffResult, options *Repor
 	}
 
 	if err := os.WriteFile(options.OutputPath, buf.Bytes(), 0644); err != nil {
-		return errors.Wrap(err, "writing text report")
+		return fmt.Errorf("writing text report: %w", err)
 	}
 
 	return nil
@@ -319,7 +317,7 @@ func (rg *ReportGenerator) generateCSVReport(result *DiffResult, options *Report
 	}
 
 	if err := os.WriteFile(options.OutputPath, buf.Bytes(), 0644); err != nil {
-		return errors.Wrap(err, "writing CSV report")
+		return fmt.Errorf("writing CSV report: %w", err)
 	}
 
 	return nil

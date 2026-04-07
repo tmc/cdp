@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/chromedp/cdproto/har"
-	"github.com/pkg/errors"
 )
 
 // CaptureMetadata stores metadata about a capture
@@ -59,7 +58,7 @@ type CaptureManager struct {
 // NewCaptureManager creates a new capture manager
 func NewCaptureManager(workDir string, verbose bool) (*CaptureManager, error) {
 	if err := os.MkdirAll(workDir, 0755); err != nil {
-		return nil, errors.Wrap(err, "creating work directory")
+		return nil, fmt.Errorf("creating work directory: %w", err)
 	}
 
 	cm := &CaptureManager{
@@ -72,7 +71,7 @@ func NewCaptureManager(workDir string, verbose bool) (*CaptureManager, error) {
 	// Load existing captures
 	if err := cm.loadMetadata(); err != nil {
 		if !os.IsNotExist(err) {
-			return nil, errors.Wrap(err, "loading existing captures")
+			return nil, fmt.Errorf("loading existing captures: %w", err)
 		}
 	}
 
@@ -97,7 +96,7 @@ func (cm *CaptureManager) CreateCapture(name, url, description string, labels ma
 	cm.captures[id] = metadata
 
 	if err := cm.saveMetadata(); err != nil {
-		return nil, errors.Wrap(err, "saving metadata")
+		return nil, fmt.Errorf("saving metadata: %w", err)
 	}
 
 	if cm.verbose {
@@ -148,12 +147,12 @@ func (cm *CaptureManager) CompleteCapture(id string, harData *har.HAR) error {
 	// Write HAR file
 	if err := cm.writeHARFile(capture.FilePath, harData); err != nil {
 		capture.Status = CaptureStatusFailed
-		return errors.Wrap(err, "writing HAR file")
+		return fmt.Errorf("writing HAR file: %w", err)
 	}
 
 	// Calculate file size and checksum
 	if err := cm.updateFileMetadata(capture); err != nil {
-		return errors.Wrap(err, "updating file metadata")
+		return fmt.Errorf("updating file metadata: %w", err)
 	}
 
 	capture.Status = CaptureStatusCompleted
@@ -214,7 +213,7 @@ func (cm *CaptureManager) DeleteCapture(id string) error {
 
 	// Remove HAR file
 	if err := os.Remove(capture.FilePath); err != nil && !os.IsNotExist(err) {
-		return errors.Wrap(err, "removing HAR file")
+		return fmt.Errorf("removing HAR file: %w", err)
 	}
 
 	// Remove from metadata
@@ -253,7 +252,7 @@ func (cm *CaptureManager) loadMetadata() error {
 
 	var captures map[string]*CaptureMetadata
 	if err := json.Unmarshal(data, &captures); err != nil {
-		return errors.Wrap(err, "unmarshaling metadata")
+		return fmt.Errorf("unmarshaling metadata: %w", err)
 	}
 
 	cm.captures = captures
@@ -264,11 +263,11 @@ func (cm *CaptureManager) loadMetadata() error {
 func (cm *CaptureManager) saveMetadata() error {
 	data, err := json.MarshalIndent(cm.captures, "", "  ")
 	if err != nil {
-		return errors.Wrap(err, "marshaling metadata")
+		return fmt.Errorf("marshaling metadata: %w", err)
 	}
 
 	if err := os.WriteFile(cm.metadataFile, data, 0644); err != nil {
-		return errors.Wrap(err, "writing metadata file")
+		return fmt.Errorf("writing metadata file: %w", err)
 	}
 
 	return nil
@@ -278,11 +277,11 @@ func (cm *CaptureManager) saveMetadata() error {
 func (cm *CaptureManager) writeHARFile(filename string, harData *har.HAR) error {
 	data, err := json.MarshalIndent(harData, "", "  ")
 	if err != nil {
-		return errors.Wrap(err, "marshaling HAR data")
+		return fmt.Errorf("marshaling HAR data: %w", err)
 	}
 
 	if err := os.WriteFile(filename, data, 0644); err != nil {
-		return errors.Wrap(err, "writing HAR file")
+		return fmt.Errorf("writing HAR file: %w", err)
 	}
 
 	return nil
@@ -292,12 +291,12 @@ func (cm *CaptureManager) writeHARFile(filename string, harData *har.HAR) error 
 func (cm *CaptureManager) loadHARFile(filename string) (*har.HAR, error) {
 	data, err := os.ReadFile(filename)
 	if err != nil {
-		return nil, errors.Wrap(err, "reading HAR file")
+		return nil, fmt.Errorf("reading HAR file: %w", err)
 	}
 
 	var harData har.HAR
 	if err := json.Unmarshal(data, &harData); err != nil {
-		return nil, errors.Wrap(err, "unmarshaling HAR data")
+		return nil, fmt.Errorf("unmarshaling HAR data: %w", err)
 	}
 
 	return &harData, nil
@@ -307,21 +306,21 @@ func (cm *CaptureManager) loadHARFile(filename string) (*har.HAR, error) {
 func (cm *CaptureManager) updateFileMetadata(capture *CaptureMetadata) error {
 	file, err := os.Open(capture.FilePath)
 	if err != nil {
-		return errors.Wrap(err, "opening HAR file")
+		return fmt.Errorf("opening HAR file: %w", err)
 	}
 	defer file.Close()
 
 	// Get file size
 	stat, err := file.Stat()
 	if err != nil {
-		return errors.Wrap(err, "getting file stats")
+		return fmt.Errorf("getting file stats: %w", err)
 	}
 	capture.Size = stat.Size()
 
 	// Calculate checksum
 	hash := md5.New()
 	if _, err := io.Copy(hash, file); err != nil {
-		return errors.Wrap(err, "calculating checksum")
+		return fmt.Errorf("calculating checksum: %w", err)
 	}
 	capture.Checksum = fmt.Sprintf("%x", hash.Sum(nil))
 

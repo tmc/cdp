@@ -2,17 +2,19 @@ package browser
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"errors"
 
 	"github.com/chromedp/cdproto/dom"
 	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/cdproto/page"
 	"github.com/chromedp/cdproto/runtime"
 	"github.com/chromedp/chromedp"
-	"github.com/pkg/errors"
 )
 
 // StabilityDetector monitors various page loading signals to determine when a page is stable
@@ -142,7 +144,7 @@ func (sd *StabilityDetector) Start() error {
 		page.Enable(),
 		runtime.Enable(),
 	); err != nil {
-		return errors.Wrap(err, "enabling DevTools domains for stability detection")
+		return fmt.Errorf("enabling DevTools domains for stability detection: %w", err)
 	}
 
 	// Set up event listeners
@@ -150,7 +152,7 @@ func (sd *StabilityDetector) Start() error {
 
 	// Inject DOM mutation observer
 	if err := sd.injectDOMMutationObserver(); err != nil {
-		return errors.Wrap(err, "injecting DOM mutation observer")
+		return fmt.Errorf("injecting DOM mutation observer: %w", err)
 	}
 
 	sd.started = true
@@ -238,7 +240,7 @@ func (sd *StabilityDetector) checkStability(ctx context.Context) error {
 				if sd.config.Verbose {
 					log.Printf("Stability check failed: %s - %v", check.name, err)
 				}
-				errChan <- errors.Wrapf(err, "%s check failed", check.name)
+				errChan <- fmt.Errorf(fmt.Sprintf("%s check failed", check.name)+": %w", err)
 			} else if sd.config.Verbose {
 				log.Printf("Stability check passed: %s", check.name)
 			}
@@ -258,7 +260,7 @@ func (sd *StabilityDetector) checkStability(ctx context.Context) error {
 	}
 
 	if len(errs) > 0 {
-		return errors.Errorf("stability checks failed: %v", errs)
+		return fmt.Errorf("stability checks failed: %v", errs)
 	}
 
 	return nil
@@ -397,9 +399,9 @@ func (sd *StabilityDetector) waitForResourceLoading(ctx context.Context) error {
 		err := sd.page.WaitForFunction(check.script, sd.config.ResourceTimeout)
 		if err != nil {
 			if resourceCtx.Err() != nil {
-				return errors.Wrapf(resourceCtx.Err(), "timeout waiting for %s", check.name)
+				return fmt.Errorf(fmt.Sprintf("timeout waiting for %s", check.name)+": %w", resourceCtx.Err())
 			}
-			return errors.Wrapf(err, "waiting for %s", check.name)
+			return fmt.Errorf(fmt.Sprintf("waiting for %s", check.name)+": %w", err)
 		}
 
 		if sd.config.Verbose {
@@ -426,7 +428,7 @@ func (sd *StabilityDetector) waitForJSExecution(ctx context.Context) error {
 			chromedp.Evaluate(`new Promise(resolve => requestAnimationFrame(() => resolve(true)))`, &frameComplete),
 		)
 		if err != nil {
-			return errors.Wrap(err, "waiting for animation frame")
+			return fmt.Errorf("waiting for animation frame: %w", err)
 		}
 	}
 
@@ -447,7 +449,7 @@ func (sd *StabilityDetector) waitForJSExecution(ctx context.Context) error {
 			})`, &idleComplete),
 		)
 		if err != nil {
-			return errors.Wrap(err, "waiting for idle callback")
+			return fmt.Errorf("waiting for idle callback: %w", err)
 		}
 	}
 
@@ -467,9 +469,9 @@ func (sd *StabilityDetector) runCustomChecks(ctx context.Context) error {
 		err := sd.page.WaitForFunction(check.Expression, check.Timeout)
 		if err != nil {
 			if checkCtx.Err() != nil {
-				return errors.Wrapf(checkCtx.Err(), "custom check '%s' timeout", check.Name)
+				return fmt.Errorf(fmt.Sprintf("custom check '%s' timeout", check.Name)+": %w", checkCtx.Err())
 			}
-			return errors.Wrapf(err, "custom check '%s' failed", check.Name)
+			return fmt.Errorf(fmt.Sprintf("custom check '%s' failed", check.Name)+": %w", err)
 		}
 
 		sd.mu.Lock()

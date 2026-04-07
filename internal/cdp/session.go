@@ -13,7 +13,6 @@ import (
 	"github.com/chromedp/cdproto/debugger"
 	"github.com/chromedp/cdproto/runtime"
 	"github.com/chromedp/chromedp"
-	"github.com/pkg/errors"
 )
 
 // TargetType represents the type of debugging target
@@ -71,7 +70,7 @@ func (m *Manager) CreateSession(ctx context.Context, target Target) (*Session, e
 	// Create CDP connection
 	conn, err := m.connectToTarget(ctx, target)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to connect to target")
+		return nil, fmt.Errorf("failed to connect to target: %w", err)
 	}
 
 	session := &Session{
@@ -115,13 +114,13 @@ func (m *Manager) connectToTarget(ctx context.Context, target Target) (*Connecti
 		// For Node.js, check if the inspector is available
 		resp, err := http.Get(fmt.Sprintf("http://localhost:%s/json/version", target.Port))
 		if err != nil {
-			return nil, errors.Wrap(err, "Node.js inspector not available")
+			return nil, fmt.Errorf("Node.js inspector not available: %w", err)
 		}
 		defer resp.Body.Close()
 
 		var versionInfo map[string]interface{}
 		if err := json.NewDecoder(resp.Body).Decode(&versionInfo); err != nil {
-			return nil, errors.Wrap(err, "failed to get Node.js version info")
+			return nil, fmt.Errorf("failed to get Node.js version info: %w", err)
 		}
 
 		if wsDebuggerURL, ok := versionInfo["webSocketDebuggerUrl"].(string); ok {
@@ -168,7 +167,7 @@ func (m *Manager) connectToTarget(ctx context.Context, target Target) (*Connecti
 
 	if err := chromedp.Run(testCtx, chromedp.Evaluate("1+1", nil)); err != nil {
 		cancel()
-		return nil, errors.Wrap(err, "failed to test connection")
+		return nil, fmt.Errorf("failed to test connection: %w", err)
 	}
 
 	if m.verbose {
@@ -222,11 +221,11 @@ func (s *Session) EnableDomains(ctx context.Context, domains ...string) error {
 				switch domain {
 				case "Runtime":
 					if err := runtime.Enable().Do(ctx); err != nil {
-						return errors.Wrapf(err, "failed to enable %s domain", domain)
+						return fmt.Errorf(fmt.Sprintf("failed to enable %s domain", domain)+": %w", err)
 					}
 				case "Debugger":
 					if _, err := debugger.Enable().Do(ctx); err != nil {
-						return errors.Wrapf(err, "failed to enable %s domain", domain)
+						return fmt.Errorf(fmt.Sprintf("failed to enable %s domain", domain)+": %w", err)
 					}
 				default:
 					if s.Verbose {
@@ -253,7 +252,7 @@ func (s *Session) Execute(ctx context.Context, expression string) (interface{}, 
 	)
 
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to execute expression")
+		return nil, fmt.Errorf("failed to execute expression: %w", err)
 	}
 
 	return result, nil

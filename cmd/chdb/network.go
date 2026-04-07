@@ -7,11 +7,12 @@ import (
 	"strings"
 	"time"
 
+	"errors"
+
 	"github.com/chromedp/cdproto/fetch"
 	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/cdproto/runtime"
 	"github.com/chromedp/chromedp"
-	"github.com/pkg/errors"
 )
 
 // NetworkController handles network operations
@@ -26,9 +27,9 @@ type NetworkController struct {
 // NewNetworkController creates a new network controller
 func NewNetworkController(debugger *ChromeDebugger, verbose bool) *NetworkController {
 	return &NetworkController{
-		debugger:    debugger,
-		verbose:     verbose,
-		requestMap:  make(map[network.RequestID]*network.Request),
+		debugger:   debugger,
+		verbose:    verbose,
+		requestMap: make(map[network.RequestID]*network.Request),
 	}
 }
 
@@ -55,7 +56,7 @@ func (nc *NetworkController) StartMonitoring(ctx context.Context, duration time.
 	)
 
 	if err != nil {
-		return errors.Wrap(err, "failed to start network monitoring")
+		return fmt.Errorf("failed to start network monitoring: %w", err)
 	}
 
 	// Monitor for specified duration or until interrupted
@@ -116,7 +117,7 @@ func (nc *NetworkController) EnableInterception(ctx context.Context, patterns []
 	)
 
 	if err != nil {
-		return errors.Wrap(err, "failed to enable interception")
+		return fmt.Errorf("failed to enable interception: %w", err)
 	}
 
 	fmt.Printf("✓ Interception enabled for patterns: %v\n", patterns)
@@ -161,7 +162,7 @@ func (nc *NetworkController) BlockRequests(ctx context.Context, patterns []strin
 	)
 
 	if err != nil {
-		return errors.Wrap(err, "failed to block requests")
+		return fmt.Errorf("failed to block requests: %w", err)
 	}
 
 	fmt.Printf("✓ Blocked request patterns: %v\n", patterns)
@@ -183,16 +184,16 @@ func (nc *NetworkController) SetThrottling(ctx context.Context, profile string) 
 		uploadThroughput = 0
 		latency = 0
 	case "slow-3g":
-		downloadThroughput = 400 * 1024 / 8    // 400 Kbps
-		uploadThroughput = 400 * 1024 / 8     // 400 Kbps
+		downloadThroughput = 400 * 1024 / 8 // 400 Kbps
+		uploadThroughput = 400 * 1024 / 8   // 400 Kbps
 		latency = 400
 	case "fast-3g":
-		downloadThroughput = 1.6 * 1024 * 1024 / 8  // 1.6 Mbps
-		uploadThroughput = 750 * 1024 / 8            // 750 Kbps
+		downloadThroughput = 1.6 * 1024 * 1024 / 8 // 1.6 Mbps
+		uploadThroughput = 750 * 1024 / 8          // 750 Kbps
 		latency = 150
 	case "4g":
-		downloadThroughput = 4 * 1024 * 1024 / 8    // 4 Mbps
-		uploadThroughput = 3 * 1024 * 1024 / 8      // 3 Mbps
+		downloadThroughput = 4 * 1024 * 1024 / 8 // 4 Mbps
+		uploadThroughput = 3 * 1024 * 1024 / 8   // 3 Mbps
 		latency = 20
 	case "none", "disabled":
 		// Disable throttling
@@ -222,7 +223,7 @@ func (nc *NetworkController) SetThrottling(ctx context.Context, profile string) 
 	)
 
 	if err != nil {
-		return errors.Wrap(err, "failed to set network throttling")
+		return fmt.Errorf("failed to set network throttling: %w", err)
 	}
 
 	fmt.Printf("✓ Network throttling set to: %s\n", profile)
@@ -264,7 +265,7 @@ func (nc *NetworkController) ModifyRequest(ctx context.Context, requestID string
 	)
 
 	if err != nil {
-		return errors.Wrap(err, "failed to modify request")
+		return fmt.Errorf("failed to modify request: %w", err)
 	}
 
 	fmt.Printf("✓ Modified request: %s\n", requestID)
@@ -366,7 +367,7 @@ func (nc *NetworkController) GetHAR(ctx context.Context) (string, error) {
 	)
 
 	if err != nil {
-		return "", errors.Wrap(err, "failed to export HAR")
+		return "", fmt.Errorf("failed to export HAR: %w", err)
 	}
 
 	return result, nil

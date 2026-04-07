@@ -5,10 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"errors"
+
 	"github.com/chromedp/cdproto/css"
 	"github.com/chromedp/cdproto/runtime"
 	"github.com/chromedp/chromedp"
-	"github.com/pkg/errors"
 )
 
 // CSSController handles CSS operations
@@ -70,7 +71,7 @@ func (cc *CSSController) GetMatchedStyles(ctx context.Context, selector string) 
 	)
 
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to get matched styles")
+		return nil, fmt.Errorf("failed to get matched styles: %w", err)
 	}
 
 	if resultMap, ok := result.(map[string]interface{}); ok {
@@ -128,7 +129,7 @@ func (cc *CSSController) GetComputedStyles(ctx context.Context, selector string)
 	)
 
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to get computed styles")
+		return nil, fmt.Errorf("failed to get computed styles: %w", err)
 	}
 
 	if resultMap, ok := result.(map[string]interface{}); ok {
@@ -224,7 +225,7 @@ func (cc *CSSController) GetInlineStyles(ctx context.Context, selector string) (
 	)
 
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to get inline styles")
+		return nil, fmt.Errorf("failed to get inline styles: %w", err)
 	}
 
 	// Convert to string map
@@ -359,7 +360,7 @@ func (cc *CSSController) StopCSSCoverage(ctx context.Context) ([]map[string]inte
 	)
 
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to get CSS coverage")
+		return nil, fmt.Errorf("failed to get CSS coverage: %w", err)
 	}
 
 	if resultArray, ok := result.([]interface{}); ok {
@@ -426,7 +427,7 @@ func (cc *CSSController) GetStyleSheets(ctx context.Context) ([]map[string]inter
 	)
 
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to get stylesheets")
+		return nil, fmt.Errorf("failed to get stylesheets: %w", err)
 	}
 
 	if resultArray, ok := result.([]interface{}); ok {

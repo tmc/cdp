@@ -12,6 +12,8 @@ import (
 	"strings"
 	"time"
 
+	"errors"
+
 	"github.com/chromedp/cdproto/debugger"
 	"github.com/chromedp/cdproto/dom"
 	"github.com/chromedp/cdproto/network"
@@ -19,7 +21,6 @@ import (
 	cdpruntime "github.com/chromedp/cdproto/runtime"
 	cdptarget "github.com/chromedp/cdproto/target"
 	"github.com/chromedp/chromedp"
-	"github.com/pkg/errors"
 )
 
 // ChromeTarget represents a Chrome tab or debug target
@@ -60,13 +61,13 @@ func (cd *ChromeDebugger) ListTargets(ctx context.Context) ([]ChromeTarget, erro
 	client := &http.Client{Timeout: 5 * time.Second}
 	resp, err := client.Get(url)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to connect to Chrome")
+		return nil, fmt.Errorf("failed to connect to Chrome: %w", err)
 	}
 	defer resp.Body.Close()
 
 	var targets []ChromeTarget
 	if err := json.NewDecoder(resp.Body).Decode(&targets); err != nil {
-		return nil, errors.Wrap(err, "failed to parse targets")
+		return nil, fmt.Errorf("failed to parse targets: %w", err)
 	}
 
 	return targets, nil
@@ -78,7 +79,7 @@ func (cd *ChromeDebugger) getBrowserWSURL() (string, error) {
 	client := &http.Client{Timeout: 5 * time.Second}
 	resp, err := client.Get(url)
 	if err != nil {
-		return "", errors.Wrap(err, "failed to get /json/version")
+		return "", fmt.Errorf("failed to get /json/version: %w", err)
 	}
 	defer resp.Body.Close()
 
@@ -86,7 +87,7 @@ func (cd *ChromeDebugger) getBrowserWSURL() (string, error) {
 		WebSocketDebuggerURL string `json:"webSocketDebuggerUrl"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&info); err != nil {
-		return "", errors.Wrap(err, "failed to parse /json/version")
+		return "", fmt.Errorf("failed to parse /json/version: %w", err)
 	}
 	if info.WebSocketDebuggerURL == "" {
 		return "", errors.New("no webSocketDebuggerUrl in /json/version")
@@ -143,7 +144,7 @@ func (cd *ChromeDebugger) Connect(ctx context.Context, targetID string) error {
 	// Test connection
 	if err := chromedp.Run(chromeCtx, chromedp.Evaluate("1+1", nil)); err != nil {
 		cd.Close()
-		return errors.Wrap(err, "failed to connect to target")
+		return fmt.Errorf("failed to connect to target: %w", err)
 	}
 
 	cd.connected = true
@@ -170,24 +171,24 @@ func (cd *ChromeDebugger) EnableDomains(ctx context.Context, domains ...string) 
 				switch domain {
 				case "Runtime":
 					if err := cdpruntime.Enable().Do(innerCtx); err != nil {
-						return errors.Wrapf(err, "failed to enable %s", domain)
+						return fmt.Errorf(fmt.Sprintf("failed to enable %s", domain)+": %w", err)
 					}
 				case "Page":
 					if err := page.Enable().Do(innerCtx); err != nil {
-						return errors.Wrapf(err, "failed to enable %s", domain)
+						return fmt.Errorf(fmt.Sprintf("failed to enable %s", domain)+": %w", err)
 					}
 				case "Network":
 					if err := network.Enable().Do(innerCtx); err != nil {
-						return errors.Wrapf(err, "failed to enable %s", domain)
+						return fmt.Errorf(fmt.Sprintf("failed to enable %s", domain)+": %w", err)
 					}
 				case "DOM":
 					if err := dom.Enable().Do(innerCtx); err != nil {
-						return errors.Wrapf(err, "failed to enable %s", domain)
+						return fmt.Errorf(fmt.Sprintf("failed to enable %s", domain)+": %w", err)
 					}
 				case "Debugger":
 					_, err := debugger.Enable().Do(innerCtx)
 					if err != nil {
-						return errors.Wrapf(err, "failed to enable %s", domain)
+						return fmt.Errorf(fmt.Sprintf("failed to enable %s", domain)+": %w", err)
 					}
 				}
 			}
@@ -447,13 +448,13 @@ func (cd *ChromeDebugger) CreateDevToolsTarget(ctx context.Context) (*ChromeTarg
 	client := &http.Client{Timeout: 5 * time.Second}
 	resp, err := client.Get(newTabURL)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to create new tab")
+		return nil, fmt.Errorf("failed to create new tab: %w", err)
 	}
 	defer resp.Body.Close()
 
 	var newTarget ChromeTarget
 	if err := json.NewDecoder(resp.Body).Decode(&newTarget); err != nil {
-		return nil, errors.Wrap(err, "failed to parse new target")
+		return nil, fmt.Errorf("failed to parse new target: %w", err)
 	}
 
 	return &newTarget, nil

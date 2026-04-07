@@ -3,11 +3,13 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+
+	"errors"
 
 	"github.com/chromedp/cdproto/runtime"
 	"github.com/chromedp/cdproto/serviceworker"
 	"github.com/chromedp/chromedp"
-	"github.com/pkg/errors"
 )
 
 // ServiceWorkerController handles service worker operations
@@ -86,7 +88,7 @@ func (swc *ServiceWorkerController) ListServiceWorkers(ctx context.Context) ([]m
 	)
 
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to list service workers")
+		return nil, fmt.Errorf("failed to list service workers: %w", err)
 	}
 
 	return workers, nil
@@ -178,7 +180,7 @@ func (swc *ServiceWorkerController) InspectServiceWorker(ctx context.Context, sc
 	)
 
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to inspect service worker")
+		return nil, fmt.Errorf("failed to inspect service worker: %w", err)
 	}
 
 	return workerInfo, nil
@@ -361,7 +363,7 @@ func (swc *ServiceWorkerController) GetServiceWorkerCaches(ctx context.Context) 
 	)
 
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to get service worker caches")
+		return nil, fmt.Errorf("failed to get service worker caches: %w", err)
 	}
 
 	return caches, nil

@@ -10,9 +10,10 @@ import (
 	"strings"
 	"time"
 
+	"errors"
+
 	"github.com/chromedp/cdproto/target"
 	"github.com/chromedp/chromedp"
-	"github.com/pkg/errors"
 )
 
 // RemoteDebuggingInfo represents information about Chrome's remote debugging endpoint
@@ -43,7 +44,7 @@ func GetRemoteDebuggingInfo(host string, port int) (*RemoteDebuggingInfo, error)
 	client := &http.Client{Timeout: 5 * time.Second}
 	resp, err := client.Get(url)
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to connect to Chrome at %s:%d", host, port)
+		return nil, fmt.Errorf(fmt.Sprintf("failed to connect to Chrome at %s:%d", host, port)+": %w", err)
 	}
 	defer resp.Body.Close()
 
@@ -53,12 +54,12 @@ func GetRemoteDebuggingInfo(host string, port int) (*RemoteDebuggingInfo, error)
 
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		return nil, errors.Wrap(err, "reading response body")
+		return nil, fmt.Errorf("reading response body: %w", err)
 	}
 
 	var info RemoteDebuggingInfo
 	if err := json.Unmarshal(body, &info); err != nil {
-		return nil, errors.Wrap(err, "parsing JSON response")
+		return nil, fmt.Errorf("parsing JSON response: %w", err)
 	}
 
 	return &info, nil
@@ -71,7 +72,7 @@ func ListTabs(host string, port int) ([]ChromeTab, error) {
 	client := &http.Client{Timeout: 5 * time.Second}
 	resp, err := client.Get(url)
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to connect to Chrome at %s:%d", host, port)
+		return nil, fmt.Errorf(fmt.Sprintf("failed to connect to Chrome at %s:%d", host, port)+": %w", err)
 	}
 	defer resp.Body.Close()
 
@@ -81,12 +82,12 @@ func ListTabs(host string, port int) ([]ChromeTab, error) {
 
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		return nil, errors.Wrap(err, "reading response body")
+		return nil, fmt.Errorf("reading response body: %w", err)
 	}
 
 	var tabs []ChromeTab
 	if err := json.Unmarshal(body, &tabs); err != nil {
-		return nil, errors.Wrap(err, "parsing JSON response")
+		return nil, fmt.Errorf("parsing JSON response: %w", err)
 	}
 
 	return tabs, nil
@@ -97,7 +98,7 @@ func (b *Browser) ConnectToTab(ctx context.Context, host string, port int, tabID
 	// Find the tab
 	tabs, err := ListTabs(host, port)
 	if err != nil {
-		return errors.Wrap(err, "listing tabs")
+		return fmt.Errorf("listing tabs: %w", err)
 	}
 
 	var targetTab *ChromeTab
@@ -184,7 +185,7 @@ func (b *Browser) ConnectToTabWebSocket(ctx context.Context, tabWSURL string) er
 
 	info, err := GetRemoteDebuggingInfo(host, port)
 	if err != nil {
-		return errors.Wrap(err, "getting remote debugging info")
+		return fmt.Errorf("getting remote debugging info: %w", err)
 	}
 
 	browserWSURL := info.WebSocketDebuggerURL
@@ -228,7 +229,7 @@ func (b *Browser) ConnectToTabWebSocket(ctx context.Context, tabWSURL string) er
 	if err := chromedp.Run(tabCtx); err != nil {
 		tabCancel()
 		allocCancel()
-		return errors.Wrap(err, "initializing tab connection")
+		return fmt.Errorf("initializing tab connection: %w", err)
 	}
 
 	if b.opts.Verbose {

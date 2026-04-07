@@ -5,11 +5,12 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"errors"
+
 	"github.com/chromedp/cdproto/cdp"
 	"github.com/chromedp/cdproto/dom"
 	"github.com/chromedp/cdproto/runtime"
 	"github.com/chromedp/chromedp"
-	"github.com/pkg/errors"
 )
 
 // ElementHandle represents a handle to a DOM element
@@ -26,7 +27,7 @@ func (p *Page) QuerySelector(selector string) (*ElementHandle, error) {
 	if err := chromedp.Run(p.ctx,
 		chromedp.Nodes(selector, &nodes, chromedp.ByQuery),
 	); err != nil {
-		return nil, errors.Wrapf(err, "querying selector %s", selector)
+		return nil, fmt.Errorf(fmt.Sprintf("querying selector %s", selector)+": %w", err)
 	}
 
 	if len(nodes) == 0 {
@@ -38,7 +39,7 @@ func (p *Page) QuerySelector(selector string) (*ElementHandle, error) {
 	// Get the remote object for the node
 	objID, err := dom.ResolveNode().WithNodeID(node.NodeID).Do(p.ctx)
 	if err != nil {
-		return nil, errors.Wrap(err, "resolving node")
+		return nil, fmt.Errorf("resolving node: %w", err)
 	}
 
 	return &ElementHandle{
@@ -55,7 +56,7 @@ func (p *Page) QuerySelectorAll(selector string) ([]*ElementHandle, error) {
 	if err := chromedp.Run(p.ctx,
 		chromedp.Nodes(selector, &nodes, chromedp.ByQueryAll),
 	); err != nil {
-		return nil, errors.Wrapf(err, "querying selector %s", selector)
+		return nil, fmt.Errorf(fmt.Sprintf("querying selector %s", selector)+": %w", err)
 	}
 
 	elements := make([]*ElementHandle, 0, len(nodes))
@@ -131,7 +132,7 @@ func (e *ElementHandle) GetText() (string, error) {
 	if err := chromedp.Run(e.ctx,
 		chromedp.Text(e.node.NodeID, &text, chromedp.ByNodeID),
 	); err != nil {
-		return "", errors.Wrap(err, "getting text")
+		return "", fmt.Errorf("getting text: %w", err)
 	}
 	return text, nil
 }
@@ -143,7 +144,7 @@ func (e *ElementHandle) GetAttribute(name string) (string, error) {
 	if err := chromedp.Run(e.ctx,
 		chromedp.AttributeValue(e.node.NodeID, name, &value, &exists, chromedp.ByNodeID),
 	); err != nil {
-		return "", errors.Wrap(err, "getting attribute")
+		return "", fmt.Errorf("getting attribute: %w", err)
 	}
 
 	if !exists {
@@ -173,7 +174,7 @@ func (e *ElementHandle) GetProperty(property string) (interface{}, error) {
 		),
 	)
 	if err != nil {
-		return nil, errors.Wrap(err, "getting property")
+		return nil, fmt.Errorf("getting property: %w", err)
 	}
 	return result, nil
 }
@@ -190,7 +191,7 @@ func (e *ElementHandle) IsVisible() (bool, error) {
 	`).WithObjectID(e.objectID).Do(e.ctx)
 
 	if err != nil {
-		return false, errors.Wrap(err, "checking visibility")
+		return false, fmt.Errorf("checking visibility: %w", err)
 	}
 
 	if result == nil || len(result.Value) == 0 {
@@ -200,7 +201,7 @@ func (e *ElementHandle) IsVisible() (bool, error) {
 	// Parse the JSON value
 	var visible bool
 	if err := json.Unmarshal(result.Value, &visible); err != nil {
-		return false, errors.Wrap(err, "parsing visibility result")
+		return false, fmt.Errorf("parsing visibility result: %w", err)
 	}
 
 	return visible, nil
@@ -246,7 +247,7 @@ func (e *ElementHandle) GetBoundingBox() (*BoundingBox, error) {
 	`).WithObjectID(e.objectID).Do(e.ctx)
 
 	if err != nil {
-		return nil, errors.Wrap(err, "getting bounding box")
+		return nil, fmt.Errorf("getting bounding box: %w", err)
 	}
 
 	if result == nil || len(result.Value) == 0 {
@@ -256,7 +257,7 @@ func (e *ElementHandle) GetBoundingBox() (*BoundingBox, error) {
 	// Parse the JSON result
 	var box BoundingBox
 	if err := json.Unmarshal(result.Value, &box); err != nil {
-		return nil, errors.Wrap(err, "parsing bounding box")
+		return nil, fmt.Errorf("parsing bounding box: %w", err)
 	}
 
 	return &box, nil
@@ -285,7 +286,7 @@ func (e *ElementHandle) Screenshot(opts ...ScreenshotOption) ([]byte, error) {
 	if err := chromedp.Run(e.ctx,
 		chromedp.Screenshot(e.node.NodeID, &buf, chromedp.ByNodeID),
 	); err != nil {
-		return nil, errors.Wrap(err, "taking element screenshot")
+		return nil, fmt.Errorf("taking element screenshot: %w", err)
 	}
 
 	return buf, nil

@@ -8,8 +8,9 @@ import (
 	"net/http"
 	"strings"
 
+	"errors"
+
 	"github.com/gorilla/websocket"
-	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 )
 
@@ -43,14 +44,14 @@ func runProxy() error {
 	listURL := fmt.Sprintf("http://%s/json/list", proxyTarget)
 	resp, err := http.Get(listURL)
 	if err != nil {
-		return errors.Wrapf(err, "cannot connect to target at %s", proxyTarget)
+		return fmt.Errorf(fmt.Sprintf("cannot connect to target at %s", proxyTarget)+": %w", err)
 	}
 	defer resp.Body.Close()
 
 	// Parse targets to get the UUIDs
 	var targets []map[string]interface{}
 	if err := json.NewDecoder(resp.Body).Decode(&targets); err != nil {
-		return errors.Wrap(err, "failed to parse target list")
+		return fmt.Errorf("failed to parse target list: %w", err)
 	}
 
 	if len(targets) == 0 {

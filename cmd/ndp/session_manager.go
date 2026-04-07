@@ -13,10 +13,11 @@ import (
 	"sync"
 	"time"
 
+	"errors"
+
 	"github.com/chromedp/cdproto/debugger"
 	cdptarget "github.com/chromedp/cdproto/target"
 	"github.com/chromedp/chromedp"
-	"github.com/pkg/errors"
 )
 
 // SessionType represents the type of debugging session
@@ -104,7 +105,7 @@ func (sm *SessionManager) CreateSession(ctx context.Context, target DebugTarget)
 	// Create CDP connection based on target type
 	conn, err := sm.connectToTarget(ctx, target)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to connect to target")
+		return nil, fmt.Errorf("failed to connect to target: %w", err)
 	}
 
 	session.Connection = conn
@@ -135,13 +136,13 @@ func (sm *SessionManager) connectToTarget(ctx context.Context, target DebugTarge
 		// For Node.js, get the exact WebSocket URL from the target list
 		resp, err := http.Get(fmt.Sprintf("http://localhost:%s/json/list", target.Port))
 		if err != nil {
-			return nil, errors.Wrap(err, "Node.js inspector not available")
+			return nil, fmt.Errorf("Node.js inspector not available: %w", err)
 		}
 		defer resp.Body.Close()
 
 		var targets []map[string]interface{}
 		if err := json.NewDecoder(resp.Body).Decode(&targets); err != nil {
-			return nil, errors.Wrap(err, "failed to parse Node.js targets")
+			return nil, fmt.Errorf("failed to parse Node.js targets: %w", err)
 		}
 
 		// Find the target with matching ID and get its WebSocket URL
@@ -382,11 +383,11 @@ func (sm *SessionManager) SaveSession(ctx context.Context, name string) error {
 
 	data, err := json.MarshalIndent(session, "", "  ")
 	if err != nil {
-		return errors.Wrap(err, "failed to marshal session")
+		return fmt.Errorf("failed to marshal session: %w", err)
 	}
 
 	if err := ioutil.WriteFile(filename, data, 0644); err != nil {
-		return errors.Wrap(err, "failed to save session")
+		return fmt.Errorf("failed to save session: %w", err)
 	}
 
 	if sm.verbose {
@@ -402,18 +403,18 @@ func (sm *SessionManager) LoadSession(ctx context.Context, name string) error {
 
 	data, err := ioutil.ReadFile(filename)
 	if err != nil {
-		return errors.Wrap(err, "failed to read session file")
+		return fmt.Errorf("failed to read session file: %w", err)
 	}
 
 	var session Session
 	if err := json.Unmarshal(data, &session); err != nil {
-		return errors.Wrap(err, "failed to unmarshal session")
+		return fmt.Errorf("failed to unmarshal session: %w", err)
 	}
 
 	// Reconnect to target
 	conn, err := sm.connectToTarget(ctx, session.Target)
 	if err != nil {
-		return errors.Wrap(err, "failed to reconnect to target")
+		return fmt.Errorf("failed to reconnect to target: %w", err)
 	}
 
 	session.Connection = conn
@@ -449,7 +450,7 @@ func (sm *SessionManager) LoadSession(ctx context.Context, name string) error {
 func (sm *SessionManager) ListSessions() ([]SessionInfo, error) {
 	files, err := ioutil.ReadDir(sm.configDir)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to read sessions directory")
+		return nil, fmt.Errorf("failed to read sessions directory: %w", err)
 	}
 
 	var sessions []SessionInfo
@@ -506,7 +507,7 @@ func (s *Session) Execute(ctx context.Context, expression string) (interface{}, 
 	)
 
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to execute expression")
+		return nil, fmt.Errorf("failed to execute expression: %w", err)
 	}
 
 	return result, nil

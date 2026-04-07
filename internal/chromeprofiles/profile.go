@@ -11,7 +11,6 @@ import (
 	"strings"
 	"time"
 
-	chromeErrors "github.com/tmc/misc/chrome-to-har/internal/errors"
 	"github.com/tmc/misc/chrome-to-har/internal/secureio"
 	"github.com/tmc/misc/chrome-to-har/internal/validation"
 	_ "modernc.org/sqlite"
@@ -47,7 +46,7 @@ func (pm *profileManager) logf(format string, args ...interface{}) {
 func (pm *profileManager) SetupWorkdir() error {
 	dir, err := secureio.CreateSecureTempDir("chrome-to-har-")
 	if err != nil {
-		return chromeErrors.Wrap(err, chromeErrors.FilePermissionError, "failed to create secure temporary directory")
+		return fmt.Errorf("failed to create secure temporary directory: %w", err)
 	}
 	pm.workDir = dir
 	pm.logf("Created secure temporary working directory: %s", dir)
@@ -76,10 +75,7 @@ func (pm *profileManager) ListProfiles() ([]string, error) {
 
 	entries, err := os.ReadDir(pm.baseDir)
 	if err != nil {
-		return nil, chromeErrors.WithContext(
-			chromeErrors.FileError("read", pm.baseDir, err),
-			"operation", "list_profiles",
-		)
+		return nil, withField(fileOpError("read", pm.baseDir, err), "operation", "list_profiles")
 	}
 
 	var profiles []string
@@ -100,15 +96,12 @@ func (pm *profileManager) ListProfiles() ([]string, error) {
 
 func (pm *profileManager) CopyProfile(name string, cookieDomains []string) error {
 	if pm.workDir == "" {
-		return chromeErrors.New(chromeErrors.ProfileSetupError, "working directory not set up")
+		return profileSetup("working directory not set up")
 	}
 
 	// Validate profile name for security
 	if err := validation.ValidateProfileName(name); err != nil {
-		return chromeErrors.WithContext(
-			chromeErrors.Wrap(err, chromeErrors.ProfileNotFoundError, "invalid profile name"),
-			"profile", name,
-		)
+		return withField(wrapProfileNotFound(err, "invalid profile name"), "profile", name)
 	}
 
 	srcDir := filepath.Join(pm.baseDir, name)
@@ -120,14 +113,14 @@ func (pm *profileManager) CopyProfile(name string, cookieDomains []string) error
 // Useful for testing, non-standard installations, and multiple profile locations
 func (pm *profileManager) CopyProfileFromDir(srcDir string, cookieDomains []string) error {
 	if pm.workDir == "" {
-		return chromeErrors.New(chromeErrors.ProfileSetupError, "working directory not set up")
+		return profileSetup("working directory not set up")
 	}
 
 	pm.logf("Copying profile from custom directory: %s", srcDir)
 
 	// Validate the custom path
 	if srcDir == "" {
-		return chromeErrors.New(chromeErrors.ProfileNotFoundError, "profile directory path cannot be empty")
+		return profileNotFound("profile directory path cannot be empty")
 	}
 
 	// Check if path is absolute
@@ -135,10 +128,7 @@ func (pm *profileManager) CopyProfileFromDir(srcDir string, cookieDomains []stri
 		pm.logf("Converting relative path to absolute: %s", srcDir)
 		absPath, err := filepath.Abs(srcDir)
 		if err != nil {
-			return chromeErrors.WithContext(
-				chromeErrors.Wrap(err, chromeErrors.ProfileSetupError, "failed to resolve profile directory path"),
-				"path", srcDir,
-			)
+			return withField(wrapProfileSetup(err, "failed to resolve profile directory path"), "path", srcDir)
 		}
 		srcDir = absPath
 	}
@@ -157,33 +147,21 @@ func (pm *profileManager) copyProfileImpl(srcDir, profileName string, cookieDoma
 		if info, err := os.Stat(srcDir); err != nil {
 			browserType := detectBrowserType(pm.baseDir)
 			errorMsg := fmt.Sprintf("%s profile directory '%s' not found", browserType, profileName)
-			return chromeErrors.WithContext(
-				chromeErrors.New(chromeErrors.ProfileNotFoundError, errorMsg),
-				"profile", profileName,
-			)
+			return withField(profileNotFound(errorMsg), "profile", profileName)
 		} else if !info.IsDir() {
-			return chromeErrors.WithContext(
-				chromeErrors.New(chromeErrors.ProfileNotFoundError, "profile path is not a directory"),
-				"profile", profileName,
-			)
+			return withField(profileNotFound("profile path is not a directory"), "profile", profileName)
 		}
 		// Profile directory exists but lacks required files
 		browserType := detectBrowserType(pm.baseDir)
 		errorMsg := fmt.Sprintf("%s profile '%s' does not contain readable profile data files (Preferences, History, or Cookies). This may indicate a corrupted profile. Location: %s", browserType, profileName, srcDir)
-		return chromeErrors.WithContext(
-			chromeErrors.New(chromeErrors.ProfileNotFoundError, errorMsg),
-			"profile", profileName,
-		)
+		return withField(profileNotFound(errorMsg), "profile", profileName)
 	}
 	browserType := detectBrowserType(pm.baseDir)
 	pm.logf("Profile validation successful for %s profile: %s", browserType, profileName)
 
 	dstDir := filepath.Join(pm.workDir, "Default")
 	if err := os.MkdirAll(dstDir, secureio.SecureDirPerms); err != nil {
-		return chromeErrors.WithContext(
-			chromeErrors.FileError("create", dstDir, err),
-			"profile", profileName,
-		)
+		return withField(fileOpError("create", dstDir, err), "profile", profileName)
 	}
 
 	pm.logf("Copying profile from %s to %s", srcDir, dstDir)
@@ -192,18 +170,12 @@ func (pm *profileManager) copyProfileImpl(srcDir, profileName string, cookieDoma
 	if len(cookieDomains) > 0 {
 		pm.logf("Filtering cookies for domains: %v", cookieDomains)
 		if err := pm.CopyCookiesWithDomains(srcDir, dstDir, cookieDomains); err != nil {
-			return chromeErrors.WithContext(
-				chromeErrors.Wrap(err, chromeErrors.ProfileCopyError, "failed to copy cookies with domain filtering"),
-				"profile", profileName,
-			)
+			return withField(profileCopy("failed to copy cookies with domain filtering", err), "profile", profileName)
 		}
 	} else {
 		if err := copyFile(filepath.Join(srcDir, "Cookies"), filepath.Join(dstDir, "Cookies")); err != nil {
 			if !os.IsNotExist(err) {
-				return chromeErrors.WithContext(
-					chromeErrors.FileError("copy", filepath.Join(srcDir, "Cookies"), err),
-					"profile", profileName,
-				)
+				return withField(fileOpError("copy", filepath.Join(srcDir, "Cookies"), err), "profile", profileName)
 			}
 		}
 	}
@@ -257,17 +229,11 @@ func (pm *profileManager) copyProfileImpl(srcDir, profileName string, cookieDoma
 			pm.logf("Local State not found, creating minimal version")
 			localState := `{"os_crypt":{"encrypted_key":""}}`
 			if err := os.WriteFile(dstLocalState, []byte(localState), 0644); err != nil {
-				return chromeErrors.WithContext(
-					chromeErrors.FileError("write", dstLocalState, err),
-					"profile", profileName,
-				)
+				return withField(fileOpError("write", dstLocalState, err), "profile", profileName)
 			}
 			pm.logf("Created minimal Local State file for profile: %s", profileName)
 		} else {
-			return chromeErrors.WithContext(
-				chromeErrors.FileError("copy", srcLocalState, err),
-				"profile", profileName,
-			)
+			return withField(fileOpError("copy", srcLocalState, err), "profile", profileName)
 		}
 	} else {
 		pm.logf("Copied Local State file (with encryption keys) for profile: %s", profileName)
@@ -283,34 +249,25 @@ func (pm *profileManager) CopyCookiesWithDomains(srcDir, dstDir string, domains 
 	// Open source database
 	src, err := sql.Open("sqlite", srcDB+"?mode=ro")
 	if err != nil {
-		return chromeErrors.WithContext(
-			chromeErrors.Wrap(err, chromeErrors.ProfileCopyError, "failed to open source cookies database"),
-			"database", srcDB,
-		)
+		return withField(profileCopy("failed to open source cookies database", err), "database", srcDB)
 	}
 	defer src.Close()
 
 	// Create destination database
 	if err := copyFile(srcDB, dstDB); err != nil {
-		return chromeErrors.WithContext(
-			chromeErrors.FileError("copy", srcDB, err),
-			"operation", "copy_cookies_database",
-		)
+		return withField(fileOpError("copy", srcDB, err), "operation", "copy_cookies_database")
 	}
 
 	dst, err := sql.Open("sqlite", dstDB)
 	if err != nil {
-		return chromeErrors.WithContext(
-			chromeErrors.Wrap(err, chromeErrors.ProfileCopyError, "failed to open destination cookies database"),
-			"database", dstDB,
-		)
+		return withField(profileCopy("failed to open destination cookies database", err), "database", dstDB)
 	}
 	defer dst.Close()
 
 	// Begin transaction
 	tx, err := dst.Begin()
 	if err != nil {
-		return chromeErrors.Wrap(err, chromeErrors.ProfileCopyError, "failed to begin database transaction")
+		return profileCopy("failed to begin database transaction", err)
 	}
 	defer tx.Rollback()
 
@@ -322,14 +279,11 @@ func (pm *profileManager) CopyCookiesWithDomains(srcDir, dstDir string, domains 
 
 	_, err = tx.Exec("DELETE FROM cookies WHERE " + whereClause.String())
 	if err != nil {
-		return chromeErrors.WithContext(
-			chromeErrors.Wrap(err, chromeErrors.ProfileCopyError, "failed to filter cookies by domain"),
-			"domains", domains,
-		)
+		return withField(profileCopy("failed to filter cookies by domain", err), "domains", domains)
 	}
 
 	if err := tx.Commit(); err != nil {
-		return chromeErrors.Wrap(err, chromeErrors.ProfileCopyError, "failed to commit database changes")
+		return profileCopy("failed to commit database changes", err)
 	}
 
 	pm.logf("Copied and filtered cookies for domains: %v", domains)
@@ -363,10 +317,7 @@ func getChromeProfileDir() (string, error) {
 			filepath.Join(os.Getenv("HOME"), ".config", "google-chrome"),
 		}
 	default:
-		return "", chromeErrors.WithContext(
-			chromeErrors.New(chromeErrors.ConfigurationError, "unsupported operating system"),
-			"os", runtime.GOOS,
-		)
+		return "", withField(configurationError("unsupported operating system"), "os", runtime.GOOS)
 	}
 
 	// Return first existing directory with valid profiles
@@ -423,7 +374,7 @@ func getChromeProfileDir() (string, error) {
 		return candidates[0], nil
 	}
 
-	return "", chromeErrors.New(chromeErrors.ConfigurationError, "no browser profile directories found")
+	return "", configurationError("no browser profile directories found")
 }
 
 // detectBrowserType identifies the browser type from the profile directory path
@@ -538,35 +489,26 @@ func copyDir(src, dst string) error {
 // attempting to reuse an existing browser session.
 func (pm *profileManager) BraveSessionIsolation(name string, cookieDomains []string) error {
 	if pm.workDir == "" {
-		return chromeErrors.New(chromeErrors.ProfileSetupError, "working directory not set up")
+		return profileSetup("working directory not set up")
 	}
 
 	// Validate profile name for security
 	if err := validation.ValidateProfileName(name); err != nil {
-		return chromeErrors.WithContext(
-			chromeErrors.Wrap(err, chromeErrors.ProfileNotFoundError, "invalid profile name"),
-			"profile", name,
-		)
+		return withField(wrapProfileNotFound(err, "invalid profile name"), "profile", name)
 	}
 
 	srcDir := filepath.Join(pm.baseDir, name)
 	pm.logf("Validating profile at: %s for Brave session isolation", srcDir)
 	if !isValidProfile(srcDir) {
 		pm.logf("Profile validation failed for: %s", name)
-		return chromeErrors.WithContext(
-			chromeErrors.New(chromeErrors.ProfileNotFoundError, "profile directory does not contain readable indicator files"),
-			"profile", name,
-		)
+		return withField(profileNotFound("profile directory does not contain readable indicator files"), "profile", name)
 	}
 
 	// Create unique isolated profile directory with timestamp
 	// This prevents Brave's session reuse by making each launch use a different path
 	isolatedDir := filepath.Join(pm.workDir, fmt.Sprintf("Profile-%d", time.Now().UnixNano()))
 	if err := os.MkdirAll(isolatedDir, secureio.SecureDirPerms); err != nil {
-		return chromeErrors.WithContext(
-			chromeErrors.FileError("create", isolatedDir, err),
-			"profile", name,
-		)
+		return withField(fileOpError("create", isolatedDir, err), "profile", name)
 	}
 
 	pm.logf("Created isolated profile directory: %s", isolatedDir)
@@ -589,10 +531,7 @@ func (pm *profileManager) BraveSessionIsolation(name string, cookieDomains []str
 func (pm *profileManager) copyProfileToDir(srcDir, dstDir, profileName string, cookieDomains []string) error {
 	dstProfileDir := filepath.Join(dstDir, "Default")
 	if err := os.MkdirAll(dstProfileDir, secureio.SecureDirPerms); err != nil {
-		return chromeErrors.WithContext(
-			chromeErrors.FileError("create", dstProfileDir, err),
-			"profile", profileName,
-		)
+		return withField(fileOpError("create", dstProfileDir, err), "profile", profileName)
 	}
 
 	pm.logf("Copying profile from %s to %s", srcDir, dstProfileDir)
@@ -601,18 +540,12 @@ func (pm *profileManager) copyProfileToDir(srcDir, dstDir, profileName string, c
 	if len(cookieDomains) > 0 {
 		pm.logf("Filtering cookies for domains: %v", cookieDomains)
 		if err := pm.CopyCookiesWithDomains(srcDir, dstProfileDir, cookieDomains); err != nil {
-			return chromeErrors.WithContext(
-				chromeErrors.Wrap(err, chromeErrors.ProfileCopyError, "failed to copy cookies with domain filtering"),
-				"profile", profileName,
-			)
+			return withField(profileCopy("failed to copy cookies with domain filtering", err), "profile", profileName)
 		}
 	} else {
 		if err := copyFile(filepath.Join(srcDir, "Cookies"), filepath.Join(dstProfileDir, "Cookies")); err != nil {
 			if !os.IsNotExist(err) {
-				return chromeErrors.WithContext(
-					chromeErrors.FileError("copy", filepath.Join(srcDir, "Cookies"), err),
-					"profile", profileName,
-				)
+				return withField(fileOpError("copy", filepath.Join(srcDir, "Cookies"), err), "profile", profileName)
 			}
 		}
 	}
@@ -666,17 +599,11 @@ func (pm *profileManager) copyProfileToDir(srcDir, dstDir, profileName string, c
 			pm.logf("Local State not found, creating minimal version")
 			localState := `{"os_crypt":{"encrypted_key":""}}`
 			if err := os.WriteFile(dstLocalState, []byte(localState), 0644); err != nil {
-				return chromeErrors.WithContext(
-					chromeErrors.FileError("write", dstLocalState, err),
-					"profile", profileName,
-				)
+				return withField(fileOpError("write", dstLocalState, err), "profile", profileName)
 			}
 			pm.logf("Created minimal Local State file in isolated directory")
 		} else {
-			return chromeErrors.WithContext(
-				chromeErrors.FileError("copy", srcLocalState, err),
-				"profile", profileName,
-			)
+			return withField(fileOpError("copy", srcLocalState, err), "profile", profileName)
 		}
 	} else {
 		pm.logf("Copied Local State file (with encryption keys) to isolated directory")

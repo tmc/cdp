@@ -11,51 +11,52 @@ import (
 	"sync"
 	"time"
 
+	"errors"
+
 	"github.com/gorilla/websocket"
-	"github.com/pkg/errors"
 )
 
 // V8InspectorClient provides a comprehensive Node.js debugging client
 // that matches Chrome DevTools capabilities using direct WebSocket connections
 type V8InspectorClient struct {
-	host     string
-	port     string
-	wsURL    string
-	conn     *websocket.Conn
+	host  string
+	port  string
+	wsURL string
+	conn  *websocket.Conn
 
 	// Message handling
-	messageID    int
-	pendingCalls map[int]chan *CDPResponse
+	messageID     int
+	pendingCalls  map[int]chan *CDPResponse
 	eventHandlers map[string][]func(map[string]interface{})
-	mu           sync.RWMutex
+	mu            sync.RWMutex
 
 	// State management
-	connected    bool
+	connected       bool
 	debuggerEnabled bool
 	runtimeEnabled  bool
 	profilerEnabled bool
 
 	// Debugging state
-	breakpoints  map[string]*V8Breakpoint
-	scripts      map[string]*V8Script
-	callFrames   []*V8CallFrame
-	paused       bool
+	breakpoints map[string]*V8Breakpoint
+	scripts     map[string]*V8Script
+	callFrames  []*V8CallFrame
+	paused      bool
 
 	// Settings
-	verbose      bool
+	verbose       bool
 	autoReconnect bool
 }
 
 // V8Target represents a Node.js debugging target
 type V8Target struct {
-	ID                    string `json:"id"`
-	Title                 string `json:"title"`
-	Type                  string `json:"type"`
-	URL                   string `json:"url"`
-	WebSocketDebuggerURL  string `json:"webSocketDebuggerUrl"`
-	DevtoolsFrontendURL   string `json:"devtoolsFrontendUrl,omitempty"`
-	FaviconURL            string `json:"faviconUrl,omitempty"`
-	Description           string `json:"description,omitempty"`
+	ID                   string `json:"id"`
+	Title                string `json:"title"`
+	Type                 string `json:"type"`
+	URL                  string `json:"url"`
+	WebSocketDebuggerURL string `json:"webSocketDebuggerUrl"`
+	DevtoolsFrontendURL  string `json:"devtoolsFrontendUrl,omitempty"`
+	FaviconURL           string `json:"faviconUrl,omitempty"`
+	Description          string `json:"description,omitempty"`
 }
 
 // CDPMessage represents a Chrome DevTools Protocol message
@@ -83,14 +84,14 @@ type CDPError struct {
 
 // V8Breakpoint represents a breakpoint in V8
 type V8Breakpoint struct {
-	ID         string `json:"breakpointId"`
-	Location   string `json:"location"`
-	LineNumber int    `json:"lineNumber"`
-	ColumnNumber int  `json:"columnNumber,omitempty"`
-	Condition  string `json:"condition,omitempty"`
-	URL        string `json:"url,omitempty"`
-	URLRegex   string `json:"urlRegex,omitempty"`
-	Resolved   bool   `json:"resolved"`
+	ID           string `json:"breakpointId"`
+	Location     string `json:"location"`
+	LineNumber   int    `json:"lineNumber"`
+	ColumnNumber int    `json:"columnNumber,omitempty"`
+	Condition    string `json:"condition,omitempty"`
+	URL          string `json:"url,omitempty"`
+	URLRegex     string `json:"urlRegex,omitempty"`
+	Resolved     bool   `json:"resolved"`
 }
 
 // V8Script represents a loaded script
@@ -107,12 +108,12 @@ type V8Script struct {
 
 // V8CallFrame represents a call frame in the execution stack
 type V8CallFrame struct {
-	CallFrameID string                 `json:"callFrameId"`
-	FunctionName string                `json:"functionName"`
-	Location    map[string]interface{} `json:"location"`
-	URL         string                 `json:"url"`
-	ScopeChain  []map[string]interface{} `json:"scopeChain"`
-	This        map[string]interface{} `json:"this"`
+	CallFrameID  string                   `json:"callFrameId"`
+	FunctionName string                   `json:"functionName"`
+	Location     map[string]interface{}   `json:"location"`
+	URL          string                   `json:"url"`
+	ScopeChain   []map[string]interface{} `json:"scopeChain"`
+	This         map[string]interface{}   `json:"this"`
 }
 
 // NewV8InspectorClient creates a new V8 Inspector client
@@ -135,7 +136,7 @@ func (c *V8InspectorClient) DiscoverTargets(ctx context.Context) ([]*V8Target, e
 
 	resp, err := http.Get(url)
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to discover targets at %s", url)
+		return nil, fmt.Errorf(fmt.Sprintf("failed to discover targets at %s", url)+": %w", err)
 	}
 	defer resp.Body.Close()
 
@@ -145,12 +146,12 @@ func (c *V8InspectorClient) DiscoverTargets(ctx context.Context) ([]*V8Target, e
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to read discovery response")
+		return nil, fmt.Errorf("failed to read discovery response: %w", err)
 	}
 
 	var targets []*V8Target
 	if err := json.Unmarshal(body, &targets); err != nil {
-		return nil, errors.Wrap(err, "failed to parse discovery response")
+		return nil, fmt.Errorf("failed to parse discovery response: %w", err)
 	}
 
 	if c.verbose {
@@ -171,7 +172,7 @@ func (c *V8InspectorClient) Connect(ctx context.Context, target *V8Target) error
 	// Parse and validate WebSocket URL
 	_, err := url.Parse(c.wsURL)
 	if err != nil {
-		return errors.Wrapf(err, "invalid WebSocket URL: %s", c.wsURL)
+		return fmt.Errorf(fmt.Sprintf("invalid WebSocket URL: %s", c.wsURL)+": %w", err)
 	}
 
 	// Establish WebSocket connection
@@ -180,7 +181,7 @@ func (c *V8InspectorClient) Connect(ctx context.Context, target *V8Target) error
 
 	conn, _, err := dialer.Dial(c.wsURL, nil)
 	if err != nil {
-		return errors.Wrapf(err, "failed to connect to WebSocket: %s", c.wsURL)
+		return fmt.Errorf(fmt.Sprintf("failed to connect to WebSocket: %s", c.wsURL)+": %w", err)
 	}
 
 	c.conn = conn
@@ -274,7 +275,7 @@ func (c *V8InspectorClient) SendCommand(method string, params map[string]interfa
 	}
 
 	if err := c.conn.WriteJSON(message); err != nil {
-		return nil, errors.Wrapf(err, "failed to send command %s", method)
+		return nil, fmt.Errorf(fmt.Sprintf("failed to send command %s", method)+": %w", err)
 	}
 
 	if c.verbose {

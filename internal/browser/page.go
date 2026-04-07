@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"time"
 
+	"errors"
+
 	"github.com/chromedp/cdproto/cdp"
 	"github.com/chromedp/cdproto/dom"
 	"github.com/chromedp/cdproto/input"
@@ -12,7 +14,6 @@ import (
 	"github.com/chromedp/cdproto/runtime"
 	"github.com/chromedp/cdproto/target"
 	"github.com/chromedp/chromedp"
-	"github.com/pkg/errors"
 )
 
 // Page represents a browser page/tab with high-level interaction methods
@@ -44,7 +45,7 @@ func (b *Browser) NewPage() (*Page, error) {
 	// Navigate to blank page to initialize
 	if err := chromedp.Run(p.ctx, chromedp.Navigate("about:blank")); err != nil {
 		cancel()
-		return nil, errors.Wrap(err, "initializing page")
+		return nil, fmt.Errorf("initializing page: %w", err)
 	}
 
 	return p, nil
@@ -59,7 +60,7 @@ func (b *Browser) AttachToTarget(targetID string) (*Page, error) {
 	// Get target info
 	targets, err := target.GetTargets().Do(b.ctx)
 	if err != nil {
-		return nil, errors.Wrap(err, "getting targets")
+		return nil, fmt.Errorf("getting targets: %w", err)
 	}
 
 	var targetInfo *target.Info
@@ -95,7 +96,7 @@ func (b *Browser) Pages() ([]*Page, error) {
 
 	targets, err := target.GetTargets().Do(b.ctx)
 	if err != nil {
-		return nil, errors.Wrap(err, "getting targets")
+		return nil, fmt.Errorf("getting targets: %w", err)
 	}
 
 	var pages []*Page
@@ -140,24 +141,24 @@ func (p *Page) Navigate(url string, opts ...NavigateOption) error {
 	defer cancel()
 
 	if err := chromedp.Run(ctx, chromedp.Navigate(url)); err != nil {
-		return errors.Wrap(err, "navigating")
+		return fmt.Errorf("navigating: %w", err)
 	}
 
 	// Wait for load state
 	switch options.WaitUntil {
 	case "domcontentloaded":
 		if err := chromedp.Run(ctx, chromedp.WaitReady("body")); err != nil {
-			return errors.Wrap(err, "waiting for DOM")
+			return fmt.Errorf("waiting for DOM: %w", err)
 		}
 	case "networkidle":
 		// Use the new stability detector for network idle
 		if err := p.WaitForLoadState(ctx, LoadStateNetworkIdle); err != nil {
-			return errors.Wrap(err, "waiting for network idle")
+			return fmt.Errorf("waiting for network idle: %w", err)
 		}
 	case "stable":
 		// Wait for full page stability (network, DOM, resources)
 		if err := p.WaitForStability(ctx, nil); err != nil {
-			return errors.Wrap(err, "waiting for page stability")
+			return fmt.Errorf("waiting for page stability: %w", err)
 		}
 	default: // "load"
 		// Default chromedp behavior
@@ -170,7 +171,7 @@ func (p *Page) Navigate(url string, opts ...NavigateOption) error {
 func (p *Page) Title() (string, error) {
 	var title string
 	if err := chromedp.Run(p.ctx, chromedp.Title(&title)); err != nil {
-		return "", errors.Wrap(err, "getting title")
+		return "", fmt.Errorf("getting title: %w", err)
 	}
 	return title, nil
 }
@@ -179,7 +180,7 @@ func (p *Page) Title() (string, error) {
 func (p *Page) URL() (string, error) {
 	var url string
 	if err := chromedp.Run(p.ctx, chromedp.Location(&url)); err != nil {
-		return "", errors.Wrap(err, "getting URL")
+		return "", fmt.Errorf("getting URL: %w", err)
 	}
 	return url, nil
 }
@@ -188,7 +189,7 @@ func (p *Page) URL() (string, error) {
 func (p *Page) Content() (string, error) {
 	var html string
 	if err := chromedp.Run(p.ctx, chromedp.OuterHTML("html", &html)); err != nil {
-		return "", errors.Wrap(err, "getting content")
+		return "", fmt.Errorf("getting content: %w", err)
 	}
 	return html, nil
 }
@@ -214,7 +215,7 @@ func (p *Page) Click(selector string, opts ...ClickOption) error {
 		chromedp.WaitVisible(selector),
 		chromedp.Click(selector),
 	); err != nil {
-		return errors.Wrapf(err, "clicking %s", selector)
+		return fmt.Errorf(fmt.Sprintf("clicking %s", selector)+": %w", err)
 	}
 
 	return nil
@@ -240,7 +241,7 @@ func (p *Page) Type(selector string, text string, opts ...TypeOption) error {
 		chromedp.Clear(selector),
 		chromedp.SendKeys(selector, text),
 	); err != nil {
-		return errors.Wrapf(err, "typing into %s", selector)
+		return fmt.Errorf(fmt.Sprintf("typing into %s", selector)+": %w", err)
 	}
 
 	return nil
@@ -287,7 +288,7 @@ func (p *Page) Evaluate(expression string, result interface{}) error {
 func (p *Page) EvaluateHandle(expression string) (*runtime.RemoteObject, error) {
 	var obj *runtime.RemoteObject
 	if err := chromedp.Run(p.ctx, chromedp.EvaluateAsDevTools(expression, &obj)); err != nil {
-		return nil, errors.Wrap(err, "evaluating handle")
+		return nil, fmt.Errorf("evaluating handle: %w", err)
 	}
 	return obj, nil
 }
@@ -316,7 +317,7 @@ func (p *Page) Screenshot(opts ...ScreenshotOption) ([]byte, error) {
 	}
 
 	if err := chromedp.Run(p.ctx, action); err != nil {
-		return nil, errors.Wrap(err, "taking screenshot")
+		return nil, fmt.Errorf("taking screenshot: %w", err)
 	}
 
 	return buf, nil
@@ -353,7 +354,7 @@ func (p *Page) PDF(opts ...PDFOption) ([]byte, error) {
 		buf = data
 		return nil
 	})); err != nil {
-		return nil, errors.Wrap(err, "generating PDF")
+		return nil, fmt.Errorf("generating PDF: %w", err)
 	}
 
 	return buf, nil
@@ -366,7 +367,7 @@ func (p *Page) GetText(selector string) (string, error) {
 		chromedp.WaitVisible(selector),
 		chromedp.Text(selector, &text),
 	); err != nil {
-		return "", errors.Wrapf(err, "getting text from %s", selector)
+		return "", fmt.Errorf(fmt.Sprintf("getting text from %s", selector)+": %w", err)
 	}
 	return text, nil
 }
@@ -378,7 +379,7 @@ func (p *Page) GetAttribute(selector, attribute string) (string, error) {
 		chromedp.WaitReady(selector),
 		chromedp.AttributeValue(selector, attribute, &value, nil),
 	); err != nil {
-		return "", errors.Wrapf(err, "getting attribute %s from %s", attribute, selector)
+		return "", fmt.Errorf(fmt.Sprintf("getting attribute %s from %s", attribute, selector)+": %w", err)
 	}
 	return value, nil
 }
@@ -486,7 +487,7 @@ func (p *Page) ElementVisible(selector string) (bool, error) {
 			})()
 		`, selector), &visible),
 	); err != nil {
-		return false, errors.Wrap(err, "checking visibility")
+		return false, fmt.Errorf("checking visibility: %w", err)
 	}
 	return visible, nil
 }
@@ -766,7 +767,7 @@ func (p *Page) ClickByRole(role, name string, nth int, opts ...ClickOption) erro
 
 	var result bool
 	if err := chromedp.Run(ctx, chromedp.Evaluate(js, &result)); err != nil {
-		return errors.Wrapf(err, "clicking element with role=%s name=%q nth=%d", role, name, nth)
+		return fmt.Errorf(fmt.Sprintf("clicking element with role=%s name=%q nth=%d", role, name, nth)+": %w", err)
 	}
 
 	return nil
@@ -862,7 +863,7 @@ func (p *Page) TypeByRole(role, name, text string, nth int, opts ...TypeOption) 
 
 	var selector string
 	if err := chromedp.Run(ctx, chromedp.Evaluate(js, &selector)); err != nil {
-		return errors.Wrapf(err, "finding element with role=%s name=%q nth=%d", role, name, nth)
+		return fmt.Errorf(fmt.Sprintf("finding element with role=%s name=%q nth=%d", role, name, nth)+": %w", err)
 	}
 
 	// Now clear and type using the selector
@@ -870,7 +871,7 @@ func (p *Page) TypeByRole(role, name, text string, nth int, opts ...TypeOption) 
 		chromedp.Clear(selector),
 		chromedp.SendKeys(selector, text),
 	); err != nil {
-		return errors.Wrapf(err, "typing into element with role=%s name=%q", role, name)
+		return fmt.Errorf(fmt.Sprintf("typing into element with role=%s name=%q", role, name)+": %w", err)
 	}
 
 	return nil

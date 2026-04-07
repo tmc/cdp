@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/chromedp/chromedp"
-	"github.com/pkg/errors"
 )
 
 // StateTracker tracks page state changes during interactions
@@ -172,7 +171,7 @@ func (st *StateTracker) CaptureCurrentState(ctx context.Context, description str
 			chromedp.Location(&url),
 			chromedp.Title(&title),
 		); err != nil {
-			return nil, errors.Wrap(err, "capturing URL and title")
+			return nil, fmt.Errorf("capturing URL and title: %w", err)
 		}
 		state.URL = url
 		state.Title = title
@@ -265,21 +264,21 @@ func (st *StateTracker) captureDOMState(ctx context.Context) (*DOMState, error) 
 	if err := chromedp.Run(ctx,
 		chromedp.Evaluate(`document.querySelectorAll('*').length`, &elementCount),
 	); err != nil {
-		return nil, errors.Wrap(err, "getting element count")
+		return nil, fmt.Errorf("getting element count: %w", err)
 	}
 
 	// Get content length
 	if err := chromedp.Run(ctx,
 		chromedp.Evaluate(`document.documentElement.innerHTML.length`, &contentLength),
 	); err != nil {
-		return nil, errors.Wrap(err, "getting content length")
+		return nil, fmt.Errorf("getting content length: %w", err)
 	}
 
 	// Get innerHTML for checksum
 	if err := chromedp.Run(ctx,
 		chromedp.Evaluate(`document.documentElement.innerHTML`, &innerHTML),
 	); err != nil {
-		return nil, errors.Wrap(err, "getting innerHTML")
+		return nil, fmt.Errorf("getting innerHTML: %w", err)
 	}
 
 	// Calculate checksum
@@ -395,7 +394,7 @@ func (st *StateTracker) captureCookies(ctx context.Context) ([]*CookieState, err
 			}).filter(cookie => cookie.name)
 		`, &cookieData),
 	); err != nil {
-		return nil, errors.Wrap(err, "capturing cookies")
+		return nil, fmt.Errorf("capturing cookies: %w", err)
 	}
 
 	cookies := make([]*CookieState, len(cookieData))
@@ -422,7 +421,7 @@ func (st *StateTracker) captureViewport(ctx context.Context) (*ViewportState, er
 			deviceScale: window.devicePixelRatio
 		})`, &viewportData),
 	); err != nil {
-		return nil, errors.Wrap(err, "capturing viewport")
+		return nil, fmt.Errorf("capturing viewport: %w", err)
 	}
 
 	return &ViewportState{
@@ -453,7 +452,7 @@ func (st *StateTracker) capturePerformance(ctx context.Context) (*PerformanceSta
 			})()
 		`, &perfData),
 	); err != nil {
-		return nil, errors.Wrap(err, "capturing performance")
+		return nil, fmt.Errorf("capturing performance: %w", err)
 	}
 
 	perf := &PerformanceState{}
@@ -562,7 +561,7 @@ func (st *StateTracker) RecordInteraction(ctx context.Context, interactionType I
 	// Capture before state
 	beforeState, err := st.CaptureCurrentState(ctx, fmt.Sprintf("Before %s", interactionType), nil)
 	if err != nil {
-		return nil, errors.Wrap(err, "capturing before state")
+		return nil, fmt.Errorf("capturing before state: %w", err)
 	}
 
 	event := &InteractionEvent{
@@ -583,7 +582,7 @@ func (st *StateTracker) CompleteInteraction(ctx context.Context, event *Interact
 	// Capture after state
 	afterState, err := st.CaptureCurrentState(ctx, fmt.Sprintf("After %s", event.Type), nil)
 	if err != nil {
-		return errors.Wrap(err, "capturing after state")
+		return fmt.Errorf("capturing after state: %w", err)
 	}
 
 	event.AfterState = afterState
@@ -607,11 +606,11 @@ func (st *StateTracker) ExportStates(filename string) error {
 
 	data, err := json.MarshalIndent(st.states, "", "  ")
 	if err != nil {
-		return errors.Wrap(err, "marshaling states")
+		return fmt.Errorf("marshaling states: %w", err)
 	}
 
 	if err := os.WriteFile(filename, data, 0644); err != nil {
-		return errors.Wrap(err, "writing states file")
+		return fmt.Errorf("writing states file: %w", err)
 	}
 
 	return nil

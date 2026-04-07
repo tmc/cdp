@@ -7,9 +7,10 @@ import (
 	"sync"
 	"time"
 
+	"errors"
+
 	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/chromedp"
-	"github.com/pkg/errors"
 )
 
 // WebSocketFrame represents a WebSocket frame
@@ -77,7 +78,7 @@ func (wsm *WebSocketMonitor) Enable() error {
 
 	// Enable network domain for WebSocket protocol handshake
 	if err := chromedp.Run(wsm.page.ctx, network.Enable()); err != nil {
-		return errors.Wrap(err, "enabling network domain")
+		return fmt.Errorf("enabling network domain: %w", err)
 	}
 
 	// Set up event handlers
@@ -85,7 +86,7 @@ func (wsm *WebSocketMonitor) Enable() error {
 
 	// Inject WebSocket monitoring script
 	if err := wsm.injectWebSocketMonitoring(); err != nil {
-		return errors.Wrap(err, "injecting WebSocket monitoring script")
+		return fmt.Errorf("injecting WebSocket monitoring script: %w", err)
 	}
 
 	wsm.enabled = true
@@ -469,7 +470,7 @@ func (wsm *WebSocketMonitor) SendMessage(connectionID string, message interface{
 	default:
 		data, err := json.Marshal(message)
 		if err != nil {
-			return errors.Wrap(err, "marshaling message")
+			return fmt.Errorf("marshaling message: %w", err)
 		}
 		messageData = string(data)
 	}
@@ -494,7 +495,7 @@ func (wsm *WebSocketMonitor) SendMessage(connectionID string, message interface{
 
 	var result bool
 	if err := chromedp.Run(wsm.page.ctx, chromedp.Evaluate(script, &result)); err != nil {
-		return errors.Wrap(err, "sending WebSocket message")
+		return fmt.Errorf("sending WebSocket message: %w", err)
 	}
 
 	if !result {

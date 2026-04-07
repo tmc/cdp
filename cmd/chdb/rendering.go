@@ -5,11 +5,12 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"errors"
+
 	"github.com/chromedp/cdproto/layertree"
 	"github.com/chromedp/cdproto/overlay"
 	"github.com/chromedp/cdproto/runtime"
 	"github.com/chromedp/chromedp"
-	"github.com/pkg/errors"
 )
 
 // RenderingController handles rendering and paint debugging
@@ -229,7 +230,7 @@ func (rc *RenderingController) GetCompositingReasons(ctx context.Context, select
 	)
 
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to get compositing reasons")
+		return nil, fmt.Errorf("failed to get compositing reasons: %w", err)
 	}
 
 	return compositingInfo, nil
@@ -333,7 +334,7 @@ func (rc *RenderingController) GetLayerTree(ctx context.Context) ([]map[string]i
 	)
 
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to get layer tree")
+		return nil, fmt.Errorf("failed to get layer tree: %w", err)
 	}
 
 	return layers, nil
@@ -419,7 +420,7 @@ func (rc *RenderingController) GetFrameRate(ctx context.Context, duration int) (
 	)
 
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to get frame rate")
+		return nil, fmt.Errorf("failed to get frame rate: %w", err)
 	}
 
 	return frameRateInfo, nil

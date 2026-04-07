@@ -14,11 +14,12 @@ import (
 	"strings"
 	"time"
 
+	"errors"
+
 	"github.com/chromedp/cdproto/debugger"
 	"github.com/chromedp/cdproto/runtime"
 	"github.com/chromedp/chromedp"
 	"github.com/gorilla/websocket"
-	"github.com/pkg/errors"
 )
 
 // NodeProcess represents a Node.js process with debugging enabled
@@ -55,13 +56,13 @@ func (nd *NodeDebugger) Attach(ctx context.Context, port string) error {
 	url := fmt.Sprintf("http://localhost:%s/json/version", port)
 	resp, err := http.Get(url)
 	if err != nil {
-		return errors.Wrapf(err, "cannot connect to Node.js on port %s", port)
+		return fmt.Errorf(fmt.Sprintf("cannot connect to Node.js on port %s", port)+": %w", err)
 	}
 	defer resp.Body.Close()
 
 	var versionInfo map[string]interface{}
 	if err := json.NewDecoder(resp.Body).Decode(&versionInfo); err != nil {
-		return errors.Wrap(err, "failed to get Node.js version info")
+		return fmt.Errorf("failed to get Node.js version info: %w", err)
 	}
 
 	if nd.verbose {
@@ -72,13 +73,13 @@ func (nd *NodeDebugger) Attach(ctx context.Context, port string) error {
 	listURL := fmt.Sprintf("http://localhost:%s/json/list", port)
 	resp, err = http.Get(listURL)
 	if err != nil {
-		return errors.Wrap(err, "failed to get Node.js targets")
+		return fmt.Errorf("failed to get Node.js targets: %w", err)
 	}
 	defer resp.Body.Close()
 
 	var targets []map[string]interface{}
 	if err := json.NewDecoder(resp.Body).Decode(&targets); err != nil {
-		return errors.Wrap(err, "failed to parse targets")
+		return fmt.Errorf("failed to parse targets: %w", err)
 	}
 
 	if len(targets) == 0 {
@@ -102,7 +103,7 @@ func (nd *NodeDebugger) Attach(ctx context.Context, port string) error {
 	// Create session
 	session, err := nd.manager.CreateSession(ctx, debugTarget)
 	if err != nil {
-		return errors.Wrap(err, "failed to create session")
+		return fmt.Errorf("failed to create session: %w", err)
 	}
 
 	nd.session = session
@@ -113,7 +114,7 @@ func (nd *NodeDebugger) Attach(ctx context.Context, port string) error {
 
 	// Enable debugger with Node.js-compatible commands
 	if err := nd.enableDebugger(ctx); err != nil {
-		return errors.Wrap(err, "failed to enable debugger")
+		return fmt.Errorf("failed to enable debugger: %w", err)
 	}
 
 	// Print session info to stderr for humans
@@ -439,7 +440,7 @@ func (nd *NodeDebugger) ListProcesses(ctx context.Context) ([]NodeProcess, error
 	cmd := exec.Command("ps", "aux")
 	output, err := cmd.Output()
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to list processes")
+		return nil, fmt.Errorf("failed to list processes: %w", err)
 	}
 
 	lines := strings.Split(string(output), "\n")
@@ -508,7 +509,7 @@ func (nd *NodeDebugger) StartScript(ctx context.Context, scriptPath string, port
 
 	// Check if script exists
 	if _, err := os.Stat(scriptPath); err != nil {
-		return errors.Wrapf(err, "script not found: %s", scriptPath)
+		return fmt.Errorf(fmt.Sprintf("script not found: %s", scriptPath)+": %w", err)
 	}
 
 	// Build command
@@ -526,7 +527,7 @@ func (nd *NodeDebugger) StartScript(ctx context.Context, scriptPath string, port
 
 	// Start the process
 	if err := cmd.Start(); err != nil {
-		return errors.Wrap(err, "failed to start Node.js")
+		return fmt.Errorf("failed to start Node.js: %w", err)
 	}
 
 	nd.nodeProcess = cmd.Process
@@ -553,7 +554,7 @@ func (nd *NodeDebugger) StartScript(ctx context.Context, scriptPath string, port
 		}
 	}
 
-	return errors.Wrapf(lastErr, "Node.js started but debug endpoint not available after 5 seconds on port %s", port)
+	return fmt.Errorf(fmt.Sprintf("Node.js started but debug endpoint not available after 5 seconds on port %s", port)+": %w", lastErr)
 }
 
 // AddWatch adds a watch expression
@@ -616,7 +617,7 @@ func (nd *NodeDebugger) Execute(ctx context.Context, method string, params inter
 		if nd.rawConn == nil {
 			conn, _, err := websocket.DefaultDialer.Dial(nd.session.Target.WebSocketDebuggerURL, nil)
 			if err != nil {
-				return nil, errors.Wrap(err, "failed to dial raw websocket")
+				return nil, fmt.Errorf("failed to dial raw websocket: %w", err)
 			}
 			nd.rawConn = conn
 		}
@@ -630,7 +631,7 @@ func (nd *NodeDebugger) Execute(ctx context.Context, method string, params inter
 		}
 
 		if err := nd.rawConn.WriteJSON(req); err != nil {
-			return nil, errors.Wrap(err, "failed to write generic request")
+			return nil, fmt.Errorf("failed to write generic request: %w", err)
 		}
 
 		// Read loop
@@ -643,7 +644,7 @@ func (nd *NodeDebugger) Execute(ctx context.Context, method string, params inter
 		for {
 			var msg map[string]interface{}
 			if err := nd.rawConn.ReadJSON(&msg); err != nil {
-				return nil, errors.Wrap(err, "failed to read response")
+				return nil, fmt.Errorf("failed to read response: %w", err)
 			}
 
 			if msgID, ok := msg["id"].(float64); ok && int64(msgID) == id {
@@ -668,7 +669,7 @@ func (nd *NodeDebugger) SearchInAllScripts(ctx context.Context, term string) ([]
 	if nd.rawConn == nil {
 		conn, _, err := websocket.DefaultDialer.Dial(nd.session.Target.WebSocketDebuggerURL, nil)
 		if err != nil {
-			return nil, errors.Wrap(err, "failed to dial raw websocket")
+			return nil, fmt.Errorf("failed to dial raw websocket: %w", err)
 		}
 		nd.rawConn = conn
 	}

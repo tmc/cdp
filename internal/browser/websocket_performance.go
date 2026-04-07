@@ -6,8 +6,6 @@ import (
 	"sort"
 	"sync"
 	"time"
-
-	"github.com/pkg/errors"
 )
 
 // WebSocketPerformanceMonitor monitors WebSocket performance metrics
@@ -745,7 +743,7 @@ func (wpm *WebSocketPerformanceMonitor) generateSummary() WebSocketPerformanceSu
 func (p *Page) StartPerformanceMonitoring() (*WebSocketPerformanceMonitor, error) {
 	monitor := NewWebSocketPerformanceMonitor(p)
 	if err := monitor.Start(); err != nil {
-		return nil, errors.Wrap(err, "failed to start performance monitoring")
+		return nil, fmt.Errorf("failed to start performance monitoring: %w", err)
 	}
 	return monitor, nil
 }

@@ -17,13 +17,14 @@ import (
 	"sync"
 	"time"
 
+	"errors"
+
 	"github.com/chromedp/cdproto/debugger"
 	"github.com/chromedp/cdproto/domdebugger"
 	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/cdproto/runtime"
 	"github.com/chromedp/chromedp"
 	"github.com/gorilla/websocket"
-	"github.com/pkg/errors"
 	"golang.org/x/tools/txtar"
 
 	"github.com/fsnotify/fsnotify"
@@ -112,12 +113,12 @@ func (r *REPL) Start(ctx context.Context, targetID string) error {
 	// Connect to target if specified
 	if targetID != "" {
 		if err := r.connectToTarget(ctx, targetID); err != nil {
-			return errors.Wrap(err, "failed to connect to target")
+			return fmt.Errorf("failed to connect to target: %w", err)
 		}
 	} else {
 		// List available targets
 		if err := r.showTargets(ctx); err != nil {
-			return errors.Wrap(err, "failed to list targets")
+			return fmt.Errorf("failed to list targets: %w", err)
 		}
 	}
 
@@ -148,7 +149,7 @@ func (r *REPL) Start(ctx context.Context, targetID string) error {
 	}
 
 	if err := scanner.Err(); err != nil {
-		return errors.Wrap(err, "input error")
+		return fmt.Errorf("input error: %w", err)
 	}
 
 	return nil
@@ -915,7 +916,7 @@ func (r *REPL) printScopeContent(ctx context.Context, scope *debugger.Scope, lab
 
 		propsBytes, _ := json.Marshal(res["result"])
 		if err := json.Unmarshal(propsBytes, &props); err != nil {
-			return errors.Wrap(err, "failed to unmarshal properties")
+			return fmt.Errorf("failed to unmarshal properties: %w", err)
 		}
 	} else {
 		// Chrome Path
@@ -974,7 +975,7 @@ func (r *REPL) sendRequest(method string, params interface{}) (map[string]interf
 	}
 
 	if err := r.rawConn.WriteJSON(req); err != nil {
-		return nil, errors.Wrap(err, "failed to send request")
+		return nil, fmt.Errorf("failed to send request: %w", err)
 	}
 
 	select {
@@ -1000,7 +1001,7 @@ func (r *REPL) connectToTargetRaw(ctx context.Context, target *DebugTarget) erro
 	// Dial WebSocket
 	conn, _, err := websocket.DefaultDialer.Dial(target.WebSocketDebuggerURL, nil)
 	if err != nil {
-		return errors.Wrap(err, "failed to dial WebSocket")
+		return fmt.Errorf("failed to dial WebSocket: %w", err)
 	}
 
 	r.rawConn = conn
@@ -1010,10 +1011,10 @@ func (r *REPL) connectToTargetRaw(ctx context.Context, target *DebugTarget) erro
 
 	// Enable domains
 	if _, err := r.sendRequest("Runtime.enable", nil); err != nil {
-		return errors.Wrap(err, "failed to enable Runtime")
+		return fmt.Errorf("failed to enable Runtime: %w", err)
 	}
 	if _, err := r.sendRequest("Debugger.enable", nil); err != nil {
-		return errors.Wrap(err, "failed to enable Debugger")
+		return fmt.Errorf("failed to enable Debugger: %w", err)
 	}
 
 	return nil
@@ -1398,7 +1399,7 @@ func (r *REPL) toggleNetwork(ctx context.Context, args []string) error {
 
 	if r.rawConn != nil {
 		if _, err := r.sendRequest(method, nil); err != nil {
-			return errors.Wrapf(err, "failed to %s", method)
+			return fmt.Errorf(fmt.Sprintf("failed to %s", method)+": %w", err)
 		}
 	} else if r.session != nil {
 		// Chrome path

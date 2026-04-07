@@ -4,11 +4,13 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"log"
 	"os"
+
 	// "os/signal"
 	"strings"
 	// "syscall"
@@ -17,11 +19,11 @@ import (
 
 	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/chromedp"
-	"github.com/pkg/errors"
+
 	"github.com/tmc/misc/chrome-to-har/internal/browser"
 	"github.com/tmc/misc/chrome-to-har/internal/chromeprofiles"
 	"github.com/tmc/misc/chrome-to-har/internal/discovery"
-	chromeErrors "github.com/tmc/misc/chrome-to-har/internal/errors"
+
 	"github.com/tmc/misc/chrome-to-har/internal/recorder"
 )
 
@@ -98,32 +100,32 @@ type options struct {
 	webSocketStats       bool        // Show WebSocket statistics
 
 	// Mirror options (wget-compatible)
-	mirror             bool        // Enable mirroring mode (shortcut for -r -l inf -k)
-	recursive          bool        // Enable recursive downloading
-	level              int         // Maximum recursion depth (0 = infinite)
-	convertLinks       bool        // Convert links to relative paths
-	pageRequisites     bool        // Download all assets needed to display page
-	noParent           bool        // Don't ascend to parent directory
-	spanHosts          bool        // Follow links to other domains
-	acceptExtensions   stringSlice // Accept file extensions (e.g., html,js,css)
-	rejectExtensions   stringSlice // Reject file extensions (e.g., mp4,zip)
-	acceptDomains      stringSlice // Accept only these domains
-	rejectDomains      stringSlice // Reject these domains
-	includeDirs        stringSlice // Include only these directories
-	excludeDirs        stringSlice // Exclude these directories
-	acceptRegex        string      // Accept URLs matching regex
-	rejectRegex        string      // Reject URLs matching regex
-	wait               int         // Wait seconds between downloads
-	noClobber          bool        // Don't re-download existing files
-	timestamping       bool        // Only download newer files
-	continueDownload   bool        // Resume partial downloads
-	limitRate          int64       // Limit download speed (bytes/sec)
-	quota              int64       // Maximum total download size
-	directoryPrefix    string      // Save files to this directory
-	noDirectories      bool        // Don't create directory hierarchy
-	forceDirectories   bool        // Force creation of directories
-	cutDirs            int         // Ignore N remote directory components
-	noHostDirectories  bool        // Don't create host-based directories
+	mirror            bool        // Enable mirroring mode (shortcut for -r -l inf -k)
+	recursive         bool        // Enable recursive downloading
+	level             int         // Maximum recursion depth (0 = infinite)
+	convertLinks      bool        // Convert links to relative paths
+	pageRequisites    bool        // Download all assets needed to display page
+	noParent          bool        // Don't ascend to parent directory
+	spanHosts         bool        // Follow links to other domains
+	acceptExtensions  stringSlice // Accept file extensions (e.g., html,js,css)
+	rejectExtensions  stringSlice // Reject file extensions (e.g., mp4,zip)
+	acceptDomains     stringSlice // Accept only these domains
+	rejectDomains     stringSlice // Reject these domains
+	includeDirs       stringSlice // Include only these directories
+	excludeDirs       stringSlice // Exclude these directories
+	acceptRegex       string      // Accept URLs matching regex
+	rejectRegex       string      // Reject URLs matching regex
+	wait              int         // Wait seconds between downloads
+	noClobber         bool        // Don't re-download existing files
+	timestamping      bool        // Only download newer files
+	continueDownload  bool        // Resume partial downloads
+	limitRate         int64       // Limit download speed (bytes/sec)
+	quota             int64       // Maximum total download size
+	directoryPrefix   string      // Save files to this directory
+	noDirectories     bool        // Don't create directory hierarchy
+	forceDirectories  bool        // Force creation of directories
+	cutDirs           int         // Ignore N remote directory components
+	noHostDirectories bool        // Don't create host-based directories
 }
 
 // headerSlice allows multiple -H flags
@@ -148,6 +150,65 @@ func (s *stringSlice) String() string {
 func (s *stringSlice) Set(value string) error {
 	*s = append(*s, value)
 	return nil
+}
+
+var (
+	errChromeLaunch      = errors.New("chrome launch error")
+	errInvalidHeader     = errors.New("invalid header")
+	errInvalidScript     = errors.New("invalid script")
+	errUnsupportedOutput = errors.New("unsupported output format")
+	errAuthentication    = errors.New("authentication error")
+	errInternal          = errors.New("internal error")
+)
+
+func printRunError(err error, verbose bool) {
+	message := err.Error()
+	var suggestions []string
+
+	switch {
+	case errors.Is(err, errInvalidHeader):
+		message = "One or more request headers are invalid."
+	case errors.Is(err, errInvalidScript):
+		message = "One or more JavaScript snippets are invalid."
+	case errors.Is(err, chromeprofiles.ErrProfileNotFound):
+		message = "Chrome profile not found. Please check the profile name and ensure it exists."
+	case errors.Is(err, chromeprofiles.ErrProfileSetup), errors.Is(err, chromeprofiles.ErrProfileCopy):
+		message = "Failed to prepare the Chrome profile."
+	case errors.Is(err, errChromeLaunch), errors.Is(err, browser.ErrConnection), errors.Is(err, browser.ErrNotLaunched):
+		message = "Failed to launch or connect to Chrome."
+		suggestions = []string{
+			"Verify the browser path or remote debugging port",
+			"Increase --timeout if startup is slow",
+			"Retry with --headless",
+		}
+	case errors.Is(err, browser.ErrNavigation):
+		message = "Failed to navigate to the requested URL."
+	case errors.Is(err, browser.ErrTimeout):
+		message = "Chrome operation timed out. Try increasing --timeout."
+	case errors.Is(err, browser.ErrNetwork), errors.Is(err, browser.ErrNetworkIdle), errors.Is(err, recorder.ErrNetworkRecord):
+		message = "Network capture failed. Please check Chrome connectivity and retry."
+	case errors.Is(err, errAuthentication):
+		message = "Authentication setup failed. Please check the provided credentials."
+	case errors.Is(err, errUnsupportedOutput):
+		message = "The requested output format is not supported."
+	case errors.Is(err, errInternal):
+		message = "An internal error occurred while preparing output."
+	case os.IsPermission(err):
+		message = "Permission denied. Please check file permissions and profile access."
+	case os.IsNotExist(err):
+		message = "Required file or directory was not found."
+	}
+
+	fmt.Fprintf(os.Stderr, "Error: %s\n", message)
+	if len(suggestions) > 0 {
+		fmt.Fprintf(os.Stderr, "\nSuggestions:\n")
+		for _, suggestion := range suggestions {
+			fmt.Fprintf(os.Stderr, "  - %s\n", suggestion)
+		}
+	}
+	if verbose {
+		fmt.Fprintf(os.Stderr, "\nDetailed error: %v\n", err)
+	}
 }
 
 func main() {
@@ -406,21 +467,9 @@ func main() {
 			log.Fatal("Operation was canceled. This might indicate an internal timeout issue.")
 		} else if strings.Contains(err.Error(), "context canceled") {
 			log.Fatal("Operation was canceled due to context timeout. Try increasing the timeout value with --timeout flag.")
-		} else if chromeErr, ok := err.(*chromeErrors.ChromeError); ok {
-			// Print user-friendly error message
-			fmt.Fprintf(os.Stderr, "Error: %s\n", chromeErr.UserMessage())
-			if suggestions := chromeErr.Suggestions(); len(suggestions) > 0 {
-				fmt.Fprintf(os.Stderr, "\nSuggestions:\n")
-				for _, suggestion := range suggestions {
-					fmt.Fprintf(os.Stderr, "  - %s\n", suggestion)
-				}
-			}
-			if opts.verbose {
-				fmt.Fprintf(os.Stderr, "\nDetailed error: %s\n", chromeErrors.FormatError(err))
-			}
-			os.Exit(1)
 		} else {
-			log.Fatal(err)
+			printRunError(err, opts.verbose)
+			os.Exit(1)
 		}
 	}
 }
@@ -433,12 +482,12 @@ func run(ctx context.Context, pm chromeprofiles.ProfileManager, url string, opts
 	// Load script files and combine with inline scripts
 	scriptsBefore, err := loadScripts(opts.scriptBefore, opts.scriptFileBefore, opts.verbose)
 	if err != nil {
-		return chromeErrors.Wrap(err, chromeErrors.InvalidScriptError, "failed to load before scripts")
+		return fmt.Errorf("%w: failed to load before scripts: %w", errInvalidScript, err)
 	}
 
 	scriptsAfter, err := loadScripts(opts.scriptAfter, opts.scriptFileAfter, opts.verbose)
 	if err != nil {
-		return chromeErrors.Wrap(err, chromeErrors.InvalidScriptError, "failed to load after scripts")
+		return fmt.Errorf("%w: failed to load after scripts: %w", errInvalidScript, err)
 	}
 
 	if opts.verbose && (len(scriptsBefore) > 0 || len(scriptsAfter) > 0) {
@@ -450,10 +499,7 @@ func run(ctx context.Context, pm chromeprofiles.ProfileManager, url string, opts
 	for _, h := range opts.headers {
 		parts := strings.SplitN(h, ":", 2)
 		if len(parts) != 2 {
-			return chromeErrors.WithContext(
-				chromeErrors.New(chromeErrors.InvalidHeaderError, "invalid header format (expected 'name: value')"),
-				"header", h,
-			)
+			return fmt.Errorf("%w: invalid header format %q (expected 'name: value')", errInvalidHeader, h)
 		}
 		name := strings.TrimSpace(parts[0])
 		value := strings.TrimSpace(parts[1])
@@ -464,7 +510,7 @@ func run(ctx context.Context, pm chromeprofiles.ProfileManager, url string, opts
 	if opts.profileDir != "" {
 		profiles, err := pm.ListProfiles()
 		if err != nil {
-			return chromeErrors.Wrap(err, chromeErrors.ProfileSetupError, "failed to list Chrome profiles")
+			return fmt.Errorf("failed to list Chrome profiles: %w", err)
 		}
 
 		profileExists := false
@@ -476,10 +522,7 @@ func run(ctx context.Context, pm chromeprofiles.ProfileManager, url string, opts
 		}
 
 		if !profileExists {
-			return chromeErrors.WithContext(
-				chromeErrors.New(chromeErrors.ProfileNotFoundError, "specified Chrome profile does not exist"),
-				"profile", opts.profileDir,
-			)
+			return fmt.Errorf("%w: specified Chrome profile does not exist (profile=%s)", chromeprofiles.ErrProfileNotFound, opts.profileDir)
 		}
 	}
 
@@ -616,25 +659,25 @@ func run(ctx context.Context, pm chromeprofiles.ProfileManager, url string, opts
 	launchCtx := context.Background()
 	b, err := browser.New(launchCtx, pm, browserOpts...)
 	if err != nil {
-		return chromeErrors.Wrap(err, chromeErrors.ChromeLaunchError, "failed to create browser instance")
+		return fmt.Errorf("%w: failed to create browser instance: %w", errChromeLaunch, err)
 	}
 
 	if err := b.Launch(launchCtx); err != nil {
-		return chromeErrors.Wrap(err, chromeErrors.ChromeLaunchError, "failed to launch browser")
+		return fmt.Errorf("%w: failed to launch browser: %w", errChromeLaunch, err)
 	}
 	defer b.Close()
 
 	// Set up request headers
 	if len(headers) > 0 {
 		if err := b.SetRequestHeaders(headers); err != nil {
-			return chromeErrors.Wrap(err, chromeErrors.NetworkError, "failed to set request headers")
+			return fmt.Errorf("failed to set request headers: %w", err)
 		}
 	}
 
 	// Set up basic auth if provided
 	if opts.username != "" && opts.password != "" {
 		if err := b.SetBasicAuth(opts.username, opts.password); err != nil {
-			return chromeErrors.Wrap(err, chromeErrors.AuthenticationError, "failed to set basic authentication")
+			return fmt.Errorf("%w: failed to set basic authentication: %w", errAuthentication, err)
 		}
 	}
 
@@ -648,7 +691,7 @@ func run(ctx context.Context, pm chromeprofiles.ProfileManager, url string, opts
 
 		rec, err = recorder.New(recOpts...)
 		if err != nil {
-			return chromeErrors.Wrap(err, chromeErrors.NetworkRecordError, "failed to create network recorder")
+			return fmt.Errorf("%w: failed to create network recorder: %w", recorder.ErrNetworkRecord, err)
 		}
 
 		// Enable network monitoring with proper timeout handling
@@ -659,7 +702,7 @@ func run(ctx context.Context, pm chromeprofiles.ProfileManager, url string, opts
 		// Check if browser context is working
 		select {
 		case <-b.Context().Done():
-			return errors.Wrap(b.Context().Err(), "browser context is done before enabling network monitoring")
+			return fmt.Errorf("%w: browser context ended before enabling network monitoring: %w", browser.ErrNetwork, b.Context().Err())
 		default:
 			// Context is active
 		}
@@ -679,7 +722,7 @@ func run(ctx context.Context, pm chromeprofiles.ProfileManager, url string, opts
 				log.Printf("Enable context error: %v", enableCtx.Err())
 				log.Printf("Browser context error after failure: %v", b.Context().Err())
 			}
-			return chromeErrors.Wrap(err, chromeErrors.NetworkError, "failed to enable network monitoring")
+			return fmt.Errorf("%w: failed to enable network monitoring: %w", browser.ErrNetwork, err)
 		}
 
 		if opts.verbose {
@@ -694,25 +737,19 @@ func run(ctx context.Context, pm chromeprofiles.ProfileManager, url string, opts
 	if opts.method != "GET" || opts.data != "" {
 		// Use HTTPRequest for custom methods or when data is provided
 		if err := b.HTTPRequest(opts.method, url, opts.data, headers); err != nil {
-			return chromeErrors.WithContext(
-				chromeErrors.Wrap(err, chromeErrors.NetworkError, "failed to make HTTP request"),
-				"method", opts.method,
-			)
+			return fmt.Errorf("failed to make %s request: %w", opts.method, err)
 		}
 	} else {
 		// Use regular navigation for GET requests without data
 		if err := b.Navigate(url); err != nil {
-			return chromeErrors.WithContext(
-				chromeErrors.Wrap(err, chromeErrors.ChromeNavigationError, "failed to navigate to URL"),
-				"url", url,
-			)
+			return fmt.Errorf("failed to navigate to URL %q: %w", url, err)
 		}
 	}
 
 	// Handle WebSocket functionality if enabled
 	if opts.webSocketEnabled {
 		if err := handleWebSocketOperations(ctx, b, opts); err != nil {
-			return chromeErrors.Wrap(err, chromeErrors.NetworkError, "WebSocket operations failed")
+			return fmt.Errorf("%w: WebSocket operations failed: %w", browser.ErrNetwork, err)
 		}
 	}
 
@@ -728,21 +765,18 @@ func run(ctx context.Context, pm chromeprofiles.ProfileManager, url string, opts
 
 	case "har":
 		if rec == nil {
-			return chromeErrors.New(chromeErrors.InternalError, "recorder not initialized for HAR output")
+			return fmt.Errorf("%w: recorder not initialized for HAR output", errInternal)
 		}
 
 		// Write HAR to a temporary file and read it back
 		tmpFile, err := os.CreateTemp("", "churl-*.har")
 		if err != nil {
-			return chromeErrors.FileError("create", "temp file", err)
+			return fmt.Errorf("failed to %s file %s: %w", "create", "temp file", err)
 		}
 		defer os.Remove(tmpFile.Name())
 
 		if err := rec.WriteHAR(tmpFile.Name()); err != nil {
-			return chromeErrors.WithContext(
-				chromeErrors.FileError("write", tmpFile.Name(), err),
-				"format", "har",
-			)
+			return fmt.Errorf("failed to write HAR temp file %s: %w", tmpFile.Name(), err)
 		}
 
 		output, outputErr = os.ReadFile(tmpFile.Name())
@@ -810,30 +844,27 @@ func run(ctx context.Context, pm chromeprofiles.ProfileManager, url string, opts
 
 		info.URL, outputErr = b.GetURL()
 		if outputErr != nil {
-			return chromeErrors.Wrap(outputErr, chromeErrors.ChromeScriptError, "failed to get URL")
+			return fmt.Errorf("failed to get URL: %w", outputErr)
 		}
 
 		info.Title, outputErr = b.GetTitle()
 		if outputErr != nil {
-			return chromeErrors.Wrap(outputErr, chromeErrors.ChromeScriptError, "failed to get title")
+			return fmt.Errorf("failed to get title: %w", outputErr)
 		}
 
 		info.Content, outputErr = b.GetHTML()
 		if outputErr != nil {
-			return chromeErrors.Wrap(outputErr, chromeErrors.ChromeScriptError, "failed to get HTML")
+			return fmt.Errorf("failed to get HTML: %w", outputErr)
 		}
 
 		output, outputErr = json.MarshalIndent(info, "", "  ")
 
 	default:
-		return chromeErrors.WithContext(
-			chromeErrors.New(chromeErrors.ValidationError, "unsupported output format"),
-			"format", opts.outputFormat,
-		)
+		return fmt.Errorf("%w: %q", errUnsupportedOutput, opts.outputFormat)
 	}
 
 	if outputErr != nil {
-		return chromeErrors.Wrap(outputErr, chromeErrors.InternalError, "failed to get output")
+		return fmt.Errorf("%w: failed to get output: %w", errInternal, outputErr)
 	}
 
 	// Write HAR file if requested (separate from main output)
@@ -843,10 +874,7 @@ func run(ctx context.Context, pm chromeprofiles.ProfileManager, url string, opts
 		}
 
 		if err := rec.WriteHAR(opts.harFile); err != nil {
-			return chromeErrors.WithContext(
-				chromeErrors.FileError("write", opts.harFile, err),
-				"format", "har",
-			)
+			return fmt.Errorf("failed to write HAR file %s: %w", opts.harFile, err)
 		}
 
 		if opts.verbose {
@@ -859,7 +887,7 @@ func run(ctx context.Context, pm chromeprofiles.ProfileManager, url string, opts
 	if opts.outputFile != "" {
 		file, err := os.Create(opts.outputFile)
 		if err != nil {
-			return chromeErrors.FileError("create", opts.outputFile, err)
+			return fmt.Errorf("failed to %s file %s: %w", "create", opts.outputFile, err)
 		}
 		defer file.Close()
 		outWriter = file
@@ -869,13 +897,11 @@ func run(ctx context.Context, pm chromeprofiles.ProfileManager, url string, opts
 	return err
 }
 
-
 // detectChromePath attempts to find Chrome or any Chromium-based browser
 func detectChromePath() (string, bool) {
 	path := discovery.FindBestBrowser()
 	return path, path != ""
 }
-
 
 // loadScripts combines inline scripts and file-based scripts into a single slice
 func loadScripts(inlineScripts []string, scriptFiles []string, verbose bool) ([]string, error) {
@@ -892,10 +918,7 @@ func loadScripts(inlineScripts []string, scriptFiles []string, verbose bool) ([]
 
 		content, err := os.ReadFile(scriptFile)
 		if err != nil {
-			return nil, chromeErrors.WithContext(
-				chromeErrors.FileError("read", scriptFile, err),
-				"operation", "load_script",
-			)
+			return nil, fmt.Errorf("%w: failed to read script file %s: %w", errInvalidScript, scriptFile, err)
 		}
 
 		script := string(content)
@@ -908,10 +931,7 @@ func loadScripts(inlineScripts []string, scriptFiles []string, verbose bool) ([]
 
 		// Basic validation for JavaScript syntax
 		if err := validateJavaScript(script); err != nil {
-			return nil, chromeErrors.WithContext(
-				chromeErrors.Wrap(err, chromeErrors.InvalidScriptError, "script validation failed"),
-				"file", scriptFile,
-			)
+			return nil, fmt.Errorf("%w: script validation failed for %s: %w", errInvalidScript, scriptFile, err)
 		}
 
 		allScripts = append(allScripts, script)
@@ -929,7 +949,7 @@ func validateJavaScript(script string) error {
 	// Trim whitespace and check for empty content
 	script = strings.TrimSpace(script)
 	if script == "" {
-		return chromeErrors.New(chromeErrors.ValidationError, "script is empty")
+		return fmt.Errorf("%w: script is empty", errInvalidScript)
 	}
 
 	// Basic checks for potentially dangerous patterns
@@ -958,13 +978,13 @@ func validateJavaScript(script string) error {
 	}
 
 	if braceCount != 0 {
-		return chromeErrors.New(chromeErrors.InvalidScriptError, "unbalanced braces in script")
+		return fmt.Errorf("%w: unbalanced braces in script", errInvalidScript)
 	}
 	if parenCount != 0 {
-		return chromeErrors.New(chromeErrors.InvalidScriptError, "unbalanced parentheses in script")
+		return fmt.Errorf("%w: unbalanced parentheses in script", errInvalidScript)
 	}
 	if bracketCount != 0 {
-		return chromeErrors.New(chromeErrors.InvalidScriptError, "unbalanced brackets in script")
+		return fmt.Errorf("%w: unbalanced brackets in script", errInvalidScript)
 	}
 
 	return nil
@@ -975,12 +995,12 @@ func handleWebSocketOperations(ctx context.Context, b *browser.Browser, opts opt
 	// Get the first page from the browser
 	page, err := b.NewPage()
 	if err != nil {
-		return errors.Wrap(err, "failed to create new page")
+		return fmt.Errorf("failed to create new page: %w", err)
 	}
 
 	// Enable WebSocket monitoring
 	if err := page.EnableWebSocketMonitoring(); err != nil {
-		return errors.Wrap(err, "failed to enable WebSocket monitoring")
+		return fmt.Errorf("failed to enable WebSocket monitoring: %w", err)
 	}
 
 	// Set up WebSocket event handlers for verbose logging
@@ -1033,7 +1053,7 @@ func handleWebSocketOperations(ctx context.Context, b *browser.Browser, opts opt
 
 		conn, err := page.WaitForWebSocket(condition, waitOpts...)
 		if err != nil {
-			return errors.Wrap(err, "failed to wait for WebSocket condition")
+			return fmt.Errorf("failed to wait for WebSocket condition: %w", err)
 		}
 
 		if opts.verbose {
@@ -1047,13 +1067,13 @@ func handleWebSocketOperations(ctx context.Context, b *browser.Browser, opts opt
 		timeout := time.Duration(opts.webSocketTimeout) * time.Second
 		conn, err := page.WaitForWebSocketConnection(opts.webSocketURLPattern, timeout)
 		if err != nil {
-			return errors.Wrap(err, "failed to wait for WebSocket connection")
+			return fmt.Errorf("failed to wait for WebSocket connection: %w", err)
 		}
 
 		// Send each message
 		for _, message := range opts.webSocketMessages {
 			if err := page.SendWebSocketMessage(conn.ID, message); err != nil {
-				return errors.Wrapf(err, "failed to send WebSocket message: %s", message)
+				return fmt.Errorf(fmt.Sprintf("failed to send WebSocket message: %s", message)+": %w", err)
 			}
 
 			if opts.verbose {
@@ -1065,7 +1085,7 @@ func handleWebSocketOperations(ctx context.Context, b *browser.Browser, opts opt
 	// Generate WebSocket output if requested
 	if opts.webSocketOutputFile != "" {
 		if err := generateWebSocketOutput(page, opts); err != nil {
-			return errors.Wrap(err, "failed to generate WebSocket output")
+			return fmt.Errorf("failed to generate WebSocket output: %w", err)
 		}
 	}
 
@@ -1103,12 +1123,12 @@ func generateWebSocketOutput(page *browser.Page, opts options) error {
 	}
 
 	if err != nil {
-		return errors.Wrap(err, "failed to export WebSocket data")
+		return fmt.Errorf("failed to export WebSocket data: %w", err)
 	}
 
 	// Write to file
 	if err := os.WriteFile(opts.webSocketOutputFile, output, 0644); err != nil {
-		return errors.Wrap(err, "failed to write WebSocket output file")
+		return fmt.Errorf("failed to write WebSocket output file: %w", err)
 	}
 
 	if opts.verbose {

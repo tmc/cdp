@@ -8,10 +8,11 @@ import (
 	"strings"
 	"time"
 
+	"errors"
+
 	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/cdproto/page"
 	"github.com/chromedp/chromedp"
-	"github.com/pkg/errors"
 	"github.com/tmc/misc/chrome-to-har/internal/htmltomd"
 )
 
@@ -540,10 +541,10 @@ func (r *CommandRegistry) registerEmulationCommands() {
 			}
 			var width, height int
 			if _, err := fmt.Sscanf(args[0], "%d", &width); err != nil {
-				return errors.Wrap(err, "invalid width")
+				return fmt.Errorf("invalid width: %w", err)
 			}
 			if _, err := fmt.Sscanf(args[1], "%d", &height); err != nil {
-				return errors.Wrap(err, "invalid height")
+				return fmt.Errorf("invalid height: %w", err)
 			}
 			return chromedp.Run(ctx, chromedp.EmulateViewport(int64(width), int64(height)))
 		},
@@ -767,7 +768,7 @@ func (r *CommandRegistry) registerPageCommands() {
 			}
 
 			if err := os.WriteFile(filename, buf, 0644); err != nil {
-				return errors.Wrap(err, "saving screenshot")
+				return fmt.Errorf("saving screenshot: %w", err)
 			}
 
 			fmt.Printf("Screenshot saved to: %s\n", filename)
@@ -797,7 +798,7 @@ func (r *CommandRegistry) registerPageCommands() {
 			}
 
 			if err := os.WriteFile(filename, buf, 0644); err != nil {
-				return errors.Wrap(err, "saving PDF")
+				return fmt.Errorf("saving PDF: %w", err)
 			}
 
 			fmt.Printf("PDF saved to: %s\n", filename)
@@ -835,11 +836,11 @@ func (r *CommandRegistry) registerPageCommands() {
 			}
 			var html string
 			if err := chromedp.Run(ctx, chromedp.OuterHTML(selector, &html)); err != nil {
-				return errors.Wrap(err, "getting HTML")
+				return fmt.Errorf("getting HTML: %w", err)
 			}
 			markdown, err := htmltomd.Convert(html)
 			if err != nil {
-				return errors.Wrap(err, "converting to markdown")
+				return fmt.Errorf("converting to markdown: %w", err)
 			}
 			fmt.Println(strings.TrimSpace(markdown))
 			return nil

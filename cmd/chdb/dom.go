@@ -5,11 +5,12 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"errors"
+
 	"github.com/chromedp/cdproto/cdp"
 	"github.com/chromedp/cdproto/dom"
 	"github.com/chromedp/cdproto/runtime"
 	"github.com/chromedp/chromedp"
-	"github.com/pkg/errors"
 )
 
 // DOMController handles DOM manipulation operations
@@ -55,7 +56,7 @@ func (dc *DOMController) GetDocumentNode(ctx context.Context) (*cdp.Node, error)
 	)
 
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to get document node")
+		return nil, fmt.Errorf("failed to get document node: %w", err)
 	}
 
 	dc.documentNode = node
@@ -85,7 +86,7 @@ func (dc *DOMController) QuerySelector(ctx context.Context, selector string) (*c
 	)
 
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to query selector")
+		return nil, fmt.Errorf("failed to query selector: %w", err)
 	}
 
 	if nodeID == 0 {
@@ -119,7 +120,7 @@ func (dc *DOMController) QuerySelectorAll(ctx context.Context, selector string) 
 	)
 
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to query selector all")
+		return nil, fmt.Errorf("failed to query selector all: %w", err)
 	}
 
 	// Get details for each node
@@ -150,7 +151,7 @@ func (dc *DOMController) DescribeNode(ctx context.Context, nodeID cdp.NodeID) (*
 	)
 
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to describe node")
+		return nil, fmt.Errorf("failed to describe node: %w", err)
 	}
 
 	return node, nil
@@ -177,7 +178,7 @@ func (dc *DOMController) GetOuterHTML(ctx context.Context, selector string) (str
 	)
 
 	if err != nil {
-		return "", errors.Wrap(err, "failed to get outer HTML")
+		return "", fmt.Errorf("failed to get outer HTML: %w", err)
 	}
 
 	return html, nil
@@ -222,7 +223,7 @@ func (dc *DOMController) GetAttributes(ctx context.Context, selector string) (ma
 	)
 
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to get attributes")
+		return nil, fmt.Errorf("failed to get attributes: %w", err)
 	}
 
 	// Convert to map
@@ -320,7 +321,7 @@ func (dc *DOMController) GetComputedStyles(ctx context.Context, selector string)
 	)
 
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to get computed styles")
+		return nil, fmt.Errorf("failed to get computed styles: %w", err)
 	}
 
 	if result.Value != nil {
@@ -416,7 +417,7 @@ func (dc *DOMController) GetBoxModel(ctx context.Context, selector string) (*dom
 	)
 
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to get box model")
+		return nil, fmt.Errorf("failed to get box model: %w", err)
 	}
 
 	return model, nil

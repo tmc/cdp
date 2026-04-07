@@ -3,15 +3,17 @@ package browser
 import (
 	"context"
 	"encoding/base64"
+	"fmt"
 	"regexp"
 	"strings"
 	"sync"
 	"time"
 
+	"errors"
+
 	"github.com/chromedp/cdproto/fetch"
 	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/chromedp"
-	"github.com/pkg/errors"
 	"github.com/tmc/misc/chrome-to-har/internal/blocking"
 )
 
@@ -97,7 +99,7 @@ func (nm *NetworkManager) Enable() error {
 		network.Enable(),
 		fetch.Enable(),
 	); err != nil {
-		return errors.Wrap(err, "enabling network interception")
+		return fmt.Errorf("enabling network interception: %w", err)
 	}
 
 	// Set up event handlers
@@ -120,7 +122,7 @@ func (nm *NetworkManager) Disable() error {
 		network.Disable(),
 		fetch.Disable(),
 	); err != nil {
-		return errors.Wrap(err, "disabling network interception")
+		return fmt.Errorf("disabling network interception: %w", err)
 	}
 
 	nm.enabled = false
@@ -137,7 +139,7 @@ func (p *Page) Route(pattern string, handler RouteHandler) error {
 	// Compile pattern as regex
 	re, err := regexp.Compile(pattern)
 	if err != nil {
-		return errors.Wrap(err, "compiling route pattern")
+		return fmt.Errorf("compiling route pattern: %w", err)
 	}
 
 	p.networkManager.mu.Lock()
@@ -389,7 +391,7 @@ func WithContentType(contentType string) FulfillOption {
 func (p *Page) WaitForRequest(pattern string, timeout ...int) (*Request, error) {
 	re, err := regexp.Compile(pattern)
 	if err != nil {
-		return nil, errors.Wrap(err, "compiling pattern")
+		return nil, fmt.Errorf("compiling pattern: %w", err)
 	}
 
 	// Default timeout
@@ -434,7 +436,7 @@ func (p *Page) WaitForRequest(pattern string, timeout ...int) (*Request, error) 
 func (p *Page) WaitForResponse(pattern string, timeout ...int) (*Response, error) {
 	re, err := regexp.Compile(pattern)
 	if err != nil {
-		return nil, errors.Wrap(err, "compiling pattern")
+		return nil, fmt.Errorf("compiling pattern: %w", err)
 	}
 
 	// Default timeout

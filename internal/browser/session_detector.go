@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pkg/errors"
+	"errors"
 )
 
 // SessionDetector detects running browser sessions and manages session isolation.
@@ -122,7 +122,7 @@ func (sd *SessionDetector) VerifyDevToolsPort(ctx context.Context, port int, tim
 	// Create a request with the provided context
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
-		return false, errors.Wrap(err, "creating request for DevTools verification")
+		return false, fmt.Errorf("creating request for DevTools verification: %w", err)
 	}
 
 	// Perform the request
@@ -166,7 +166,7 @@ func (sd *SessionDetector) WaitForDevTools(ctx context.Context, port int, maxWai
 			}
 
 			if time.Now().After(deadline) {
-				return errors.Errorf("timeout waiting for DevTools on port %d", port)
+				return fmt.Errorf("timeout waiting for DevTools on port %d", port)
 			}
 
 			sd.logf("Waiting for DevTools on port %d...", port)
@@ -196,13 +196,13 @@ func (sd *SessionDetector) EnumerateTabsWithRetry(ctx context.Context, port int,
 
 		req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 		if err != nil {
-			lastErr = errors.Wrap(err, "creating request for tab enumeration")
+			lastErr = fmt.Errorf("creating request for tab enumeration: %w", err)
 			continue
 		}
 
 		resp, err := client.Do(req)
 		if err != nil {
-			lastErr = errors.Wrap(err, "tab enumeration request failed")
+			lastErr = fmt.Errorf("tab enumeration request failed: %w", err)
 			continue
 		}
 
@@ -210,7 +210,7 @@ func (sd *SessionDetector) EnumerateTabsWithRetry(ctx context.Context, port int,
 		resp.Body.Close()
 
 		if err != nil {
-			lastErr = errors.Wrap(err, "reading tab enumeration response")
+			lastErr = fmt.Errorf("reading tab enumeration response: %w", err)
 			continue
 		}
 
@@ -228,9 +228,9 @@ func (sd *SessionDetector) EnumerateTabsWithRetry(ctx context.Context, port int,
 
 	// All retries exhausted
 	if lastErr != nil {
-		return "", errors.Wrapf(lastErr, "failed to enumerate tabs after %d attempts", maxRetries)
+		return "", fmt.Errorf(fmt.Sprintf("failed to enumerate tabs after %d attempts", maxRetries)+": %w", lastErr)
 	}
-	return "", errors.Errorf("failed to enumerate tabs after %d attempts", maxRetries)
+	return "", fmt.Errorf("failed to enumerate tabs after %d attempts", maxRetries)
 }
 
 // min returns the minimum of two integers.

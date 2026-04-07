@@ -1,7 +1,7 @@
 package browser
 
 import (
-	"github.com/pkg/errors"
+	"errors"
 )
 
 // Options controls browser behavior

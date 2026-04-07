@@ -7,7 +7,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/pkg/errors"
+	"errors"
 )
 
 // Config holds the configuration for URL/domain blocking
@@ -24,11 +24,11 @@ type Config struct {
 
 // BlockingStats holds statistics about blocking activity
 type BlockingStats struct {
-	RequestsBlocked   int
-	RequestsAllowed   int
-	DomainsBlocked    int
-	PatternsBlocked   int
-	TotalRules        int
+	RequestsBlocked int
+	RequestsAllowed int
+	DomainsBlocked  int
+	PatternsBlocked int
+	TotalRules      int
 }
 
 // BlockingEngine handles URL and domain blocking logic
@@ -61,7 +61,7 @@ func NewBlockingEngine(config *Config) (*BlockingEngine, error) {
 	for _, pattern := range config.RegexPatterns {
 		regex, err := regexp.Compile(pattern)
 		if err != nil {
-			return nil, errors.Wrapf(err, "compiling regex pattern: %s", pattern)
+			return nil, fmt.Errorf(fmt.Sprintf("compiling regex pattern: %s", pattern)+": %w", err)
 		}
 		engine.compiledRegex = append(engine.compiledRegex, regex)
 	}
@@ -82,7 +82,7 @@ func NewBlockingEngine(config *Config) (*BlockingEngine, error) {
 	// Load rules from file if specified
 	if config.RuleFile != "" {
 		if err := engine.loadRulesFromFile(config.RuleFile); err != nil {
-			return nil, errors.Wrapf(err, "loading rules from file: %s", config.RuleFile)
+			return nil, fmt.Errorf(fmt.Sprintf("loading rules from file: %s", config.RuleFile)+": %w", err)
 		}
 	}
 
@@ -151,7 +151,7 @@ func (e *BlockingEngine) ShouldBlock(url string) bool {
 func (e *BlockingEngine) loadRulesFromFile(filename string) error {
 	file, err := os.Open(filename)
 	if err != nil {
-		return errors.Wrap(err, "opening rule file")
+		return fmt.Errorf("opening rule file: %w", err)
 	}
 	defer func() {
 		_ = file.Close() // Ignore close error in defer

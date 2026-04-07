@@ -19,8 +19,6 @@ import (
 	"syscall"
 	"text/tabwriter"
 	"time"
-
-	"github.com/pkg/errors"
 )
 
 // mock implementation that doesn't use Chrome
@@ -191,14 +189,14 @@ func runMock(ctx context.Context, url string, opts options) error {
 	// Create the request
 	req, err := http.NewRequestWithContext(ctx, opts.method, url, strings.NewReader(opts.data))
 	if err != nil {
-		return errors.Wrap(err, "creating request")
+		return fmt.Errorf("creating request: %w", err)
 	}
 
 	// Add headers
 	for _, h := range opts.headers {
 		parts := strings.SplitN(h, ":", 2)
 		if len(parts) != 2 {
-			return errors.Errorf("invalid header format: %s", h)
+			return fmt.Errorf("invalid header format: %s", h)
 		}
 		name := strings.TrimSpace(parts[0])
 		value := strings.TrimSpace(parts[1])
@@ -223,7 +221,7 @@ func runMock(ctx context.Context, url string, opts options) error {
 	// Make the request
 	resp, err := client.Do(req)
 	if err != nil {
-		return errors.Wrap(err, "making request")
+		return fmt.Errorf("making request: %w", err)
 	}
 	defer resp.Body.Close()
 
@@ -235,7 +233,7 @@ func runMock(ctx context.Context, url string, opts options) error {
 	// Read the response body
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return errors.Wrap(err, "reading response body")
+		return fmt.Errorf("reading response body: %w", err)
 	}
 
 	// Process based on requested format
@@ -288,7 +286,7 @@ func runMock(ctx context.Context, url string, opts options) error {
 
 		output, err = json.MarshalIndent(info, "", "  ")
 		if err != nil {
-			return errors.Wrap(err, "marshaling JSON")
+			return fmt.Errorf("marshaling JSON: %w", err)
 		}
 
 	case "har":
@@ -326,11 +324,11 @@ func runMock(ctx context.Context, url string, opts options) error {
 
 		output, err = json.MarshalIndent(harData, "", "  ")
 		if err != nil {
-			return errors.Wrap(err, "marshaling HAR")
+			return fmt.Errorf("marshaling HAR: %w", err)
 		}
 
 	default:
-		return errors.Errorf("unsupported output format: %s", opts.outputFormat)
+		return fmt.Errorf("unsupported output format: %s", opts.outputFormat)
 	}
 
 	// Write the output
@@ -338,7 +336,7 @@ func runMock(ctx context.Context, url string, opts options) error {
 	if opts.outputFile != "" {
 		file, err := os.Create(opts.outputFile)
 		if err != nil {
-			return errors.Wrap(err, "creating output file")
+			return fmt.Errorf("creating output file: %w", err)
 		}
 		defer file.Close()
 		outWriter = file

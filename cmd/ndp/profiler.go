@@ -8,12 +8,13 @@ import (
 	"log"
 	"time"
 
+	"errors"
+
 	"github.com/chromedp/cdproto/heapprofiler"
 	"github.com/chromedp/cdproto/profiler"
 	"github.com/chromedp/cdproto/runtime"
 	"github.com/chromedp/chromedp"
 	"github.com/gorilla/websocket"
-	"github.com/pkg/errors"
 )
 
 // ProfileType represents the type of profile
@@ -94,7 +95,7 @@ func (p *Profiler) executeRaw(ctx context.Context, method string, params interfa
 	if p.rawConn == nil {
 		conn, _, err := websocket.DefaultDialer.Dial(p.session.Target.WebSocketDebuggerURL, nil)
 		if err != nil {
-			return nil, errors.Wrap(err, "failed to dial raw websocket")
+			return nil, fmt.Errorf("failed to dial raw websocket: %w", err)
 		}
 		p.rawConn = conn
 	}
@@ -108,7 +109,7 @@ func (p *Profiler) executeRaw(ctx context.Context, method string, params interfa
 	}
 
 	if err := p.rawConn.WriteJSON(req); err != nil {
-		return nil, errors.Wrap(err, "failed to write generic request")
+		return nil, fmt.Errorf("failed to write generic request: %w", err)
 	}
 
 	// Read loop to find response
@@ -122,7 +123,7 @@ func (p *Profiler) executeRaw(ctx context.Context, method string, params interfa
 	for {
 		var msg map[string]interface{}
 		if err := p.rawConn.ReadJSON(&msg); err != nil {
-			return nil, errors.Wrap(err, "failed to read response")
+			return nil, fmt.Errorf("failed to read response: %w", err)
 		}
 
 		// Check if this is our response
@@ -148,7 +149,7 @@ func (p *Profiler) ProfileCPU(ctx context.Context, duration string, outputFile s
 	// Parse duration
 	dur, err := time.ParseDuration(duration)
 	if err != nil {
-		return errors.Wrap(err, "invalid duration format")
+		return fmt.Errorf("invalid duration format: %w", err)
 	}
 
 	// Get or create session
@@ -160,7 +161,7 @@ func (p *Profiler) ProfileCPU(ctx context.Context, duration string, outputFile s
 
 	// Start profiling
 	if err := p.startCPUProfiling(ctx); err != nil {
-		return errors.Wrap(err, "failed to start CPU profiling")
+		return fmt.Errorf("failed to start CPU profiling: %w", err)
 	}
 
 	// Wait for duration
@@ -175,7 +176,7 @@ func (p *Profiler) ProfileCPU(ctx context.Context, duration string, outputFile s
 	// Stop profiling
 	profile, err := p.stopCPUProfiling(ctx)
 	if err != nil {
-		return errors.Wrap(err, "failed to stop CPU profiling")
+		return fmt.Errorf("failed to stop CPU profiling: %w", err)
 	}
 
 	p.cpuProfile = profile
@@ -183,7 +184,7 @@ func (p *Profiler) ProfileCPU(ctx context.Context, duration string, outputFile s
 	// Save profile
 	if outputFile != "" {
 		if err := p.saveCPUProfile(outputFile); err != nil {
-			return errors.Wrap(err, "failed to save CPU profile")
+			return fmt.Errorf("failed to save CPU profile: %w", err)
 		}
 		fmt.Printf("CPU profile saved to: %s\n", outputFile)
 	}
@@ -202,13 +203,13 @@ func (p *Profiler) startCPUProfiling(ctx context.Context) error {
 			log.Println("Enabling Profiler domain...")
 		}
 		if _, err := p.executeRaw(ctx, "Profiler.enable", nil); err != nil {
-			return errors.Wrap(err, "failed to enable profiler")
+			return fmt.Errorf("failed to enable profiler: %w", err)
 		}
 		if p.verbose {
 			log.Println("Starting Profiler...")
 		}
 		if _, err := p.executeRaw(ctx, "Profiler.start", nil); err != nil {
-			return errors.Wrap(err, "failed to start profiler")
+			return fmt.Errorf("failed to start profiler: %w", err)
 		}
 		if p.verbose {
 			log.Println("CPU profiling started (Node.js raw)")
@@ -256,7 +257,7 @@ func (p *Profiler) stopCPUProfiling(ctx context.Context) (*CPUProfile, error) {
 				bytes, _ := json.Marshal(profileMap)
 				profile = &profiler.Profile{}
 				if err := json.Unmarshal(bytes, profile); err != nil {
-					return nil, errors.Wrap(err, "failed to decode profile")
+					return nil, fmt.Errorf("failed to decode profile: %w", err)
 				}
 			}
 		}
@@ -433,7 +434,7 @@ func (p *Profiler) ProfileHeap(ctx context.Context, outputFile string, targetID 
 	// Take heap snapshot
 	snapshot, err := p.takeHeapSnapshot(ctx)
 	if err != nil {
-		return errors.Wrap(err, "failed to take heap snapshot")
+		return fmt.Errorf("failed to take heap snapshot: %w", err)
 	}
 
 	p.heapSnapshot = snapshot
@@ -441,7 +442,7 @@ func (p *Profiler) ProfileHeap(ctx context.Context, outputFile string, targetID 
 	// Save snapshot
 	if outputFile != "" {
 		if err := p.saveHeapSnapshot(outputFile); err != nil {
-			return errors.Wrap(err, "failed to save heap snapshot")
+			return fmt.Errorf("failed to save heap snapshot: %w", err)
 		}
 		fmt.Printf("Heap snapshot saved to: %s\n", outputFile)
 	}
@@ -510,7 +511,7 @@ func (p *Profiler) takeHeapSnapshot(ctx context.Context) (*HeapSnapshot, error) 
 
 func (p *Profiler) takeHeapSnapshotNode(ctx context.Context) (*HeapSnapshot, error) {
 	if _, err := p.executeRaw(ctx, "HeapProfiler.enable", nil); err != nil {
-		return nil, errors.Wrap(err, "failed to enable heap profiler")
+		return nil, fmt.Errorf("failed to enable heap profiler: %w", err)
 	}
 
 	var chunks []string
@@ -537,7 +538,7 @@ func (p *Profiler) takeHeapSnapshotNode(ctx context.Context) (*HeapSnapshot, err
 	}
 
 	if err := p.rawConn.WriteJSON(req); err != nil {
-		return nil, errors.Wrap(err, "failed to write snapshot request")
+		return nil, fmt.Errorf("failed to write snapshot request: %w", err)
 	}
 
 	// Read loop
@@ -546,7 +547,7 @@ func (p *Profiler) takeHeapSnapshotNode(ctx context.Context) (*HeapSnapshot, err
 	for !done {
 		var msg map[string]interface{}
 		if err := p.rawConn.ReadJSON(&msg); err != nil {
-			return nil, errors.Wrap(err, "failed to read response")
+			return nil, fmt.Errorf("failed to read response: %w", err)
 		}
 
 		// Check for method (Event)
@@ -697,7 +698,7 @@ func (p *Profiler) ensureSession(ctx context.Context, targetID string) error {
 	// Find target
 	targets, err := p.manager.ListTargets(ctx)
 	if err != nil {
-		return errors.Wrap(err, "failed to list targets")
+		return fmt.Errorf("failed to list targets: %w", err)
 	}
 
 	if len(targets) == 0 {
@@ -724,7 +725,7 @@ func (p *Profiler) ensureSession(ctx context.Context, targetID string) error {
 	// Create session
 	session, err := p.manager.CreateSession(ctx, *target)
 	if err != nil {
-		return errors.Wrap(err, "failed to create session")
+		return fmt.Errorf("failed to create session: %w", err)
 	}
 
 	p.session = session
@@ -745,7 +746,7 @@ func (p *Profiler) ensureSession(ctx context.Context, targetID string) error {
 		)
 
 		if err != nil {
-			return errors.Wrap(err, "failed to enable runtime")
+			return fmt.Errorf("failed to enable runtime: %w", err)
 		}
 	}
 

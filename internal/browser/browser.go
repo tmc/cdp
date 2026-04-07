@@ -4,6 +4,7 @@ package browser
 import (
 	"context"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -15,10 +16,8 @@ import (
 	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/cdproto/page"
 	"github.com/chromedp/chromedp"
-	"github.com/pkg/errors"
 	"github.com/tmc/misc/chrome-to-har/internal/blocking"
 	"github.com/tmc/misc/chrome-to-har/internal/chromeprofiles"
-	chromeErrors "github.com/tmc/misc/chrome-to-har/internal/errors"
 )
 
 // filteredErrorf filters out noisy chromedp error messages
@@ -68,7 +67,7 @@ func New(ctx context.Context, profileMgr chromeprofiles.ProfileManager, opts ...
 	// Apply all option functions
 	for _, opt := range opts {
 		if err := opt(options); err != nil {
-			return nil, errors.Wrap(err, "applying browser option")
+			return nil, fmt.Errorf("applying browser option: %w", err)
 		}
 	}
 
@@ -93,19 +92,19 @@ func New(ctx context.Context, profileMgr chromeprofiles.ProfileManager, opts ...
 
 		blockingEngine, err := blocking.NewBlockingEngine(blockingConfig)
 		if err != nil {
-			return nil, errors.Wrap(err, "creating blocking engine")
+			return nil, fmt.Errorf("creating blocking engine: %w", err)
 		}
 
 		// Add common blocking rules if requested
 		if options.BlockCommonAds {
 			if err := blockingEngine.AddCommonAdBlockRules(); err != nil {
-				return nil, errors.Wrap(err, "adding common ad blocking rules")
+				return nil, fmt.Errorf("adding common ad blocking rules: %w", err)
 			}
 		}
 
 		if options.BlockCommonTracking {
 			if err := blockingEngine.AddCommonTrackingBlockRules(); err != nil {
-				return nil, errors.Wrap(err, "adding common tracking blocking rules")
+				return nil, fmt.Errorf("adding common tracking blocking rules: %w", err)
 			}
 		}
 
@@ -138,7 +137,7 @@ func (b *Browser) Launch(ctx context.Context) error {
 	// Set up the profile directory if needed
 	if b.opts.UseProfile && b.profileMgr != nil {
 		if err := b.profileMgr.SetupWorkdir(); err != nil {
-			return errors.Wrap(err, "setting up working directory")
+			return fmt.Errorf("setting up working directory: %w", err)
 		}
 
 		// Check for Brave session isolation needs
@@ -153,7 +152,7 @@ func (b *Browser) Launch(ctx context.Context) error {
 
 			// Use Brave session isolation instead of standard profile copy
 			if err := b.profileMgr.BraveSessionIsolation(b.opts.ProfileName, b.opts.CookieDomains); err != nil {
-				return errors.Wrap(err, "creating Brave isolated profile")
+				return fmt.Errorf("creating Brave isolated profile: %w", err)
 			}
 
 			if b.opts.Verbose {
@@ -162,7 +161,7 @@ func (b *Browser) Launch(ctx context.Context) error {
 		} else {
 			// Standard profile copy
 			if err := b.profileMgr.CopyProfile(b.opts.ProfileName, b.opts.CookieDomains); err != nil {
-				return errors.Wrap(err, "copying profile")
+				return fmt.Errorf("copying profile: %w", err)
 			}
 		}
 	}
@@ -267,7 +266,6 @@ func (b *Browser) Launch(ctx context.Context) error {
 	// var result bool
 	// if err := chromedp.Run(testCtx, chromedp.Evaluate(`true`, &result)); err != nil {
 	// 	b.cancelFunc()
-	// 	return errors.Wrap(err, "testing Chrome connection")
 	// }
 
 	if b.opts.Verbose {
@@ -278,7 +276,7 @@ func (b *Browser) Launch(ctx context.Context) error {
 	if b.opts.ProxyServer != "" && b.opts.ProxyUsername != "" && b.opts.ProxyPassword != "" {
 		if err := b.setupProxyAuthentication(); err != nil {
 			b.cancelFunc()
-			return errors.Wrap(err, "setting up proxy authentication")
+			return fmt.Errorf("setting up proxy authentication: %w", err)
 		}
 	}
 
@@ -286,7 +284,7 @@ func (b *Browser) Launch(ctx context.Context) error {
 	if b.blockingEngine != nil {
 		if err := b.setupNetworkBlocking(); err != nil {
 			b.cancelFunc()
-			return errors.Wrap(err, "setting up network blocking")
+			return fmt.Errorf("setting up network blocking: %w", err)
 		}
 	}
 
@@ -296,7 +294,7 @@ func (b *Browser) Launch(ctx context.Context) error {
 // Navigate visits the specified URL
 func (b *Browser) Navigate(url string) error {
 	if b.ctx == nil {
-		return errors.New("browser not launched, call Launch() first")
+		return notLaunchedError()
 	}
 
 	if b.opts.Verbose {
@@ -320,7 +318,7 @@ func (b *Browser) Navigate(url string) error {
 			if b.opts.Verbose {
 				log.Printf("network.Enable failed: %v", err)
 			}
-			return errors.Wrap(err, "enabling network events")
+			return wrapError(ErrNetwork, "enable network events", err)
 		}
 		if b.opts.Verbose {
 			log.Printf("Successfully enabled network events")
@@ -332,7 +330,7 @@ func (b *Browser) Navigate(url string) error {
 		if b.opts.Verbose {
 			log.Printf("Navigation error: %v", err)
 		}
-		return errors.Wrap(err, "navigating to URL")
+		return wrapError(ErrNavigation, "navigate to URL", err)
 	}
 
 	// Execute pre-navigation scripts after basic navigation but before waiting for network idle
@@ -340,7 +338,7 @@ func (b *Browser) Navigate(url string) error {
 		if b.opts.Verbose {
 			log.Printf("Pre-navigation script error: %v", err)
 		}
-		return errors.Wrap(err, "executing pre-navigation scripts")
+		return fmt.Errorf("execute pre-navigation scripts: %w", err)
 	}
 
 	// If waiting for network idle is requested
@@ -385,10 +383,7 @@ func (b *Browser) Navigate(url string) error {
 				}
 			}
 		})); err != nil {
-			return chromeErrors.WithContext(
-				chromeErrors.Wrap(err, chromeErrors.NetworkIdleError, "failed to wait for network idle"),
-				"url", url,
-			)
+			return wrapError(ErrNetworkIdle, fmt.Sprintf("wait for network idle after navigating to %s", url), err)
 		}
 	}
 
@@ -455,7 +450,7 @@ func (b *Browser) Navigate(url string) error {
 		defer waitCancel()
 
 		if err := chromedp.Run(waitCtx, chromedp.WaitVisible(b.opts.WaitSelector, chromedp.ByQuery)); err != nil {
-			return errors.Wrap(err, "waiting for selector: "+b.opts.WaitSelector)
+			return wrapError(ErrTimeout, fmt.Sprintf("wait for selector %q", b.opts.WaitSelector), err)
 		}
 	}
 
@@ -464,7 +459,7 @@ func (b *Browser) Navigate(url string) error {
 		if b.opts.Verbose {
 			log.Printf("Post-navigation script error: %v", err)
 		}
-		return errors.Wrap(err, "executing post-navigation scripts")
+		return fmt.Errorf("execute post-navigation scripts: %w", err)
 	}
 
 	return nil
@@ -473,12 +468,12 @@ func (b *Browser) Navigate(url string) error {
 // GetHTML returns the current page's HTML content
 func (b *Browser) GetHTML() (string, error) {
 	if b.ctx == nil {
-		return "", chromeErrors.New(chromeErrors.ChromeConnectionError, "browser not launched, call Launch() first")
+		return "", notLaunchedError()
 	}
 
 	var html string
 	if err := chromedp.Run(b.ctx, chromedp.OuterHTML("html", &html)); err != nil {
-		return "", chromeErrors.Wrap(err, chromeErrors.ChromeScriptError, "failed to get page HTML")
+		return "", wrapError(ErrScript, "get page HTML", err)
 	}
 
 	return html, nil
@@ -518,7 +513,7 @@ func (b *Browser) Close() error {
 
 	if b.profileMgr != nil {
 		if err := b.profileMgr.Cleanup(); err != nil {
-			return chromeErrors.Wrap(err, chromeErrors.ProfileSetupError, "failed to clean up profile")
+			return fmt.Errorf("failed to clean up profile: %w", err)
 		}
 	}
 
@@ -640,8 +635,8 @@ func (b *Browser) getBalancedSecurityOptions() []chromedp.ExecAllocatorOption {
 		chromedp.Flag("disable-plugins", true),
 
 		// Automation-friendly flags (prevent popups/prompts)
-		chromedp.Flag("disable-fre", true),                            // Disable First Run Experience
-		chromedp.Flag("auto-accept-browser-signin-for-tests", true),   // Auto-accept sign-in prompts
+		chromedp.Flag("disable-fre", true),                                                   // Disable First Run Experience
+		chromedp.Flag("auto-accept-browser-signin-for-tests", true),                          // Auto-accept sign-in prompts
 		chromedp.Flag("disable-features", "OfferMigrationToDiceUsers,OptGuideOnDeviceModel"), // Disable account migration and ML prompts
 
 		// Stability flags
@@ -733,17 +728,14 @@ func (b *Browser) getPermissiveSecurityOptions() []chromedp.ExecAllocatorOption 
 // WaitForSelector waits for a CSS selector to be visible
 func (b *Browser) WaitForSelector(selector string, timeout time.Duration) error {
 	if b.ctx == nil {
-		return chromeErrors.New(chromeErrors.ChromeConnectionError, "browser not launched, call Launch() first")
+		return notLaunchedError()
 	}
 
 	waitCtx, waitCancel := context.WithTimeout(b.ctx, timeout)
 	defer waitCancel()
 
 	if err := chromedp.Run(waitCtx, chromedp.WaitVisible(selector, chromedp.ByQuery)); err != nil {
-		return chromeErrors.WithContext(
-			chromeErrors.Wrap(err, chromeErrors.ChromeTimeoutError, "failed to wait for selector"),
-			"selector", selector,
-		)
+		return withField(timeoutError("failed to wait for selector", err), "selector", selector)
 	}
 	return nil
 }
@@ -751,16 +743,13 @@ func (b *Browser) WaitForSelector(selector string, timeout time.Duration) error 
 // ExecuteScript runs JavaScript in the browser and returns the result
 func (b *Browser) ExecuteScript(script string) (interface{}, error) {
 	if b.ctx == nil {
-		return nil, chromeErrors.New(chromeErrors.ChromeConnectionError, "browser not launched, call Launch() first")
+		return nil, notLaunchedError()
 	}
 
 	var result interface{}
 	err := chromedp.Run(b.ctx, chromedp.Evaluate(script, &result))
 	if err != nil {
-		return nil, chromeErrors.WithContext(
-			chromeErrors.Wrap(err, chromeErrors.ChromeScriptError, "failed to execute script"),
-			"script", script,
-		)
+		return nil, withField(scriptError("failed to execute script", err), "script", script)
 	}
 
 	return result, nil
@@ -769,7 +758,7 @@ func (b *Browser) ExecuteScript(script string) (interface{}, error) {
 // ExecuteScriptWithTimeout runs JavaScript with a custom timeout
 func (b *Browser) ExecuteScriptWithTimeout(script string, timeout time.Duration) (interface{}, error) {
 	if b.ctx == nil {
-		return nil, chromeErrors.New(chromeErrors.ChromeConnectionError, "browser not launched, call Launch() first")
+		return nil, notLaunchedError()
 	}
 
 	ctx, cancel := context.WithTimeout(b.ctx, timeout)
@@ -779,15 +768,9 @@ func (b *Browser) ExecuteScriptWithTimeout(script string, timeout time.Duration)
 	err := chromedp.Run(ctx, chromedp.Evaluate(script, &result))
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
-			return nil, chromeErrors.WithContext(
-				chromeErrors.Wrap(err, chromeErrors.ChromeTimeoutError, "script execution timed out"),
-				"script", script,
-			)
+			return nil, withField(timeoutError("script execution timed out", err), "script", script)
 		}
-		return nil, chromeErrors.WithContext(
-			chromeErrors.Wrap(err, chromeErrors.ChromeScriptError, "failed to execute script"),
-			"script", script,
-		)
+		return nil, withField(scriptError("failed to execute script", err), "script", script)
 	}
 
 	return result, nil
@@ -796,7 +779,7 @@ func (b *Browser) ExecuteScriptWithTimeout(script string, timeout time.Duration)
 // ExecuteScripts runs multiple JavaScript scripts in sequence
 func (b *Browser) ExecuteScripts(scripts []string) ([]interface{}, error) {
 	if b.ctx == nil {
-		return nil, chromeErrors.New(chromeErrors.ChromeConnectionError, "browser not launched, call Launch() first")
+		return nil, notLaunchedError()
 	}
 
 	if len(scripts) == 0 {
@@ -812,10 +795,7 @@ func (b *Browser) ExecuteScripts(scripts []string) ([]interface{}, error) {
 
 		result, err := b.ExecuteScript(script)
 		if err != nil {
-			return results, chromeErrors.WithContext(
-				chromeErrors.Wrapf(err, chromeErrors.ChromeScriptError, "failed to execute script %d", i+1),
-				"script_index", i+1,
-			)
+			return results, withField(scriptError(fmt.Sprintf("failed to execute script %d", i+1), err), "script_index", i+1)
 		}
 
 		results[i] = result
@@ -827,7 +807,7 @@ func (b *Browser) ExecuteScripts(scripts []string) ([]interface{}, error) {
 // ExecuteScriptsWithTimeout runs multiple JavaScript scripts with individual timeouts
 func (b *Browser) ExecuteScriptsWithTimeout(scripts []string, timeout time.Duration) ([]interface{}, error) {
 	if b.ctx == nil {
-		return nil, chromeErrors.New(chromeErrors.ChromeConnectionError, "browser not launched, call Launch() first")
+		return nil, notLaunchedError()
 	}
 
 	if len(scripts) == 0 {
@@ -843,10 +823,7 @@ func (b *Browser) ExecuteScriptsWithTimeout(scripts []string, timeout time.Durat
 
 		result, err := b.ExecuteScriptWithTimeout(script, timeout)
 		if err != nil {
-			return results, chromeErrors.WithContext(
-				chromeErrors.Wrapf(err, chromeErrors.ChromeScriptError, "failed to execute script %d with timeout", i+1),
-				"script_index", i+1,
-			)
+			return results, withField(scriptError(fmt.Sprintf("failed to execute script %d with timeout", i+1), err), "script_index", i+1)
 		}
 
 		results[i] = result
@@ -870,7 +847,7 @@ func (b *Browser) executeScriptsBefore() error {
 
 	_, err := b.ExecuteScriptsWithTimeout(b.opts.ScriptBefore, timeout)
 	if err != nil {
-		return chromeErrors.Wrap(err, chromeErrors.ChromeScriptError, "failed to execute pre-navigation scripts")
+		return fmt.Errorf("failed to execute pre-navigation scripts: %w", err)
 	}
 
 	if b.opts.Verbose {
@@ -895,7 +872,7 @@ func (b *Browser) executeScriptsAfter() error {
 
 	_, err := b.ExecuteScriptsWithTimeout(b.opts.ScriptAfter, timeout)
 	if err != nil {
-		return chromeErrors.Wrap(err, chromeErrors.ChromeScriptError, "failed to execute post-navigation scripts")
+		return fmt.Errorf("failed to execute post-navigation scripts: %w", err)
 	}
 
 	if b.opts.Verbose {
@@ -908,12 +885,12 @@ func (b *Browser) executeScriptsAfter() error {
 // GetTitle returns the page title
 func (b *Browser) GetTitle() (string, error) {
 	if b.ctx == nil {
-		return "", chromeErrors.New(chromeErrors.ChromeConnectionError, "browser not launched, call Launch() first")
+		return "", notLaunchedError()
 	}
 
 	var title string
 	if err := chromedp.Run(b.ctx, chromedp.Title(&title)); err != nil {
-		return "", chromeErrors.Wrap(err, chromeErrors.ChromeScriptError, "failed to get page title")
+		return "", scriptError("failed to get page title", err)
 	}
 
 	return title, nil
@@ -922,12 +899,12 @@ func (b *Browser) GetTitle() (string, error) {
 // GetURL returns the current page URL
 func (b *Browser) GetURL() (string, error) {
 	if b.ctx == nil {
-		return "", chromeErrors.New(chromeErrors.ChromeConnectionError, "browser not launched, call Launch() first")
+		return "", notLaunchedError()
 	}
 
 	var url string
 	if err := chromedp.Run(b.ctx, chromedp.Location(&url)); err != nil {
-		return "", chromeErrors.Wrap(err, chromeErrors.ChromeScriptError, "failed to get page URL")
+		return "", scriptError("failed to get page URL", err)
 	}
 
 	return url, nil
@@ -936,7 +913,7 @@ func (b *Browser) GetURL() (string, error) {
 // SetRequestHeaders sets custom headers for all subsequent requests
 func (b *Browser) SetRequestHeaders(headers map[string]string) error {
 	if b.ctx == nil {
-		return chromeErrors.New(chromeErrors.ChromeConnectionError, "browser not launched, call Launch() first")
+		return notLaunchedError()
 	}
 
 	// Convert to the format expected by CDP
@@ -946,7 +923,7 @@ func (b *Browser) SetRequestHeaders(headers map[string]string) error {
 	}
 
 	if err := chromedp.Run(b.ctx, network.SetExtraHTTPHeaders(network.Headers(cdpHeaders))); err != nil {
-		return chromeErrors.Wrap(err, chromeErrors.NetworkError, "failed to set request headers")
+		return networkError("failed to set request headers", err)
 	}
 	return nil
 }
@@ -993,7 +970,7 @@ func detectContentType(data string, headers map[string]string) string {
 // HTTPRequest performs an HTTP request with the specified method and data
 func (b *Browser) HTTPRequest(method, url, data string, headers map[string]string) error {
 	if b.ctx == nil {
-		return chromeErrors.New(chromeErrors.ChromeConnectionError, "browser not launched, call Launch() first")
+		return notLaunchedError()
 	}
 
 	if b.opts.Verbose {
@@ -1022,10 +999,7 @@ func (b *Browser) HTTPRequest(method, url, data string, headers map[string]strin
 
 	// Enable request interception
 	if err := b.enableRequestInterception(requestData); err != nil {
-		return chromeErrors.WithContext(
-			chromeErrors.Wrap(err, chromeErrors.NetworkError, "failed to enable request interception"),
-			"method", method,
-		)
+		return withField(networkError("failed to enable request interception", err), "method", method)
 	}
 
 	// Execute pre-navigation scripts before making the request
@@ -1033,7 +1007,7 @@ func (b *Browser) HTTPRequest(method, url, data string, headers map[string]strin
 		if b.opts.Verbose {
 			log.Printf("Pre-navigation script error: %v", err)
 		}
-		return errors.Wrap(err, "executing pre-navigation scripts")
+		return fmt.Errorf("executing pre-navigation scripts: %w", err)
 	}
 
 	// Navigate to the URL (this will trigger our interceptor)
@@ -1045,10 +1019,7 @@ func (b *Browser) HTTPRequest(method, url, data string, headers map[string]strin
 	defer navCancel()
 
 	if err := chromedp.Run(navCtx, chromedp.Navigate(url)); err != nil {
-		return chromeErrors.WithContext(
-			chromeErrors.Wrap(err, chromeErrors.ChromeNavigationError, "failed to navigate with custom method"),
-			"method", method,
-		)
+		return withField(navigationError("failed to navigate with custom method", err), "method", method)
 	}
 
 	// Wait for network idle if requested (similar to Navigate method)
@@ -1115,7 +1086,7 @@ func (b *Browser) HTTPRequest(method, url, data string, headers map[string]strin
 		if b.opts.Verbose {
 			log.Printf("Post-navigation script error: %v", err)
 		}
-		return errors.Wrap(err, "executing post-navigation scripts")
+		return fmt.Errorf("executing post-navigation scripts: %w", err)
 	}
 
 	// Disable request interception after the request
@@ -1139,13 +1110,13 @@ func (b *Browser) enableRequestInterception(requestData *HTTPRequestData) error 
 
 	// Enable network events
 	if err := chromedp.Run(b.ctx, network.Enable()); err != nil {
-		return chromeErrors.Wrap(err, chromeErrors.NetworkError, "failed to enable network events")
+		return networkError("failed to enable network events", err)
 	}
 
 	// Enable fetch domain for request interception with patterns
 	if err := chromedp.Run(b.ctx,
 		fetch.Enable().WithPatterns([]*fetch.RequestPattern{{URLPattern: "*"}})); err != nil {
-		return chromeErrors.Wrap(err, chromeErrors.NetworkError, "failed to enable fetch domain")
+		return networkError("failed to enable fetch domain", err)
 	}
 
 	// Set up the request interceptor
@@ -1173,7 +1144,7 @@ func (b *Browser) disableRequestInterception() error {
 
 	// Disable fetch domain
 	if err := chromedp.Run(b.ctx, fetch.Disable()); err != nil {
-		return chromeErrors.Wrap(err, chromeErrors.NetworkError, "failed to disable fetch domain")
+		return networkError("failed to disable fetch domain", err)
 	}
 
 	if b.opts.Verbose {
@@ -1266,12 +1237,12 @@ func (b *Browser) setupProxyAuthentication() error {
 
 	// Enable network domain to intercept auth challenges
 	if err := chromedp.Run(b.ctx, network.Enable()); err != nil {
-		return chromeErrors.Wrap(err, chromeErrors.NetworkError, "failed to enable network domain for proxy auth")
+		return networkError("failed to enable network domain for proxy auth", err)
 	}
 
 	// Enable fetch domain for handling authentication
 	if err := chromedp.Run(b.ctx, fetch.Enable()); err != nil {
-		return chromeErrors.Wrap(err, chromeErrors.NetworkError, "failed to enable fetch domain for proxy auth")
+		return networkError("failed to enable fetch domain for proxy auth", err)
 	}
 
 	// Listen for auth required events
@@ -1326,12 +1297,12 @@ func (b *Browser) setupNetworkBlocking() error {
 
 	// Enable network domain
 	if err := chromedp.Run(b.ctx, network.Enable()); err != nil {
-		return errors.Wrap(err, "enabling network domain for blocking")
+		return fmt.Errorf("enabling network domain for blocking: %w", err)
 	}
 
 	// Enable fetch domain for request interception
 	if err := chromedp.Run(b.ctx, fetch.Enable()); err != nil {
-		return errors.Wrap(err, "enabling fetch domain for blocking")
+		return fmt.Errorf("enabling fetch domain for blocking: %w", err)
 	}
 
 	// Set up the request interceptor
@@ -1391,7 +1362,7 @@ func (b *Browser) BlockURLPattern(pattern string) error {
 		var err error
 		b.blockingEngine, err = blocking.NewBlockingEngine(config)
 		if err != nil {
-			return errors.Wrap(err, "creating blocking engine")
+			return fmt.Errorf("creating blocking engine: %w", err)
 		}
 		// Setup network blocking
 		return b.setupNetworkBlocking()
@@ -1407,7 +1378,7 @@ func (b *Browser) BlockURLPattern(pattern string) error {
 	var err error
 	b.blockingEngine, err = blocking.NewBlockingEngine(config)
 	if err != nil {
-		return errors.Wrap(err, "recreating blocking engine")
+		return fmt.Errorf("recreating blocking engine: %w", err)
 	}
 	return nil
 }

@@ -9,11 +9,12 @@ import (
 	"strings"
 	"sync"
 
+	"errors"
+
 	"github.com/chromedp/cdproto/cdp"
 	"github.com/chromedp/cdproto/debugger"
 	"github.com/chromedp/cdproto/runtime"
 	"github.com/chromedp/chromedp"
-	"github.com/pkg/errors"
 )
 
 // BreakpointType represents the type of breakpoint
@@ -30,12 +31,12 @@ const (
 type Breakpoint struct {
 	ID           string         `json:"id"`
 	Type         BreakpointType `json:"type"`
-	Location     string         `json:"location"`     // file:line or function name
-	Condition    string         `json:"condition"`    // Conditional expression
-	HitCount     int            `json:"hit_count"`    // Number of times hit
-	LogMessage   string         `json:"log_message"`  // For log points
+	Location     string         `json:"location"`    // file:line or function name
+	Condition    string         `json:"condition"`   // Conditional expression
+	HitCount     int            `json:"hit_count"`   // Number of times hit
+	LogMessage   string         `json:"log_message"` // For log points
 	Enabled      bool           `json:"enabled"`
-	ScriptID     cdp.ScriptID `json:"script_id,omitempty"`
+	ScriptID     cdp.ScriptID   `json:"script_id,omitempty"`
 	LineNumber   int            `json:"line_number"`
 	ColumnNumber int            `json:"column_number"`
 	Resolved     bool           `json:"resolved"`
@@ -71,7 +72,7 @@ func (bm *BreakpointManager) SetBreakpoint(ctx context.Context, location string,
 	// Parse location (file:line or function name)
 	bp, err := bm.parseLocation(location)
 	if err != nil {
-		return errors.Wrap(err, "invalid breakpoint location")
+		return fmt.Errorf("invalid breakpoint location: %w", err)
 	}
 
 	bp.Condition = condition
@@ -152,7 +153,7 @@ func (bm *BreakpointManager) setLineBreakpoint(ctx context.Context, bp *Breakpoi
 
 			for _, script := range scripts {
 				if strings.Contains(script.URL, fileName) ||
-				   filepath.Base(script.URL) == fileName {
+					filepath.Base(script.URL) == fileName {
 					targetScript = script
 					break
 				}
@@ -290,7 +291,7 @@ func (bm *BreakpointManager) setPendingBreakpoint(ctx context.Context, bp *Break
 func (bm *BreakpointManager) SetLogPoint(ctx context.Context, location string, logMessage string) error {
 	bp, err := bm.parseLocation(location)
 	if err != nil {
-		return errors.Wrap(err, "invalid log point location")
+		return fmt.Errorf("invalid log point location: %w", err)
 	}
 
 	bp.Type = BreakpointTypeLog

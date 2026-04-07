@@ -5,10 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"errors"
+
 	"github.com/chromedp/cdproto/animation"
 	"github.com/chromedp/cdproto/runtime"
 	"github.com/chromedp/chromedp"
-	"github.com/pkg/errors"
 )
 
 // AnimationController handles animation debugging and control
@@ -131,7 +132,7 @@ func (ac *AnimationController) ListAnimations(ctx context.Context) ([]map[string
 	)
 
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to list animations")
+		return nil, fmt.Errorf("failed to list animations: %w", err)
 	}
 
 	return animations, nil
@@ -507,7 +508,7 @@ func (ac *AnimationController) InspectAnimation(ctx context.Context, animationID
 	)
 
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to inspect animation")
+		return nil, fmt.Errorf("failed to inspect animation: %w", err)
 	}
 
 	return animationInfo, nil
@@ -606,7 +607,7 @@ func (ac *AnimationController) CreateAnimationTimeline(ctx context.Context) (map
 	)
 
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to create animation timeline")
+		return nil, fmt.Errorf("failed to create animation timeline: %w", err)
 	}
 
 	return timeline, nil

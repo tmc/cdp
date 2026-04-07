@@ -10,15 +10,16 @@ import (
 	"strings"
 	"time"
 
-	"github.com/chromedp/chromedp"
+	"errors"
+
+	"github.com/chromedp/cdproto/cdp"
 	"github.com/chromedp/cdproto/debugger"
 	"github.com/chromedp/cdproto/dom"
 	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/cdproto/page"
 	"github.com/chromedp/cdproto/runtime"
-	"github.com/chromedp/cdproto/cdp"
 	"github.com/chromedp/cdproto/target"
-	"github.com/pkg/errors"
+	"github.com/chromedp/chromedp"
 )
 
 // ChromeTab represents a Chrome tab or target
@@ -32,32 +33,32 @@ type ChromeTab struct {
 
 // NetworkRequest represents a captured network request
 type NetworkRequest struct {
-	RequestID  string                 `json:"request_id"`
-	URL        string                 `json:"url"`
-	Method     string                 `json:"method"`
-	Headers    map[string]interface{} `json:"headers"`
-	PostData   string                 `json:"post_data,omitempty"`
-	Response   *NetworkResponse       `json:"response,omitempty"`
-	Timestamp  time.Time              `json:"timestamp"`
-	Duration   float64                `json:"duration,omitempty"`
+	RequestID string                 `json:"request_id"`
+	URL       string                 `json:"url"`
+	Method    string                 `json:"method"`
+	Headers   map[string]interface{} `json:"headers"`
+	PostData  string                 `json:"post_data,omitempty"`
+	Response  *NetworkResponse       `json:"response,omitempty"`
+	Timestamp time.Time              `json:"timestamp"`
+	Duration  float64                `json:"duration,omitempty"`
 }
 
 // NetworkResponse represents a network response
 type NetworkResponse struct {
-	Status      int                    `json:"status"`
-	StatusText  string                 `json:"status_text"`
-	Headers     map[string]interface{} `json:"headers"`
-	MimeType    string                 `json:"mime_type"`
-	Body        string                 `json:"body,omitempty"`
-	BodySize    int64                  `json:"body_size"`
+	Status     int                    `json:"status"`
+	StatusText string                 `json:"status_text"`
+	Headers    map[string]interface{} `json:"headers"`
+	MimeType   string                 `json:"mime_type"`
+	Body       string                 `json:"body,omitempty"`
+	BodySize   int64                  `json:"body_size"`
 }
 
 // ChromeDebugger handles Chrome/Chromium debugging operations
 type ChromeDebugger struct {
-	manager         *SessionManager
-	session         *Session
-	verbose         bool
-	networkRequests map[string]*NetworkRequest
+	manager          *SessionManager
+	session          *Session
+	verbose          bool
+	networkRequests  map[string]*NetworkRequest
 	recordingNetwork bool
 }
 
@@ -76,13 +77,13 @@ func (cd *ChromeDebugger) Attach(ctx context.Context, port string) error {
 	url := fmt.Sprintf("http://localhost:%s/json/version", port)
 	resp, err := http.Get(url)
 	if err != nil {
-		return errors.Wrapf(err, "cannot connect to Chrome on port %s", port)
+		return fmt.Errorf(fmt.Sprintf("cannot connect to Chrome on port %s", port)+": %w", err)
 	}
 	defer resp.Body.Close()
 
 	var versionInfo map[string]interface{}
 	if err := json.NewDecoder(resp.Body).Decode(&versionInfo); err != nil {
-		return errors.Wrap(err, "failed to get Chrome version info")
+		return fmt.Errorf("failed to get Chrome version info: %w", err)
 	}
 
 	if cd.verbose {
@@ -92,7 +93,7 @@ func (cd *ChromeDebugger) Attach(ctx context.Context, port string) error {
 	// List available tabs
 	tabs, err := cd.ListTabs(ctx, port)
 	if err != nil {
-		return errors.Wrap(err, "failed to list tabs")
+		return fmt.Errorf("failed to list tabs: %w", err)
 	}
 
 	if len(tabs) == 0 {
@@ -100,14 +101,14 @@ func (cd *ChromeDebugger) Attach(ctx context.Context, port string) error {
 		newTabURL := fmt.Sprintf("http://localhost:%s/json/new", port)
 		resp, err := http.Get(newTabURL)
 		if err != nil {
-			return errors.Wrap(err, "failed to create new tab")
+			return fmt.Errorf("failed to create new tab: %w", err)
 		}
 		resp.Body.Close()
 
 		// Re-list tabs
 		tabs, err = cd.ListTabs(ctx, port)
 		if err != nil {
-			return errors.Wrap(err, "failed to list tabs after creation")
+			return fmt.Errorf("failed to list tabs after creation: %w", err)
 		}
 	}
 
@@ -141,14 +142,14 @@ func (cd *ChromeDebugger) Attach(ctx context.Context, port string) error {
 	// Create session
 	session, err := cd.manager.CreateSession(ctx, debugTarget)
 	if err != nil {
-		return errors.Wrap(err, "failed to create session")
+		return fmt.Errorf("failed to create session: %w", err)
 	}
 
 	cd.session = session
 
 	// Enable necessary domains
 	if err := cd.enableDomains(ctx); err != nil {
-		return errors.Wrap(err, "failed to enable Chrome domains")
+		return fmt.Errorf("failed to enable Chrome domains: %w", err)
 	}
 
 	fmt.Printf("Attached to Chrome tab: %s\n", targetTab.Title)
@@ -369,22 +370,22 @@ func (cd *ChromeDebugger) ListTabs(ctx context.Context, port string) ([]ChromeTa
 	client := &http.Client{Timeout: 5 * time.Second}
 	resp, err := client.Get(url)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to list Chrome tabs")
+		return nil, fmt.Errorf("failed to list Chrome tabs: %w", err)
 	}
 	defer resp.Body.Close()
 
 	var rawTabs []map[string]interface{}
 	if err := json.NewDecoder(resp.Body).Decode(&rawTabs); err != nil {
-		return nil, errors.Wrap(err, "failed to parse tabs")
+		return nil, fmt.Errorf("failed to parse tabs: %w", err)
 	}
 
 	var tabs []ChromeTab
 	for _, rawTab := range rawTabs {
 		tab := ChromeTab{
-			ID:    getString(rawTab, "id"),
-			Type:  getString(rawTab, "type"),
-			Title: getString(rawTab, "title"),
-			URL:   getString(rawTab, "url"),
+			ID:          getString(rawTab, "id"),
+			Type:        getString(rawTab, "type"),
+			Title:       getString(rawTab, "title"),
+			URL:         getString(rawTab, "url"),
 			Description: getString(rawTab, "description"),
 		}
 
@@ -408,7 +409,7 @@ func (cd *ChromeDebugger) Navigate(ctx context.Context, url string, tabID string
 			}),
 		)
 		if err != nil {
-			return errors.Wrap(err, "failed to activate target")
+			return fmt.Errorf("failed to activate target: %w", err)
 		}
 	}
 
@@ -418,7 +419,7 @@ func (cd *ChromeDebugger) Navigate(ctx context.Context, url string, tabID string
 	)
 
 	if err != nil {
-		return errors.Wrap(err, "failed to navigate")
+		return fmt.Errorf("failed to navigate: %w", err)
 	}
 
 	fmt.Printf("Navigated to: %s\n", url)
@@ -440,7 +441,7 @@ func (cd *ChromeDebugger) EvaluateJS(ctx context.Context, expression string, tab
 			}),
 		)
 		if err != nil {
-			return nil, errors.Wrap(err, "failed to activate target")
+			return nil, fmt.Errorf("failed to activate target: %w", err)
 		}
 	}
 
@@ -450,7 +451,7 @@ func (cd *ChromeDebugger) EvaluateJS(ctx context.Context, expression string, tab
 	)
 
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to evaluate JavaScript")
+		return nil, fmt.Errorf("failed to evaluate JavaScript: %w", err)
 	}
 
 	return result, nil
@@ -489,12 +490,12 @@ func (cd *ChromeDebugger) TakeScreenshot(ctx context.Context, filename string) e
 	)
 
 	if err != nil {
-		return errors.Wrap(err, "failed to capture screenshot")
+		return fmt.Errorf("failed to capture screenshot: %w", err)
 	}
 
 	// Save to file
 	if err := os.WriteFile(filename, buf, 0644); err != nil {
-		return errors.Wrap(err, "failed to save screenshot")
+		return fmt.Errorf("failed to save screenshot: %w", err)
 	}
 
 	fmt.Printf("Screenshot saved to: %s\n", filename)
@@ -514,7 +515,7 @@ func (cd *ChromeDebugger) GetPageHTML(ctx context.Context) (string, error) {
 	)
 
 	if err != nil {
-		return "", errors.Wrap(err, "failed to get page HTML")
+		return "", fmt.Errorf("failed to get page HTML: %w", err)
 	}
 
 	return html, nil

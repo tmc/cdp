@@ -6,11 +6,12 @@ import (
 	"fmt"
 	"strings"
 
+	"errors"
+
 	"github.com/chromedp/cdproto/debugger"
 	"github.com/chromedp/cdproto/domdebugger"
 	"github.com/chromedp/cdproto/runtime"
 	"github.com/chromedp/chromedp"
-	"github.com/pkg/errors"
 )
 
 // DebuggerController handles all debugging operations
@@ -120,7 +121,7 @@ func (dc *DebuggerController) SetBreakpoint(ctx context.Context, location string
 	)
 
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to set breakpoint")
+		return nil, fmt.Errorf("failed to set breakpoint: %w", err)
 	}
 
 	// Store breakpoint
@@ -154,7 +155,7 @@ func (dc *DebuggerController) SetXHRBreakpoint(ctx context.Context, urlPattern s
 	)
 
 	if err != nil {
-		return errors.Wrap(err, "failed to set XHR breakpoint")
+		return fmt.Errorf("failed to set XHR breakpoint: %w", err)
 	}
 
 	dc.breakpoints["xhr:"+urlPattern] = &Breakpoint{
@@ -202,7 +203,7 @@ func (dc *DebuggerController) SetEventListenerBreakpoint(ctx context.Context, ev
 	)
 
 	if err != nil {
-		return errors.Wrap(err, "failed to set event listener breakpoint")
+		return fmt.Errorf("failed to set event listener breakpoint: %w", err)
 	}
 
 	dc.breakpoints["event:"+eventName] = &Breakpoint{
@@ -228,7 +229,7 @@ func (dc *DebuggerController) RemoveBreakpoint(ctx context.Context, breakpointID
 	)
 
 	if err != nil {
-		return errors.Wrap(err, "failed to remove breakpoint")
+		return fmt.Errorf("failed to remove breakpoint: %w", err)
 	}
 
 	delete(dc.breakpoints, breakpointID)
@@ -336,7 +337,7 @@ func (dc *DebuggerController) EvaluateOnCallFrame(ctx context.Context, frameID s
 	)
 
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to evaluate expression")
+		return nil, fmt.Errorf("failed to evaluate expression: %w", err)
 	}
 
 	if result.Value != nil {

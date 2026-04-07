@@ -5,10 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"errors"
+
 	"github.com/chromedp/cdproto/emulation"
 	"github.com/chromedp/cdproto/runtime"
 	"github.com/chromedp/chromedp"
-	"github.com/pkg/errors"
 )
 
 // DeviceController handles device emulation and touch operations
@@ -19,57 +20,57 @@ type DeviceController struct {
 
 // DeviceProfile represents a mobile device profile
 type DeviceProfile struct {
-	Name       string
-	Width      int64
-	Height     int64
+	Name              string
+	Width             int64
+	Height            int64
 	DeviceScaleFactor float64
-	Mobile     bool
-	TouchEnabled bool
-	UserAgent  string
+	Mobile            bool
+	TouchEnabled      bool
+	UserAgent         string
 }
 
 // Predefined device profiles
 var deviceProfiles = map[string]DeviceProfile{
 	"iphone-14-pro": {
-		Name: "iPhone 14 Pro",
+		Name:  "iPhone 14 Pro",
 		Width: 393, Height: 852,
 		DeviceScaleFactor: 3.0,
-		Mobile: true, TouchEnabled: true,
+		Mobile:            true, TouchEnabled: true,
 		UserAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1",
 	},
 	"iphone-se": {
-		Name: "iPhone SE",
+		Name:  "iPhone SE",
 		Width: 375, Height: 667,
 		DeviceScaleFactor: 2.0,
-		Mobile: true, TouchEnabled: true,
+		Mobile:            true, TouchEnabled: true,
 		UserAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.0 Mobile/15E148 Safari/604.1",
 	},
 	"ipad-air": {
-		Name: "iPad Air",
+		Name:  "iPad Air",
 		Width: 820, Height: 1180,
 		DeviceScaleFactor: 2.0,
-		Mobile: true, TouchEnabled: true,
+		Mobile:            true, TouchEnabled: true,
 		UserAgent: "Mozilla/5.0 (iPad; CPU OS 15_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.0 Mobile/15E148 Safari/604.1",
 	},
 	"pixel-7": {
-		Name: "Pixel 7",
+		Name:  "Pixel 7",
 		Width: 412, Height: 915,
 		DeviceScaleFactor: 2.625,
-		Mobile: true, TouchEnabled: true,
+		Mobile:            true, TouchEnabled: true,
 		UserAgent: "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Mobile Safari/537.36",
 	},
 	"galaxy-s23": {
-		Name: "Galaxy S23",
+		Name:  "Galaxy S23",
 		Width: 384, Height: 854,
 		DeviceScaleFactor: 3.0,
-		Mobile: true, TouchEnabled: true,
+		Mobile:            true, TouchEnabled: true,
 		UserAgent: "Mozilla/5.0 (Linux; Android 13; SM-S911B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Mobile Safari/537.36",
 	},
 	"desktop": {
-		Name: "Desktop",
+		Name:  "Desktop",
 		Width: 1920, Height: 1080,
 		DeviceScaleFactor: 1.0,
-		Mobile: false, TouchEnabled: false,
+		Mobile:            false, TouchEnabled: false,
 		UserAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36",
 	},
 }
@@ -99,7 +100,7 @@ func (dc *DeviceController) SetDeviceProfile(ctx context.Context, profileName st
 
 	profile, exists := deviceProfiles[profileName]
 	if !exists {
-		return errors.Errorf("unknown device profile: %s", profileName)
+		return fmt.Errorf("unknown device profile: %s", profileName)
 	}
 
 	return chromedp.Run(dc.debugger.chromeCtx,
@@ -412,7 +413,7 @@ func (dc *DeviceController) GetDeviceInfo(ctx context.Context) (map[string]inter
 	)
 
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to get device info")
+		return nil, fmt.Errorf("failed to get device info: %w", err)
 	}
 
 	return deviceInfo, nil
@@ -435,7 +436,7 @@ func (dc *DeviceController) SetOrientation(ctx context.Context, orientation stri
 	case "landscape-secondary":
 		orientationType = emulation.OrientationTypeLandscapeSecondary
 	default:
-		return errors.Errorf("invalid orientation: %s (use: portrait-primary, portrait-secondary, landscape-primary, landscape-secondary)", orientation)
+		return fmt.Errorf("invalid orientation: %s (use: portrait-primary, portrait-secondary, landscape-primary, landscape-secondary)", orientation)
 	}
 
 	return chromedp.Run(dc.debugger.chromeCtx,

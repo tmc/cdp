@@ -9,8 +9,9 @@ import (
 	"strings"
 	"time"
 
+	"errors"
+
 	"github.com/gorilla/websocket"
-	"github.com/pkg/errors"
 )
 
 // SimpleBreakpointSetter sets breakpoints using direct WebSocket connection
@@ -53,7 +54,7 @@ func (sbs *SimpleBreakpointSetter) SetBreakpoint(ctx context.Context, location s
 
 	conn, _, err := dialer.Dial(wsURL, http.Header{})
 	if err != nil {
-		return errors.Wrapf(err, "failed to connect to WebSocket")
+		return fmt.Errorf(fmt.Sprintf("failed to connect to WebSocket")+": %w", err)
 	}
 	defer conn.Close()
 
@@ -61,7 +62,7 @@ func (sbs *SimpleBreakpointSetter) SetBreakpoint(ctx context.Context, location s
 
 	// Enable debugger
 	if _, err := sbs.sendCommand("Debugger.enable", nil); err != nil {
-		return errors.Wrap(err, "failed to enable debugger")
+		return fmt.Errorf("failed to enable debugger: %w", err)
 	}
 
 	// Build file URL pattern
@@ -79,7 +80,7 @@ func (sbs *SimpleBreakpointSetter) SetBreakpoint(ctx context.Context, location s
 
 	response, err := sbs.sendCommand("Debugger.setBreakpointByUrl", params)
 	if err != nil {
-		return errors.Wrap(err, "failed to set breakpoint")
+		return fmt.Errorf("failed to set breakpoint: %w", err)
 	}
 
 	// Parse response
@@ -104,13 +105,13 @@ func (sbs *SimpleBreakpointSetter) getWebSocketURL() (string, error) {
 	url := fmt.Sprintf("http://localhost:%s/json/list", sbs.port)
 	resp, err := http.Get(url)
 	if err != nil {
-		return "", errors.Wrapf(err, "failed to get debug targets")
+		return "", fmt.Errorf(fmt.Sprintf("failed to get debug targets")+": %w", err)
 	}
 	defer resp.Body.Close()
 
 	var targets []map[string]interface{}
 	if err := json.NewDecoder(resp.Body).Decode(&targets); err != nil {
-		return "", errors.Wrap(err, "failed to parse targets")
+		return "", fmt.Errorf("failed to parse targets: %w", err)
 	}
 
 	if len(targets) == 0 {
@@ -140,14 +141,14 @@ func (sbs *SimpleBreakpointSetter) sendCommand(method string, params map[string]
 
 	// Send message
 	if err := sbs.conn.WriteJSON(message); err != nil {
-		return nil, errors.Wrap(err, "failed to send message")
+		return nil, fmt.Errorf("failed to send message: %w", err)
 	}
 
 	// Wait for response
 	for {
 		var response map[string]interface{}
 		if err := sbs.conn.ReadJSON(&response); err != nil {
-			return nil, errors.Wrap(err, "failed to read response")
+			return nil, fmt.Errorf("failed to read response: %w", err)
 		}
 
 		// Check if this is our response
@@ -186,7 +187,7 @@ func (sbs *SimpleBreakpointSetter) ListBreakpoints(ctx context.Context) error {
 
 	conn, _, err := dialer.Dial(wsURL, http.Header{})
 	if err != nil {
-		return errors.Wrapf(err, "failed to connect to WebSocket")
+		return fmt.Errorf(fmt.Sprintf("failed to connect to WebSocket")+": %w", err)
 	}
 	defer conn.Close()
 
@@ -194,7 +195,7 @@ func (sbs *SimpleBreakpointSetter) ListBreakpoints(ctx context.Context) error {
 
 	// Enable debugger
 	if _, err := sbs.sendCommand("Debugger.enable", nil); err != nil {
-		return errors.Wrap(err, "failed to enable debugger")
+		return fmt.Errorf("failed to enable debugger: %w", err)
 	}
 
 	// Note: CDP doesn't have a direct "list breakpoints" command

@@ -19,7 +19,7 @@ import (
 	"github.com/chromedp/cdproto/har"
 	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/chromedp"
-	chromeErrors "github.com/tmc/misc/chrome-to-har/internal/errors"
+
 	"github.com/tmc/misc/chrome-to-har/internal/scrub"
 )
 
@@ -776,14 +776,11 @@ func (r *Recorder) WriteHAR(filename string) error {
 
 	jsonBytes, err := json.MarshalIndent(harWithAnnotations, "", "  ")
 	if err != nil {
-		return chromeErrors.Wrap(err, chromeErrors.NetworkRecordError, "failed to marshal HAR data")
+		return fmt.Errorf("failed to marshal HAR data: %w", err)
 	}
 
 	if err := os.WriteFile(filename, jsonBytes, 0644); err != nil {
-		return chromeErrors.WithContext(
-			chromeErrors.FileError("write", filename, err),
-			"format", "har",
-		)
+		return fmt.Errorf("failed to write %s (format=har): %w", filename, err)
 	}
 
 	if r.verbose {
@@ -897,18 +894,12 @@ func isBinaryContent(mimeType string) bool {
 func (r *Recorder) applyTemplate(entry *har.Entry) (*har.Entry, error) {
 	t, err := template.New("har").Parse(r.template)
 	if err != nil {
-		return nil, chromeErrors.WithContext(
-			chromeErrors.Wrap(err, chromeErrors.ValidationError, "failed to parse template"),
-			"template", r.template,
-		)
+		return nil, fmt.Errorf("failed to parse template %q: %w", r.template, err)
 	}
 
 	var buf strings.Builder
 	if err := t.Execute(&buf, entry); err != nil {
-		return nil, chromeErrors.WithContext(
-			chromeErrors.Wrap(err, chromeErrors.ValidationError, "failed to execute template"),
-			"template", r.template,
-		)
+		return nil, fmt.Errorf("failed to execute template %q: %w", r.template, err)
 	}
 
 	return &har.Entry{

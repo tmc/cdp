@@ -24,12 +24,13 @@ import (
 	"syscall"
 	"time"
 
+	"errors"
+
 	"github.com/chromedp/cdproto/fetch"
 	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/cdproto/runtime"
 	"github.com/chromedp/cdproto/target"
 	"github.com/chromedp/chromedp"
-	"github.com/pkg/errors"
 	"github.com/tmc/macgo"
 	"github.com/tmc/misc/chrome-to-har/internal/browser"
 	"github.com/tmc/misc/chrome-to-har/internal/cdpproxy"
@@ -1106,18 +1107,18 @@ func main() {
 		autoDiscover bool
 
 		// New features
-		jsScripts   stringSlice // Support multiple --js flags
-		tabID       string
-		harFile     string
-		harMode     string // HAR capture mode: simple, enhanced (default: enhanced)
-		harlStream  bool   // Stream HAR entries as NDJSON
-		harlFile    string // File to stream NDJSON to
-		interactive bool
-		background  bool
-		command     string
-		fullCapture    bool
+		jsScripts       stringSlice // Support multiple --js flags
+		tabID           string
+		harFile         string
+		harMode         string // HAR capture mode: simple, enhanced (default: enhanced)
+		harlStream      bool   // Stream HAR entries as NDJSON
+		harlFile        string // File to stream NDJSON to
+		interactive     bool
+		background      bool
+		command         string
+		fullCapture     bool
 		showChromeFlags bool
-		outputDir   string // Directory to write domain-organized logs to
+		outputDir       string // Directory to write domain-organized logs to
 
 		// Profile management features
 		useProfile      string
@@ -2376,7 +2377,7 @@ func main() {
 				chromedp.Flag("disable-popup-blocking", true),
 				chromedp.Flag("disable-sync", true),
 				chromedp.Flag("enable-unsafe-extension-debugging", true),
-			chromedp.Flag("remote-allow-origins", "*"),
+				chromedp.Flag("remote-allow-origins", "*"),
 			}
 			if loadExtensions != "" {
 				opts = append(opts, chromedp.Flag("load-extension", loadExtensions))
@@ -3449,7 +3450,7 @@ func executeCommand(ctx context.Context, command string) error {
 			// Validate JSON
 			var temp map[string]interface{}
 			if err := json.Unmarshal([]byte(paramStr), &temp); err != nil {
-				return errors.Wrap(err, "invalid JSON parameters")
+				return fmt.Errorf("invalid JSON parameters: %w", err)
 			}
 			params = json.RawMessage(paramStr)
 		}
@@ -3461,7 +3462,7 @@ func executeCommand(ctx context.Context, command string) error {
 	if method == "Runtime.evaluate" {
 		var evalParams runtime.EvaluateParams
 		if err := json.Unmarshal(params, &evalParams); err != nil {
-			return errors.Wrap(err, "parsing Runtime.evaluate parameters")
+			return fmt.Errorf("parsing Runtime.evaluate parameters: %w", err)
 		}
 
 		var result interface{}
@@ -3479,7 +3480,7 @@ func executeCommand(ctx context.Context, command string) error {
 			URL string `json:"url"`
 		}
 		if err := json.Unmarshal(params, &navParams); err != nil {
-			return errors.Wrap(err, "parsing Page.navigate parameters")
+			return fmt.Errorf("parsing Page.navigate parameters: %w", err)
 		}
 
 		if err := chromedp.Run(ctx, chromedp.Navigate(navParams.URL)); err != nil {
@@ -3511,7 +3512,7 @@ func executeCommand(ctx context.Context, command string) error {
 		return executeCDPDOM(ctx, method, params)
 	}
 
-	return errors.Errorf("unsupported CDP method: %s", method)
+	return fmt.Errorf("unsupported CDP method: %s", method)
 }
 
 func executeCDPRuntime(ctx context.Context, method string, params json.RawMessage) error {
@@ -3522,7 +3523,7 @@ func executeCDPRuntime(ctx context.Context, method string, params json.RawMessag
 		return nil
 
 	default:
-		return errors.Errorf("unsupported Runtime method: %s", method)
+		return fmt.Errorf("unsupported Runtime method: %s", method)
 	}
 }
 
@@ -3541,7 +3542,7 @@ func executeCDPPage(ctx context.Context, method string, params json.RawMessage) 
 		return nil
 
 	default:
-		return errors.Errorf("unsupported Page method: %s", method)
+		return fmt.Errorf("unsupported Page method: %s", method)
 	}
 }
 
@@ -3559,7 +3560,7 @@ func executeCDPNetwork(ctx context.Context, method string, params json.RawMessag
 		return nil
 
 	default:
-		return errors.Errorf("unsupported Network method: %s", method)
+		return fmt.Errorf("unsupported Network method: %s", method)
 	}
 }
 
@@ -3578,7 +3579,7 @@ func executeCDPDOM(ctx context.Context, method string, params json.RawMessage) e
 		return nil
 
 	default:
-		return errors.Errorf("unsupported DOM method: %s", method)
+		return fmt.Errorf("unsupported DOM method: %s", method)
 	}
 }
 
@@ -4449,10 +4450,10 @@ func setupChromeForEnhanced(ctx context.Context, cfg fullCaptureConfig) (context
 			chromeprofiles.WithVerbose(verbose),
 		)
 		if err != nil {
-			return nil, nil, false, errors.Wrap(err, "failed to create profile manager")
+			return nil, nil, false, fmt.Errorf("failed to create profile manager: %w", err)
 		}
 		if err := pm.SetupWorkdir(); err != nil {
-			return nil, nil, false, errors.Wrap(err, "failed to setup profile working directory")
+			return nil, nil, false, fmt.Errorf("failed to setup profile working directory: %w", err)
 		}
 
 		var cookieDomains []string
@@ -4465,12 +4466,12 @@ func setupChromeForEnhanced(ctx context.Context, cfg fullCaptureConfig) (context
 		if sessionDetector.NeedsBraveSessionIsolation(ctx, selectedPath, true) {
 			if err := pm.BraveSessionIsolation(cfg.UseProfile, cookieDomains); err != nil {
 				pm.Cleanup()
-				return nil, nil, false, errors.Wrapf(err, "failed to create Brave isolated profile '%s'", cfg.UseProfile)
+				return nil, nil, false, fmt.Errorf(fmt.Sprintf("failed to create Brave isolated profile '%s'", cfg.UseProfile)+": %w", err)
 			}
 		} else {
 			if err := pm.CopyProfile(cfg.UseProfile, cookieDomains); err != nil {
 				pm.Cleanup()
-				return nil, nil, false, errors.Wrapf(err, "failed to copy profile '%s'", cfg.UseProfile)
+				return nil, nil, false, fmt.Errorf(fmt.Sprintf("failed to copy profile '%s'", cfg.UseProfile)+": %w", err)
 			}
 		}
 
@@ -4545,7 +4546,7 @@ func setupChromeForEnhanced(ctx context.Context, cfg fullCaptureConfig) (context
 		if profileCleanup != nil {
 			profileCleanup()
 		}
-		return nil, nil, false, errors.Wrap(err, "failed to start browser")
+		return nil, nil, false, fmt.Errorf("failed to start browser: %w", err)
 	}
 
 	if verbose {

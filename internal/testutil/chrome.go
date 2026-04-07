@@ -14,8 +14,9 @@ import (
 	"testing"
 	"time"
 
+	"errors"
+
 	"github.com/chromedp/chromedp"
-	"github.com/pkg/errors"
 	"github.com/tmc/misc/chrome-to-har/internal/discovery"
 )
 
@@ -62,14 +63,14 @@ func (h *ChromeTestHelper) StartChrome(ctx context.Context, headless bool) (cont
 	// Create temp directory for user data
 	tempDir, err := os.MkdirTemp("", "chrome-test-*")
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "creating temp dir")
+		return nil, nil, fmt.Errorf("creating temp dir: %w", err)
 	}
 	h.tempDir = tempDir
 
 	// Find a free port
 	port, err := getFreePort()
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "getting free port")
+		return nil, nil, fmt.Errorf("getting free port: %w", err)
 	}
 	h.port = port
 
@@ -126,7 +127,7 @@ func (h *ChromeTestHelper) StartChrome(ctx context.Context, headless bool) (cont
 	if err := chromedp.Run(testCtx, chromedp.Navigate("about:blank")); err != nil {
 		browserCancel()
 		allocCancel()
-		return nil, nil, errors.Wrap(err, "starting Chrome")
+		return nil, nil, fmt.Errorf("starting Chrome: %w", err)
 	}
 
 	// Return combined cancel function
@@ -370,7 +371,7 @@ func GetChromeVersion() (string, error) {
 	cmd := exec.Command(chromePath, "--version")
 	output, err := cmd.Output()
 	if err != nil {
-		return "", errors.Wrap(err, "getting Chrome version")
+		return "", fmt.Errorf("getting Chrome version: %w", err)
 	}
 
 	return strings.TrimSpace(string(output)), nil

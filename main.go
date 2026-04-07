@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"log"
@@ -18,12 +19,13 @@ import (
 	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/cdproto/runtime"
 	"github.com/chromedp/chromedp"
-	"github.com/pkg/errors"
+
 	"github.com/tmc/misc/chrome-to-har/internal/blocking"
+	"github.com/tmc/misc/chrome-to-har/internal/browser"
 	"github.com/tmc/misc/chrome-to-har/internal/chromeprofiles"
 	"github.com/tmc/misc/chrome-to-har/internal/differential"
 	"github.com/tmc/misc/chrome-to-har/internal/discovery"
-	chromeErrors "github.com/tmc/misc/chrome-to-har/internal/errors"
+
 	"github.com/tmc/misc/chrome-to-har/internal/recorder"
 )
 
@@ -108,12 +110,65 @@ type options struct {
 	allowDangerousScripts bool   // Allow potentially dangerous scripts
 }
 
+var errChromeConnection = errors.New("chrome connection error")
+
 type Runner struct {
 	pm chromeprofiles.ProfileManager
 }
 
 func NewRunner(pm chromeprofiles.ProfileManager) *Runner {
 	return &Runner{pm: pm}
+}
+
+func printRunError(err error, verbose bool) {
+	message := err.Error()
+	var suggestions []string
+
+	switch {
+	case errors.Is(err, chromeprofiles.ErrProfileNotFound):
+		message = "Chrome profile not found. Please check the profile name and ensure it exists."
+		suggestions = []string{
+			"List available profiles with --list-profiles",
+			"Check the profile name spelling",
+			"Ensure the profile directory exists",
+		}
+	case errors.Is(err, chromeprofiles.ErrProfileSetup), errors.Is(err, chromeprofiles.ErrProfileCopy):
+		message = "Failed to set up the Chrome profile."
+		suggestions = []string{
+			"Check that the browser profile directory is readable",
+			"Close running browser instances that may lock the profile",
+			"Retry with a different profile",
+		}
+	case errors.Is(err, errChromeConnection), errors.Is(err, browser.ErrConnection), errors.Is(err, browser.ErrNotLaunched):
+		message = "Failed to connect to Chrome browser. Please check if Chrome is running and the debug port is available."
+		suggestions = []string{
+			"Try a different debug port with --debug-port",
+			"Ensure no other process is using the debug port",
+			"Increase timeout with --timeout",
+			"Try running with --headless",
+		}
+	case errors.Is(err, browser.ErrNavigation):
+		message = "Failed to navigate to the requested URL. Please check the URL and your network connection."
+	case errors.Is(err, browser.ErrTimeout):
+		message = "Chrome operation timed out. Try increasing the timeout value or check your network connection."
+	case errors.Is(err, browser.ErrNetwork), errors.Is(err, browser.ErrNetworkIdle), errors.Is(err, recorder.ErrNetworkRecord):
+		message = "Network recording failed. Please check Chrome connectivity and retry."
+	case os.IsPermission(err):
+		message = "Permission denied. Please check file permissions and profile access."
+	case os.IsNotExist(err):
+		message = "Required file or directory was not found."
+	}
+
+	fmt.Fprintf(os.Stderr, "Error: %s\n", message)
+	if len(suggestions) > 0 {
+		fmt.Fprintf(os.Stderr, "\nSuggestions:\n")
+		for _, suggestion := range suggestions {
+			fmt.Fprintf(os.Stderr, "  - %s\n", suggestion)
+		}
+	}
+	if verbose {
+		fmt.Fprintf(os.Stderr, "\nDetailed error: %v\n", err)
+	}
 }
 
 func init() {
@@ -267,21 +322,9 @@ func main() {
 	if err := run(ctx, pm, opts); err != nil {
 		if err == context.DeadlineExceeded {
 			log.Fatal("Operation timed out. Try increasing the timeout value or check your Chrome browser.")
-		} else if chromeErr, ok := err.(*chromeErrors.ChromeError); ok {
-			// Print user-friendly error message
-			fmt.Fprintf(os.Stderr, "Error: %s\n", chromeErr.UserMessage())
-			if suggestions := chromeErr.Suggestions(); len(suggestions) > 0 {
-				fmt.Fprintf(os.Stderr, "\nSuggestions:\n")
-				for _, suggestion := range suggestions {
-					fmt.Fprintf(os.Stderr, "  - %s\n", suggestion)
-				}
-			}
-			if opts.verbose {
-				fmt.Fprintf(os.Stderr, "\nDetailed error: %s\n", chromeErrors.FormatError(err))
-			}
-			os.Exit(1)
 		} else {
-			log.Fatal(err)
+			printRunError(err, opts.verbose)
+			os.Exit(1)
 		}
 	}
 }
@@ -296,7 +339,7 @@ func listAvailableProfiles(verbose bool) error {
 
 	profiles, err := pm.ListProfiles()
 	if err != nil {
-		return chromeErrors.Wrap(err, chromeErrors.ProfileSetupError, "failed to list available profiles")
+		return fmt.Errorf("failed to list available profiles: %w", err)
 	}
 
 	fmt.Println("Available Chrome profiles:")
@@ -311,10 +354,10 @@ func run(ctx context.Context, pm chromeprofiles.ProfileManager, opts options) er
 	if opts.profileDir == "" {
 		profiles, err := pm.ListProfiles()
 		if err != nil {
-			return chromeErrors.Wrap(err, chromeErrors.ProfileSetupError, "failed to list Chrome profiles")
+			return fmt.Errorf("failed to list Chrome profiles: %w", err)
 		}
 		if len(profiles) == 0 {
-			return chromeErrors.New(chromeErrors.ProfileNotFoundError, "no Chrome profiles found")
+			return fmt.Errorf("%w: no Chrome profiles found", chromeprofiles.ErrProfileNotFound)
 		}
 		opts.profileDir = profiles[0]
 		if opts.verbose {
@@ -325,7 +368,7 @@ func run(ctx context.Context, pm chromeprofiles.ProfileManager, opts options) er
 	// Verify profile exists
 	profiles, err := pm.ListProfiles()
 	if err != nil {
-		return chromeErrors.Wrap(err, chromeErrors.ProfileSetupError, "failed to list Chrome profiles for verification")
+		return fmt.Errorf("failed to list Chrome profiles for verification: %w", err)
 	}
 	profileExists := false
 	for _, p := range profiles {
@@ -335,10 +378,7 @@ func run(ctx context.Context, pm chromeprofiles.ProfileManager, opts options) er
 		}
 	}
 	if !profileExists {
-		return chromeErrors.WithContext(
-			chromeErrors.New(chromeErrors.ProfileNotFoundError, "specified Chrome profile does not exist"),
-			"profile", opts.profileDir,
-		)
+		return fmt.Errorf("%w: specified Chrome profile does not exist (profile=%s)", chromeprofiles.ErrProfileNotFound, opts.profileDir)
 	}
 
 	runner := NewRunner(pm)
@@ -347,7 +387,7 @@ func run(ctx context.Context, pm chromeprofiles.ProfileManager, opts options) er
 
 func (r *Runner) Run(ctx context.Context, opts options) error {
 	if err := r.pm.SetupWorkdir(); err != nil {
-		return chromeErrors.Wrap(err, chromeErrors.ProfileSetupError, "failed to set up profile working directory")
+		return fmt.Errorf("failed to set up profile working directory: %w", err)
 	}
 	defer r.pm.Cleanup()
 
@@ -357,10 +397,7 @@ func (r *Runner) Run(ctx context.Context, opts options) error {
 	}
 
 	if err := r.pm.CopyProfile(opts.profileDir, cookieDomains); err != nil {
-		return chromeErrors.WithContext(
-			chromeErrors.Wrap(err, chromeErrors.ProfileCopyError, "failed to copy Chrome profile"),
-			"profile", opts.profileDir,
-		)
+		return fmt.Errorf("failed to copy Chrome profile %q: %w", opts.profileDir, err)
 	}
 
 	// Chrome launch options
@@ -477,7 +514,7 @@ func (r *Runner) Run(ctx context.Context, opts options) error {
 			log.Println("3. Close any other Chrome instances that may be running")
 			log.Println("4. Try with -headless flag")
 		}
-		return chromeErrors.Wrap(testErr, chromeErrors.ChromeConnectionError, "Chrome connection test failed")
+		return fmt.Errorf("%w: Chrome connection test failed: %w", errChromeConnection, testErr)
 	}
 
 	if opts.verbose {
@@ -492,7 +529,7 @@ func (r *Runner) Run(ctx context.Context, opts options) error {
 		recorder.WithTemplate(opts.template),
 	)
 	if err != nil {
-		return chromeErrors.Wrap(err, chromeErrors.NetworkRecordError, "failed to create network recorder")
+		return fmt.Errorf("%w: failed to create network recorder: %w", recorder.ErrNetworkRecord, err)
 	}
 
 	// Enable network events BEFORE any navigation
@@ -513,7 +550,7 @@ func (r *Runner) Run(ctx context.Context, opts options) error {
 			return nil
 		}),
 	); err != nil {
-		return chromeErrors.Wrap(err, chromeErrors.NetworkError, "failed to enable network monitoring")
+		return fmt.Errorf("%w: failed to enable network monitoring: %w", browser.ErrNetwork, err)
 	}
 
 	// Set up blocking if enabled
@@ -533,25 +570,25 @@ func (r *Runner) Run(ctx context.Context, opts options) error {
 		var err error
 		blockingEngine, err = blocking.NewBlockingEngine(blockingConfig)
 		if err != nil {
-			return errors.Wrap(err, "creating blocking engine")
+			return fmt.Errorf("creating blocking engine: %w", err)
 		}
 
 		// Add common blocking rules if requested
 		if opts.blockCommonAds {
 			if err := blockingEngine.AddCommonAdBlockRules(); err != nil {
-				return errors.Wrap(err, "adding common ad blocking rules")
+				return fmt.Errorf("adding common ad blocking rules: %w", err)
 			}
 		}
 
 		if opts.blockCommonTracking {
 			if err := blockingEngine.AddCommonTrackingBlockRules(); err != nil {
-				return errors.Wrap(err, "adding common tracking blocking rules")
+				return fmt.Errorf("adding common tracking blocking rules: %w", err)
 			}
 		}
 
 		// Enable fetch domain for request interception
 		if err := chromedp.Run(taskCtx, fetch.Enable()); err != nil {
-			return errors.Wrap(err, "enabling fetch domain for blocking")
+			return fmt.Errorf("enabling fetch domain for blocking: %w", err)
 		}
 
 		// Set up the request interceptor
@@ -584,10 +621,7 @@ func (r *Runner) Run(ctx context.Context, opts options) error {
 		}
 
 		if err := chromedp.Run(navCtx, chromedp.Navigate(opts.startURL)); err != nil {
-			return chromeErrors.WithContext(
-				chromeErrors.Wrap(err, chromeErrors.ChromeNavigationError, "failed to navigate to URL"),
-				"url", opts.startURL,
-			)
+			return fmt.Errorf("%w: failed to navigate to URL %q: %w", browser.ErrNavigation, opts.startURL, err)
 		}
 
 		if opts.verbose {
@@ -669,10 +703,7 @@ func (r *Runner) Run(ctx context.Context, opts options) error {
 
 	if !opts.streaming {
 		if err := rec.WriteHAR(opts.outputFile); err != nil {
-			return chromeErrors.WithContext(
-				chromeErrors.FileError("write", opts.outputFile, err),
-				"format", "har",
-			)
+			return fmt.Errorf("failed to write HAR file %s: %w", opts.outputFile, err)
 		}
 	}
 
@@ -754,17 +785,17 @@ func waitForEnhancedStability(ctx context.Context, opts options) error {
 
 	// Enable network domain for monitoring
 	if err := chromedp.Run(stableCtx, network.Enable()); err != nil {
-		return chromeErrors.Wrap(err, chromeErrors.NetworkError, "failed to enable network domain")
+		return fmt.Errorf("%w: failed to enable network domain: %w", browser.ErrNetwork, err)
 	}
 
 	// Wait for DOM to be ready first
 	if err := chromedp.Run(stableCtx, chromedp.WaitReady("body")); err != nil {
-		return chromeErrors.Wrap(err, chromeErrors.ChromeTimeoutError, "timed out waiting for DOM ready")
+		return fmt.Errorf("%w: timed out waiting for DOM ready: %w", browser.ErrTimeout, err)
 	}
 
 	// Network idle detection
 	if err := waitForNetworkIdle(stableCtx, opts); err != nil {
-		return chromeErrors.Wrap(err, chromeErrors.NetworkIdleError, "network idle detection failed")
+		return fmt.Errorf("%w: network idle detection failed: %w", browser.ErrNetworkIdle, err)
 	}
 
 	// Wait for resources if requested
@@ -868,7 +899,7 @@ func waitForResources(ctx context.Context, opts options) error {
 		for {
 			select {
 			case <-resourceCtx.Done():
-				return errors.Errorf("timeout waiting for %s", check.name)
+				return fmt.Errorf("timeout waiting for %s", check.name)
 			case <-ticker.C:
 				var result bool
 				if err := chromedp.Run(resourceCtx, chromedp.Evaluate(check.script, &result)); err == nil && result {
@@ -897,7 +928,7 @@ func waitForJSExecution(ctx context.Context, opts options) error {
 	// Wait for next animation frame
 	var frameComplete bool
 	if err := chromedp.Run(jsCtx, chromedp.Evaluate(`new Promise(resolve => requestAnimationFrame(() => resolve(true)))`, &frameComplete)); err != nil {
-		return errors.Wrap(err, "waiting for animation frame")
+		return fmt.Errorf("waiting for animation frame: %w", err)
 	}
 
 	// Wait for idle callback if available
@@ -909,7 +940,7 @@ func waitForJSExecution(ctx context.Context, opts options) error {
 			setTimeout(() => resolve(true), 0);
 		}
 	})`, &idleComplete)); err != nil {
-		return errors.Wrap(err, "waiting for idle callback")
+		return fmt.Errorf("waiting for idle callback: %w", err)
 	}
 
 	if opts.verbose {
@@ -927,7 +958,7 @@ func waitForLegacyStability(ctx context.Context, opts options) error {
 
 	// Wait for page load
 	if err := chromedp.Run(stableCtx, chromedp.WaitReady("body")); err != nil {
-		return errors.Wrap(err, "waiting for page to be ready")
+		return fmt.Errorf("waiting for page to be ready: %w", err)
 	}
 
 	// Wait for a fixed delay to allow dynamic content to load
@@ -959,7 +990,7 @@ func runDifferentialMode(opts options) error {
 
 	controller, err := differential.NewDifferentialController(diffOpts)
 	if err != nil {
-		return errors.Wrap(err, "creating differential controller")
+		return fmt.Errorf("creating differential controller: %w", err)
 	}
 	defer controller.Cleanup()
 
@@ -995,7 +1026,7 @@ func runDifferentialMode(opts options) error {
 	// Handle delete capture
 	if opts.deleteCapture != "" {
 		if err := controller.DeleteCapture(opts.deleteCapture); err != nil {
-			return errors.Wrap(err, "deleting capture")
+			return fmt.Errorf("deleting capture: %w", err)
 		}
 		fmt.Printf("Capture %s deleted successfully\n", opts.deleteCapture)
 		return nil
@@ -1010,7 +1041,7 @@ func runDifferentialMode(opts options) error {
 		// Perform comparison
 		result, err := controller.CompareCapturesByID(opts.baselineCapture, opts.compareWith)
 		if err != nil {
-			return errors.Wrap(err, "comparing captures")
+			return fmt.Errorf("comparing captures: %w", err)
 		}
 
 		// Generate report
@@ -1060,7 +1091,7 @@ func runDifferentialMode(opts options) error {
 		}
 
 		if err := controller.GenerateReport(result, reportOpts); err != nil {
-			return errors.Wrap(err, "generating report")
+			return fmt.Errorf("generating report: %w", err)
 		}
 
 		fmt.Printf("Comparison completed successfully\n")
@@ -1096,7 +1127,7 @@ func runDifferentialMode(opts options) error {
 		// Create a new capture
 		capture, err := controller.CreateBaselineCapture(context.Background(), captureName, opts.startURL, "Differential mode capture", labels)
 		if err != nil {
-			return errors.Wrap(err, "creating capture")
+			return fmt.Errorf("creating capture: %w", err)
 		}
 
 		fmt.Printf("Created capture: %s (ID: %s)\n", capture.Name, capture.ID)

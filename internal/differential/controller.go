@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/chromedp/cdproto/har"
-	"github.com/pkg/errors"
+
 	"github.com/tmc/misc/chrome-to-har/internal/recorder"
 )
 
@@ -49,13 +49,13 @@ func NewDifferentialController(options *DifferentialOptions) (*DifferentialContr
 		options.WorkDir = filepath.Join(os.TempDir(), "chrome-to-har-diff")
 	}
 	if err := os.MkdirAll(options.WorkDir, 0755); err != nil {
-		return nil, errors.Wrap(err, "creating work directory")
+		return nil, fmt.Errorf("creating work directory: %w", err)
 	}
 
 	// Create capture manager
 	captureManager, err := NewCaptureManager(options.WorkDir, options.Verbose)
 	if err != nil {
-		return nil, errors.Wrap(err, "creating capture manager")
+		return nil, fmt.Errorf("creating capture manager: %w", err)
 	}
 
 	// Create diff engine
@@ -89,11 +89,11 @@ func (dc *DifferentialController) CreateBaselineCapture(ctx context.Context, nam
 	// Create capture metadata
 	metadata, err := dc.captureManager.CreateCapture(name, url, description, labels)
 	if err != nil {
-		return nil, errors.Wrap(err, "creating baseline capture")
+		return nil, fmt.Errorf("creating baseline capture: %w", err)
 	}
 
 	if err := dc.captureManager.StartCapture(metadata.ID); err != nil {
-		return nil, errors.Wrap(err, "starting baseline capture")
+		return nil, fmt.Errorf("starting baseline capture: %w", err)
 	}
 
 	return metadata, nil
@@ -108,11 +108,11 @@ func (dc *DifferentialController) CreateCompareCapture(ctx context.Context, name
 	// Create capture metadata
 	metadata, err := dc.captureManager.CreateCapture(name, url, description, labels)
 	if err != nil {
-		return nil, errors.Wrap(err, "creating compare capture")
+		return nil, fmt.Errorf("creating compare capture: %w", err)
 	}
 
 	if err := dc.captureManager.StartCapture(metadata.ID); err != nil {
-		return nil, errors.Wrap(err, "starting compare capture")
+		return nil, fmt.Errorf("starting compare capture: %w", err)
 	}
 
 	return metadata, nil
@@ -136,23 +136,23 @@ func (dc *DifferentialController) CompareCapturesByID(baselineID, compareID stri
 	// Get capture metadata
 	baselineMetadata, err := dc.captureManager.GetCapture(baselineID)
 	if err != nil {
-		return nil, errors.Wrap(err, "getting baseline capture")
+		return nil, fmt.Errorf("getting baseline capture: %w", err)
 	}
 
 	compareMetadata, err := dc.captureManager.GetCapture(compareID)
 	if err != nil {
-		return nil, errors.Wrap(err, "getting compare capture")
+		return nil, fmt.Errorf("getting compare capture: %w", err)
 	}
 
 	// Load HAR data
 	baselineHAR, err := dc.captureManager.LoadHAR(baselineID)
 	if err != nil {
-		return nil, errors.Wrap(err, "loading baseline HAR")
+		return nil, fmt.Errorf("loading baseline HAR: %w", err)
 	}
 
 	compareHAR, err := dc.captureManager.LoadHAR(compareID)
 	if err != nil {
-		return nil, errors.Wrap(err, "loading compare HAR")
+		return nil, fmt.Errorf("loading compare HAR: %w", err)
 	}
 
 	// Compare captures
@@ -229,7 +229,7 @@ func (dc *DifferentialController) CreateFullDiffReport(baselineID, compareID str
 	// Compare captures
 	result, err := dc.CompareCapturesByID(baselineID, compareID)
 	if err != nil {
-		return errors.Wrap(err, "comparing captures")
+		return fmt.Errorf("comparing captures: %w", err)
 	}
 
 	// Setup report options
@@ -289,13 +289,13 @@ func (dc *DifferentialController) RunDifferentialComparison(ctx context.Context,
 	// Perform comparison
 	result, err := dc.CompareCapturesByID(baselineCapture.ID, compareCapture.ID)
 	if err != nil {
-		return nil, errors.Wrap(err, "performing comparison")
+		return nil, fmt.Errorf("performing comparison: %w", err)
 	}
 
 	// Generate report if requested
 	if options.ReportOptions != nil {
 		if err := dc.GenerateReport(result, options.ReportOptions); err != nil {
-			return nil, errors.Wrap(err, "generating report")
+			return nil, fmt.Errorf("generating report: %w", err)
 		}
 	}
 

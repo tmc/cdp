@@ -6,7 +6,7 @@ import (
 	"regexp"
 	"time"
 
-	"github.com/pkg/errors"
+	"errors"
 )
 
 // WebSocketWaitCondition represents a condition to wait for

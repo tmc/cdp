@@ -5,10 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"errors"
+
 	"github.com/chromedp/cdproto/indexeddb"
 	"github.com/chromedp/cdproto/runtime"
 	"github.com/chromedp/chromedp"
-	"github.com/pkg/errors"
 )
 
 // StorageController handles storage operations
@@ -60,7 +61,7 @@ func (sc *StorageController) GetLocalStorage(ctx context.Context) (map[string]st
 	)
 
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to get localStorage")
+		return nil, fmt.Errorf("failed to get localStorage: %w", err)
 	}
 
 	// Convert to string map
@@ -157,7 +158,7 @@ func (sc *StorageController) GetSessionStorage(ctx context.Context) (map[string]
 	)
 
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to get sessionStorage")
+		return nil, fmt.Errorf("failed to get sessionStorage: %w", err)
 	}
 
 	// Convert to string map
@@ -230,7 +231,7 @@ func (sc *StorageController) GetCookies(ctx context.Context) ([]map[string]inter
 	)
 
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to get cookies")
+		return nil, fmt.Errorf("failed to get cookies: %w", err)
 	}
 
 	return cookies, nil
@@ -327,7 +328,7 @@ func (sc *StorageController) GetIndexedDBDatabases(ctx context.Context) ([]map[s
 	)
 
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to get IndexedDB databases")
+		return nil, fmt.Errorf("failed to get IndexedDB databases: %w", err)
 	}
 
 	return databases, nil
@@ -426,7 +427,7 @@ func (sc *StorageController) GetCacheStorage(ctx context.Context) ([]map[string]
 	)
 
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to get cache storage")
+		return nil, fmt.Errorf("failed to get cache storage: %w", err)
 	}
 
 	return caches, nil
