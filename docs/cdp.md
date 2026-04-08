@@ -5,13 +5,13 @@ CDP is a powerful command-line tool for interacting with Chrome using the Chrome
 ## Installation
 
 ```bash
-go install github.com/tmc/misc/chrome-to-har/cmd/cdp@latest
+go install github.com/tmc/cdp/cmd/cdp@latest
 ```
 
 Or build from source:
 
 ```bash
-cd chrome-to-har
+cd cdp
 go build -o cdp ./cmd/cdp
 ```
 

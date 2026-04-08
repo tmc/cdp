@@ -20,14 +20,14 @@
 ### Using Go Install
 
 ```bash
-go install github.com/tmc/misc/chrome-to-har/cmd/churl@latest
+go install github.com/tmc/cdp/cmd/churl@latest
 ```
 
 ### Building from Source
 
 ```bash
-git clone https://github.com/tmc/misc/chrome-to-har.git
-cd chrome-to-har
+git clone https://github.com/tmc/cdp.git
+cd cdp
 go build -o churl ./cmd/churl
 ```
 
@@ -578,7 +578,7 @@ jobs:
         uses: browser-actions/setup-chrome@latest
       
       - name: Install churl
-        run: go install github.com/tmc/misc/chrome-to-har/cmd/churl@latest
+        run: go install github.com/tmc/cdp/cmd/churl@latest
       
       - name: Test website availability
         run: |

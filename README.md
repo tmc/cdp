@@ -1,6 +1,6 @@
 # chrome-to-har
 
-[![Go Reference](https://pkg.go.dev/badge/github.com/tmc/misc/chrome-to-har.svg)](https://pkg.go.dev/github.com/tmc/misc/chrome-to-har)
+[![Go Reference](https://pkg.go.dev/badge/github.com/tmc/cdp.svg)](https://pkg.go.dev/github.com/tmc/cdp)
 
 A comprehensive suite of Chrome/Chromium automation tools for network traffic capture, web scraping, and browser automation.
 
@@ -148,13 +148,13 @@ source ~/.zshrc
 ### Install
 
 ```bash
-go install github.com/tmc/misc/chrome-to-har@latest
+go install github.com/tmc/cdp@latest
 ```
 
 ### Run directly
 
 ```bash
-go run github.com/tmc/misc/chrome-to-har@latest [arguments]
+go run github.com/tmc/cdp@latest [arguments]
 ```
 
 ## CDP - Chrome DevTools Protocol CLI
@@ -220,7 +220,7 @@ The `churl` command provides a curl-like interface with full JavaScript/SPA supp
 
 ```bash
 # Install churl (included with chrome-to-har)
-go install github.com/tmc/misc/chrome-to-har/cmd/churl@latest
+go install github.com/tmc/cdp/cmd/churl@latest
 
 # Or build from source
 cd cmd/churl && go build
@@ -365,4 +365,3 @@ churl --socks5-proxy socks5://proxy.example.com:1080 \
 ```
 
 For more information, run `churl --help`.
-

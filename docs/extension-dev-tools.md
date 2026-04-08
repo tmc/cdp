@@ -170,7 +170,7 @@ func extractBundledExtensions() (string, error) {
 - Chrome launch: optionally add `--load-extension=~/.cdp/extensions/coverage` to auto-load
 - Version check: embed a version stamp, only re-extract when cdp binary updates
 
-**Why embed**: Single binary distribution. No "clone the repo to get the extension" step. `go install github.com/tmc/misc/chrome-to-har/cmd/cdp@latest` gives you everything.
+**Why embed**: Single binary distribution. No "clone the repo to get the extension" step. `go install github.com/tmc/cdp/cmd/cdp@latest` gives you everything.
 
 ## Complexity
 

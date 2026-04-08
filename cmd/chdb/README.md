@@ -17,7 +17,7 @@ CHDB is a comprehensive command-line debugger for Chrome and Chromium browsers t
 ## Installation
 
 ```bash
-go install github.com/tmc/misc/chrome-to-har/cmd/chdb@latest
+go install github.com/tmc/cdp/cmd/chdb@latest
 ```
 
 Or build from source:

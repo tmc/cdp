@@ -318,7 +318,7 @@ package main
 
 import (
     "context"
-    "github.com/tmc/misc/chrome-to-har/internal/differential"
+    "github.com/tmc/cdp/internal/differential"
 )
 
 func main() {

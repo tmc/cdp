@@ -20,8 +20,8 @@ import (
     "fmt"
     "log"
 
-    "github.com/tmc/misc/chrome-to-har/internal/browser"
-    "github.com/tmc/misc/chrome-to-har/internal/langmodel"
+    "github.com/tmc/cdp/internal/browser"
+    "github.com/tmc/cdp/internal/langmodel"
 )
 
 func main() {
