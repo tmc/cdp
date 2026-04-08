@@ -33,3 +33,10 @@ func (gst *GlobalSessionTracker) SetNodeDebugger(debugger *NodeDebugger) {
 	defer gst.mu.Unlock()
 	gst.nodeDebugger = debugger
 }
+
+// GetNodeDebugger gets the current node debugger.
+func (gst *GlobalSessionTracker) GetNodeDebugger() *NodeDebugger {
+	gst.mu.RLock()
+	defer gst.mu.RUnlock()
+	return gst.nodeDebugger
+}

@@ -15,7 +15,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
-	"github.com/tmc/misc/chrome-to-har/internal/targets"
+	"github.com/tmc/cdp/internal/targets"
 )
 
 var (
@@ -159,6 +159,181 @@ var runtimeCmd = &cobra.Command{
 	Short: "Runtime domain commands",
 }
 
+var runtimeContextsCmd = &cobra.Command{
+	Use:   "contexts <port>",
+	Short: "List runtime execution contexts",
+	Args:  cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		ctx := createContext()
+		port := args[0]
+
+		client := NewV8InspectorClient("127.0.0.1", port, verbose)
+		if err := client.ConnectByPort(ctx, port); err != nil {
+			log.Fatalf("Failed to connect: %v", err)
+		}
+		rt := NewV8Runtime(client)
+		if err := rt.EnableRuntime(); err != nil {
+			log.Fatalf("Failed to enable runtime: %v", err)
+		}
+
+		contexts, err := rt.GetExecutionContexts()
+		if err != nil {
+			log.Fatalf("Failed to get contexts: %v", err)
+		}
+		if len(contexts) == 0 {
+			fmt.Println("No execution contexts reported")
+			return
+		}
+		for _, execCtx := range contexts {
+			fmt.Printf("%d\t%s\t%s\n", execCtx.ID, execCtx.Name, execCtx.Origin)
+		}
+	},
+}
+
+var runtimeDisableCmd = &cobra.Command{
+	Use:   "disable <port>",
+	Short: "Disable the runtime domain for a target",
+	Args:  cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		ctx := createContext()
+		port := args[0]
+
+		client := NewV8InspectorClient("127.0.0.1", port, verbose)
+		if err := client.ConnectByPort(ctx, port); err != nil {
+			log.Fatalf("Failed to connect: %v", err)
+		}
+		rt := NewV8Runtime(client)
+		if err := rt.DisableRuntime(); err != nil {
+			log.Fatalf("Failed to disable runtime: %v", err)
+		}
+		fmt.Printf("Runtime disabled on port %s\n", port)
+	},
+}
+
+var runtimeReleaseObjectCmd = &cobra.Command{
+	Use:   "release-object <port> <object-id>",
+	Short: "Release a remote object",
+	Args:  cobra.ExactArgs(2),
+	Run: func(cmd *cobra.Command, args []string) {
+		ctx := createContext()
+		port := args[0]
+		objectID := args[1]
+
+		client := NewV8InspectorClient("127.0.0.1", port, verbose)
+		if err := client.ConnectByPort(ctx, port); err != nil {
+			log.Fatalf("Failed to connect: %v", err)
+		}
+		rt := NewV8Runtime(client)
+		if err := rt.ReleaseObject(objectID); err != nil {
+			log.Fatalf("Failed to release object: %v", err)
+		}
+		_ = ctx
+		fmt.Printf("Released object %s\n", objectID)
+	},
+}
+
+var runtimeReleaseGroupCmd = &cobra.Command{
+	Use:   "release-group <port> <object-group>",
+	Short: "Release a remote object group",
+	Args:  cobra.ExactArgs(2),
+	Run: func(cmd *cobra.Command, args []string) {
+		ctx := createContext()
+		port := args[0]
+		group := args[1]
+
+		client := NewV8InspectorClient("127.0.0.1", port, verbose)
+		if err := client.ConnectByPort(ctx, port); err != nil {
+			log.Fatalf("Failed to connect: %v", err)
+		}
+		rt := NewV8Runtime(client)
+		if err := rt.ReleaseObjectGroup(group); err != nil {
+			log.Fatalf("Failed to release object group: %v", err)
+		}
+		_ = ctx
+		fmt.Printf("Released object group %s\n", group)
+	},
+}
+
+var runtimeCompileCmd = &cobra.Command{
+	Use:   "compile <port> <expression>",
+	Short: "Compile JavaScript and print the script ID",
+	Args:  cobra.ExactArgs(2),
+	Run: func(cmd *cobra.Command, args []string) {
+		ctx := createContext()
+		port := args[0]
+		expression := args[1]
+		sourceURL, _ := cmd.Flags().GetString("source-url")
+		persistScript, _ := cmd.Flags().GetBool("persist")
+		execContextID, _ := cmd.Flags().GetInt("context-id")
+
+		client := NewV8InspectorClient("127.0.0.1", port, verbose)
+		if err := client.ConnectByPort(ctx, port); err != nil {
+			log.Fatalf("Failed to connect: %v", err)
+		}
+		rt := NewV8Runtime(client)
+		scriptID, err := rt.CompileScript(expression, sourceURL, persistScript, execContextID)
+		if err != nil {
+			log.Fatalf("Failed to compile script: %v", err)
+		}
+		fmt.Println(scriptID)
+	},
+}
+
+var runtimeRunCmd = &cobra.Command{
+	Use:   "run <port> <script-id>",
+	Short: "Run a previously compiled script",
+	Args:  cobra.ExactArgs(2),
+	Run: func(cmd *cobra.Command, args []string) {
+		ctx := createContext()
+		port := args[0]
+		scriptID := args[1]
+		objectGroup, _ := cmd.Flags().GetString("object-group")
+		execContextID, _ := cmd.Flags().GetInt("context-id")
+		awaitPromise, _ := cmd.Flags().GetBool("await-promise")
+
+		client := NewV8InspectorClient("127.0.0.1", port, verbose)
+		if err := client.ConnectByPort(ctx, port); err != nil {
+			log.Fatalf("Failed to connect: %v", err)
+		}
+		rt := NewV8Runtime(client)
+		result, err := rt.RunScript(scriptID, execContextID, objectGroup, false, false, true, false, awaitPromise)
+		if err != nil {
+			log.Fatalf("Failed to run script: %v", err)
+		}
+		_ = ctx
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		enc.Encode(result)
+	},
+}
+
+var runtimeCallCmd = &cobra.Command{
+	Use:   "call <port> <object-id> <function-declaration>",
+	Short: "Call a function on a remote object",
+	Args:  cobra.ExactArgs(3),
+	Run: func(cmd *cobra.Command, args []string) {
+		ctx := createContext()
+		port := args[0]
+		objectID := args[1]
+		functionDecl := args[2]
+		silent, _ := cmd.Flags().GetBool("silent")
+
+		client := NewV8InspectorClient("127.0.0.1", port, verbose)
+		if err := client.ConnectByPort(ctx, port); err != nil {
+			log.Fatalf("Failed to connect: %v", err)
+		}
+		rt := NewV8Runtime(client)
+		result, err := rt.CallFunctionOn(objectID, functionDecl, nil, silent)
+		if err != nil {
+			log.Fatalf("Failed to call function: %v", err)
+		}
+		_ = ctx
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		enc.Encode(result)
+	},
+}
+
 var runtimeEvalCmd = &cobra.Command{
 	Use:     "evaluate <expression>",
 	Short:   "Evaluate JavaScript expression",
@@ -217,6 +392,21 @@ func init() {
 
 	// Runtime subcommands
 	runtimeCmd.AddCommand(runtimeEvalCmd)
+	runtimeCmd.AddCommand(runtimeContextsCmd)
+	runtimeCmd.AddCommand(runtimeDisableCmd)
+	runtimeCmd.AddCommand(runtimeReleaseObjectCmd)
+	runtimeCmd.AddCommand(runtimeReleaseGroupCmd)
+	runtimeCmd.AddCommand(runtimeCompileCmd)
+	runtimeCmd.AddCommand(runtimeRunCmd)
+	runtimeCmd.AddCommand(runtimeCallCmd)
+
+	runtimeCompileCmd.Flags().String("source-url", "", "Optional source URL for compiled script")
+	runtimeCompileCmd.Flags().Bool("persist", true, "Persist compiled script for later execution")
+	runtimeCompileCmd.Flags().Int("context-id", 0, "Execution context ID")
+	runtimeRunCmd.Flags().String("object-group", "", "Object group for references created by the script")
+	runtimeRunCmd.Flags().Int("context-id", 0, "Execution context ID")
+	runtimeRunCmd.Flags().Bool("await-promise", false, "Await promise results")
+	runtimeCallCmd.Flags().Bool("silent", false, "Suppress exception reporting")
 
 	// Profile commands
 
@@ -534,7 +724,27 @@ var targetsCmd = &cobra.Command{
 
 		// Use Chrome-style discovery for all targets
 		discovery := targets.NewDiscovery(5 * time.Second)
-		allTargets, err := discovery.DiscoverTargets(ctx)
+		if ports, _ := cmd.Flags().GetIntSlice("ports"); len(ports) > 0 {
+			discovery.SetPorts(ports)
+		}
+
+		singlePort, _ := cmd.Flags().GetInt("port")
+		showVersion, _ := cmd.Flags().GetBool("version")
+
+		var allTargets []targets.TargetInfo
+		var err error
+		if singlePort > 0 {
+			allTargets, err = discovery.DiscoverPort(ctx, singlePort)
+			if err == nil && showVersion {
+				version, versionErr := discovery.GetVersion(ctx, singlePort)
+				if versionErr != nil {
+					log.Fatalf("Failed to get version for port %d: %v", singlePort, versionErr)
+				}
+				fmt.Printf("Port %d: %s (protocol %s)\n\n", singlePort, version.Browser, version.ProtocolVersion)
+			}
+		} else {
+			allTargets, err = discovery.DiscoverTargets(ctx)
+		}
 		if err != nil {
 			log.Fatalf("Failed to discover targets: %v", err)
 		}
@@ -610,6 +820,9 @@ func main() {
 
 	nodeSessionsCmd.Flags().BoolP("simple", "s", false, "Simple output (just ports)")
 	nodeListCmd.Flags().BoolP("breakpoints", "b", false, "Show breakpoints in each session")
+	targetsCmd.Flags().Int("port", 0, "Query a single debug port")
+	targetsCmd.Flags().IntSlice("ports", nil, "Explicit ports to scan")
+	targetsCmd.Flags().Bool("version", false, "Show version info for --port")
 	chromeNavigateCmd.Flags().String("tab", "", "Target tab ID")
 	chromeConsoleCmd.Flags().String("tab", "", "Target tab ID")
 

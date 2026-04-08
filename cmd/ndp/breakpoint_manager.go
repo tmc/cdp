@@ -2,8 +2,10 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -105,6 +107,10 @@ func (bm *BreakpointManager) SetBreakpoint(ctx context.Context, location string,
 	}
 
 	fmt.Printf("Breakpoint %s set at %s\n", bp.ID, location)
+
+	if err := bm.SaveBreakpoints(""); err != nil && bm.verbose {
+		log.Printf("Warning: failed to persist breakpoints: %v", err)
+	}
 
 	return nil
 }
@@ -319,6 +325,10 @@ func (bm *BreakpointManager) RemoveBreakpoint(ctx context.Context, breakpointID 
 
 	fmt.Printf("Breakpoint %s removed\n", breakpointID)
 
+	if err := bm.SaveBreakpoints(""); err != nil && bm.verbose {
+		log.Printf("Warning: failed to persist breakpoints: %v", err)
+	}
+
 	return nil
 }
 
@@ -333,6 +343,96 @@ func (bm *BreakpointManager) ListBreakpoints() []Breakpoint {
 	}
 
 	return breakpoints
+}
+
+// GetBreakpoint retrieves a breakpoint by ID.
+func (bm *BreakpointManager) GetBreakpoint(breakpointID string) (*Breakpoint, error) {
+	bm.mu.RLock()
+	defer bm.mu.RUnlock()
+
+	bp, ok := bm.breakpoints[breakpointID]
+	if !ok {
+		return nil, fmt.Errorf("breakpoint %s not found", breakpointID)
+	}
+
+	return bp, nil
+}
+
+// SaveBreakpoints saves all known breakpoints to disk.
+func (bm *BreakpointManager) SaveBreakpoints(filename string) error {
+	if filename == "" {
+		var err error
+		filename, err = bm.breakpointFilename()
+		if err != nil {
+			return err
+		}
+	}
+
+	bm.mu.RLock()
+	breakpoints := make([]Breakpoint, 0, len(bm.breakpoints))
+	for _, bp := range bm.breakpoints {
+		breakpoints = append(breakpoints, *bp)
+	}
+	bm.mu.RUnlock()
+
+	data, err := json.MarshalIndent(breakpoints, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal breakpoints: %w", err)
+	}
+
+	if err := os.MkdirAll(filepath.Dir(filename), 0700); err != nil {
+		return fmt.Errorf("create breakpoint directory: %w", err)
+	}
+	if err := os.WriteFile(filename, data, 0600); err != nil {
+		return fmt.Errorf("write breakpoints: %w", err)
+	}
+
+	return nil
+}
+
+// LoadBreakpoints loads persisted breakpoints into the manager.
+func (bm *BreakpointManager) LoadBreakpoints(filename string) error {
+	if filename == "" {
+		var err error
+		filename, err = bm.breakpointFilename()
+		if err != nil {
+			return err
+		}
+	}
+
+	data, err := os.ReadFile(filename)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("read breakpoints: %w", err)
+	}
+
+	var breakpoints []Breakpoint
+	if err := json.Unmarshal(data, &breakpoints); err != nil {
+		return fmt.Errorf("unmarshal breakpoints: %w", err)
+	}
+
+	bm.mu.Lock()
+	defer bm.mu.Unlock()
+
+	bm.breakpoints = make(map[string]*Breakpoint, len(breakpoints))
+	for i := range breakpoints {
+		bp := breakpoints[i]
+		bm.breakpoints[bp.ID] = &bp
+	}
+
+	return nil
+}
+
+func (bm *BreakpointManager) breakpointFilename() (string, error) {
+	if bm.session == nil {
+		return "", errors.New("no active debug session")
+	}
+	if bm.session.Target.Port == "" {
+		return "", errors.New("debug session has no port")
+	}
+	return BreakpointFile(bm.session.Target.Port), nil
 }
 
 // getScripts retrieves all parsed scripts

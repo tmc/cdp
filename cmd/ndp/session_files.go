@@ -115,3 +115,8 @@ func GetDefaultSession() (string, error) {
 
 	return "", fmt.Errorf("invalid default session link")
 }
+
+// BreakpointFile returns the path used to persist breakpoints for a port.
+func BreakpointFile(port string) string {
+	return filepath.Join(GetSessionDir(), fmt.Sprintf("%s.breakpoints.json", port))
+}

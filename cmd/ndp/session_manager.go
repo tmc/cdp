@@ -15,7 +15,6 @@ import (
 
 	"errors"
 
-	"github.com/chromedp/cdproto/debugger"
 	cdptarget "github.com/chromedp/cdproto/target"
 	"github.com/chromedp/chromedp"
 )
@@ -217,6 +216,19 @@ func (sm *SessionManager) connectToTarget(ctx context.Context, target DebugTarge
 	return conn, nil
 }
 
+// GetSession retrieves a session by ID.
+func (sm *SessionManager) GetSession(sessionID string) (*Session, error) {
+	sm.mu.RLock()
+	defer sm.mu.RUnlock()
+
+	session, ok := sm.sessions[sessionID]
+	if !ok {
+		return nil, fmt.Errorf("session %s not found", sessionID)
+	}
+
+	return session, nil
+}
+
 // ListTargets lists all available debug targets
 func (sm *SessionManager) ListTargets(ctx context.Context) ([]DebugTarget, error) {
 	var targets []DebugTarget
@@ -351,7 +363,15 @@ func (sm *SessionManager) SaveSession(ctx context.Context, name string) error {
 	// Gather session state
 	session.mu.Lock()
 
-	// Get breakpoints
+	manager := NewBreakpointManager(sm.verbose)
+	manager.SetSession(session)
+	if err := manager.LoadBreakpoints(""); err != nil && sm.verbose {
+		log.Printf("Warning: failed to load persisted breakpoints: %v", err)
+	}
+	if breakpoints := manager.ListBreakpoints(); len(breakpoints) > 0 {
+		session.State["breakpoints"] = breakpoints
+	}
+
 	if err := chromedp.Run(session.ChromeCtx,
 		chromedp.ActionFunc(func(ctx context.Context) error {
 			// Basic session state capture - simplified for now
@@ -411,14 +431,20 @@ func (sm *SessionManager) LoadSession(ctx context.Context, name string) error {
 
 	// Restore session state
 	if breakpoints, ok := session.State["breakpoints"]; ok && breakpoints != nil {
-		// Restore breakpoints
-		if err := chromedp.Run(session.ChromeCtx,
-			chromedp.ActionFunc(func(ctx context.Context) error {
-				_, err := debugger.Enable().Do(ctx)
-				return err
-			}),
-		); err != nil && sm.verbose {
-			log.Printf("Warning: failed to restore breakpoints: %v", err)
+		manager := NewBreakpointManager(sm.verbose)
+		manager.SetSession(&session)
+		if persisted, err := json.Marshal(breakpoints); err == nil {
+			filename := BreakpointFile(session.Target.Port)
+			if err := os.WriteFile(filename, persisted, 0600); err != nil && sm.verbose {
+				log.Printf("Warning: failed to persist restored breakpoints: %v", err)
+			}
+		}
+		if err := manager.LoadBreakpoints(""); err == nil {
+			for _, bp := range manager.ListBreakpoints() {
+				if err := manager.SetBreakpoint(ctx, bp.Location, bp.Condition); err != nil && sm.verbose {
+					log.Printf("Warning: failed to restore breakpoint %s: %v", bp.Location, err)
+				}
+			}
 		}
 	}
 

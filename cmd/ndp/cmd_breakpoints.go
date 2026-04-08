@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 
 	"github.com/chromedp/cdproto/domdebugger"
@@ -16,9 +17,45 @@ var nodeBreakpointsCmd = &cobra.Command{
 		ctx := createContext()
 		port := args[0]
 
-		setter := NewSimpleBreakpointSetter(port)
-		if err := setter.ListBreakpoints(ctx); err != nil {
-			log.Fatalf("Failed to list breakpoints: %v", err)
+		debugger := NewNodeDebugger(verbose)
+		if err := debugger.Attach(ctx, port); err != nil {
+			log.Fatalf("Failed to attach to Node.js process: %v", err)
+		}
+
+		session := globalSessionTracker.GetCurrentSession()
+		if session == nil {
+			log.Fatalf("No active debug session")
+		}
+		if globalSessionTracker.GetNodeDebugger() == nil {
+			log.Fatalf("Node debugger is not available")
+		}
+		session, err := debugger.manager.GetSession(session.ID)
+		if err != nil {
+			log.Fatalf("Failed to resolve session: %v", err)
+		}
+
+		manager := NewBreakpointManager(verbose)
+		manager.SetSession(session)
+		if err := manager.LoadBreakpoints(""); err != nil {
+			log.Fatalf("Failed to load breakpoints: %v", err)
+		}
+
+		breakpoints := manager.ListBreakpoints()
+		if len(breakpoints) == 0 {
+			setter := NewSimpleBreakpointSetter(port)
+			if err := setter.ListBreakpoints(ctx); err != nil {
+				log.Fatalf("Failed to list breakpoints: %v", err)
+			}
+			return
+		}
+
+		fmt.Printf("Saved breakpoints (%d):\n", len(breakpoints))
+		for _, bp := range breakpoints {
+			if bp.Condition != "" {
+				fmt.Printf("  %s  %s if %s\n", bp.ID, bp.Location, bp.Condition)
+				continue
+			}
+			fmt.Printf("  %s  %s\n", bp.ID, bp.Location)
 		}
 	},
 }
@@ -44,6 +81,13 @@ var nodeBreakCmd = &cobra.Command{
 		if session == nil {
 			log.Fatalf("No active debug session")
 		}
+		if globalSessionTracker.GetNodeDebugger() == nil {
+			log.Fatalf("Node debugger is not available")
+		}
+		session, err := debugger.manager.GetSession(session.ID)
+		if err != nil {
+			log.Fatalf("Failed to resolve session: %v", err)
+		}
 
 		manager := NewBreakpointManager(verbose)
 		manager.SetSession(session)
@@ -55,6 +99,48 @@ var nodeBreakCmd = &cobra.Command{
 				log.Fatalf("Failed to set breakpoint: %v", err)
 			}
 		}
+	},
+}
+
+var nodeBreakRemoveCmd = &cobra.Command{
+	Use:   "break-remove <port> <breakpoint-id>",
+	Short: "Remove a saved breakpoint from a debug session",
+	Args:  cobra.ExactArgs(2),
+	Run: func(cmd *cobra.Command, args []string) {
+		ctx := createContext()
+		port := args[0]
+		breakpointID := args[1]
+
+		debugger := NewNodeDebugger(verbose)
+		if err := debugger.Attach(ctx, port); err != nil {
+			log.Fatalf("Failed to attach to Node.js process: %v", err)
+		}
+
+		session := globalSessionTracker.GetCurrentSession()
+		if session == nil {
+			log.Fatalf("No active debug session")
+		}
+		if globalSessionTracker.GetNodeDebugger() == nil {
+			log.Fatalf("Node debugger is not available")
+		}
+		session, err := debugger.manager.GetSession(session.ID)
+		if err != nil {
+			log.Fatalf("Failed to resolve session: %v", err)
+		}
+
+		manager := NewBreakpointManager(verbose)
+		manager.SetSession(session)
+		if err := manager.LoadBreakpoints(""); err != nil {
+			log.Fatalf("Failed to load breakpoints: %v", err)
+		}
+		bp, err := manager.GetBreakpoint(breakpointID)
+		if err != nil {
+			log.Fatalf("Failed to find breakpoint: %v", err)
+		}
+		if err := manager.RemoveBreakpoint(ctx, breakpointID); err != nil {
+			log.Fatalf("Failed to remove breakpoint: %v", err)
+		}
+		fmt.Printf("Removed breakpoint %s at %s\n", bp.ID, bp.Location)
 	},
 }
 
@@ -95,6 +181,7 @@ var nodeBreakXhrCmd = &cobra.Command{
 func init() {
 	nodeCmd.AddCommand(nodeBreakCmd)
 	nodeCmd.AddCommand(nodeBreakpointsCmd)
+	nodeCmd.AddCommand(nodeBreakRemoveCmd)
 	nodeCmd.AddCommand(nodeBreakXhrCmd)
 
 	nodeBreakCmd.Flags().StringP("condition", "c", "", "Conditional breakpoint")

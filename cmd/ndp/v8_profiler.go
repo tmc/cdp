@@ -1,6 +1,9 @@
 package main
 
-import "fmt"
+import (
+	"fmt"
+	"time"
+)
 
 // V8Profiler provides CPU and memory profiling capabilities
 type V8Profiler struct {
@@ -625,4 +628,35 @@ func (p *V8Profiler) parseSamplingHeapProfileNode(node map[string]interface{}) S
 	}
 
 	return profileNode
+}
+
+// ProfilerSession provides high-level profiling session management.
+type ProfilerSession struct {
+	profiler   *V8Profiler
+	startTime  time.Time
+	cpuRunning bool
+	title      string
+}
+
+// NewProfilerSession creates a new profiler session.
+func NewProfilerSession(profiler *V8Profiler, title string) *ProfilerSession {
+	return &ProfilerSession{profiler: profiler, title: title}
+}
+
+// StartCPUProfiling starts a CPU profiling session.
+func (s *ProfilerSession) StartCPUProfiling(samplingInterval int) error {
+	s.startTime = time.Now()
+	s.cpuRunning = true
+	return s.profiler.StartCPUProfiling(s.title, samplingInterval)
+}
+
+// StopCPUProfiling stops the CPU profiling session.
+func (s *ProfilerSession) StopCPUProfiling() (*V8CPUProfile, time.Duration, error) {
+	if !s.cpuRunning {
+		return nil, 0, fmt.Errorf("CPU profiling is not running")
+	}
+	profile, err := s.profiler.StopCPUProfiling()
+	duration := time.Since(s.startTime)
+	s.cpuRunning = false
+	return profile, duration, err
 }

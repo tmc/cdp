@@ -31,6 +31,17 @@ func (r *V8Runtime) EnableRuntime() error {
 	return nil
 }
 
+// DisableRuntime disables the Runtime domain.
+func (r *V8Runtime) DisableRuntime() error {
+	_, err := r.client.SendCommand("Runtime.disable", nil)
+	if err != nil {
+		return err
+	}
+
+	r.client.runtimeEnabled = false
+	return nil
+}
+
 // Evaluate executes JavaScript code in the global context
 func (r *V8Runtime) Evaluate(expression string, options *EvaluateOptions) (*EvaluationResult, error) {
 	params := map[string]interface{}{
@@ -171,6 +182,135 @@ type PropertyDescriptor struct {
 	Symbol       *RemoteObject `json:"symbol,omitempty"`
 }
 
+// CallArgument represents an argument for function calls.
+type CallArgument struct {
+	Value               interface{} `json:"value,omitempty"`
+	UnserializableValue string      `json:"unserializableValue,omitempty"`
+	ObjectID            string      `json:"objectId,omitempty"`
+}
+
+// ExecutionContextDescription describes an execution context.
+type ExecutionContextDescription struct {
+	ID      int                    `json:"id"`
+	Origin  string                 `json:"origin"`
+	Name    string                 `json:"name"`
+	AuxData map[string]interface{} `json:"auxData,omitempty"`
+}
+
+// CallFunctionOn calls a function on a remote object.
+func (r *V8Runtime) CallFunctionOn(objectID, functionDeclaration string, arguments []CallArgument, silent bool) (*EvaluationResult, error) {
+	params := map[string]interface{}{
+		"functionDeclaration": functionDeclaration,
+		"silent":              silent,
+	}
+	if objectID != "" {
+		params["objectId"] = objectID
+	}
+	if len(arguments) > 0 {
+		args := make([]map[string]interface{}, 0, len(arguments))
+		for _, arg := range arguments {
+			item := map[string]interface{}{}
+			if arg.Value != nil {
+				item["value"] = arg.Value
+			}
+			if arg.UnserializableValue != "" {
+				item["unserializableValue"] = arg.UnserializableValue
+			}
+			if arg.ObjectID != "" {
+				item["objectId"] = arg.ObjectID
+			}
+			args = append(args, item)
+		}
+		params["arguments"] = args
+	}
+	result, err := r.client.SendCommand("Runtime.callFunctionOn", params)
+	if err != nil {
+		return nil, err
+	}
+	return r.parseEvaluationResult(result), nil
+}
+
+// ReleaseObject releases a remote object.
+func (r *V8Runtime) ReleaseObject(objectID string) error {
+	_, err := r.client.SendCommand("Runtime.releaseObject", map[string]interface{}{"objectId": objectID})
+	return err
+}
+
+// ReleaseObjectGroup releases all objects in an object group.
+func (r *V8Runtime) ReleaseObjectGroup(objectGroup string) error {
+	_, err := r.client.SendCommand("Runtime.releaseObjectGroup", map[string]interface{}{"objectGroup": objectGroup})
+	return err
+}
+
+// GetExecutionContexts retrieves available execution contexts.
+func (r *V8Runtime) GetExecutionContexts() ([]ExecutionContextDescription, error) {
+	result, err := r.client.SendCommand("Runtime.getExecutionContexts", nil)
+	if err != nil {
+		return nil, err
+	}
+	var contexts []ExecutionContextDescription
+	if ctxs, ok := result["contexts"].([]interface{}); ok {
+		for _, ctx := range ctxs {
+			if ctxMap, ok := ctx.(map[string]interface{}); ok {
+				contexts = append(contexts, r.parseExecutionContext(ctxMap))
+			}
+		}
+	}
+	return contexts, nil
+}
+
+// CompileScript compiles a script and returns its script ID.
+func (r *V8Runtime) CompileScript(expression, sourceURL string, persistScript bool, executionContextID int) (string, error) {
+	params := map[string]interface{}{
+		"expression":    expression,
+		"sourceURL":     sourceURL,
+		"persistScript": persistScript,
+	}
+	if executionContextID > 0 {
+		params["executionContextId"] = executionContextID
+	}
+	result, err := r.client.SendCommand("Runtime.compileScript", params)
+	if err != nil {
+		return "", err
+	}
+	scriptID, _ := result["scriptId"].(string)
+	if scriptID == "" {
+		return "", fmt.Errorf("failed to compile script")
+	}
+	return scriptID, nil
+}
+
+// RunScript runs a compiled script.
+func (r *V8Runtime) RunScript(scriptID string, executionContextID int, objectGroup string, silent bool, includeCommandLineAPI bool, returnByValue bool, generatePreview bool, awaitPromise bool) (*EvaluationResult, error) {
+	params := map[string]interface{}{"scriptId": scriptID}
+	if executionContextID > 0 {
+		params["executionContextId"] = executionContextID
+	}
+	if objectGroup != "" {
+		params["objectGroup"] = objectGroup
+	}
+	if silent {
+		params["silent"] = true
+	}
+	if includeCommandLineAPI {
+		params["includeCommandLineAPI"] = true
+	}
+	if returnByValue {
+		params["returnByValue"] = true
+	}
+	if generatePreview {
+		params["generatePreview"] = true
+	}
+	if awaitPromise {
+		params["awaitPromise"] = true
+	}
+	result, err := r.client.SendCommand("Runtime.runScript", params)
+	if err != nil {
+		return nil, err
+	}
+	return r.parseEvaluationResult(result), nil
+}
+
 // Utility methods for parsing CDP responses
 
 func (r *V8Runtime) parseEvaluationResult(result map[string]interface{}) *EvaluationResult {
@@ -288,6 +428,23 @@ func (r *V8Runtime) parsePropertyDescriptor(prop map[string]interface{}) Propert
 		desc.Symbol = r.parseRemoteObject(symbol)
 	}
 
+	return desc
+}
+
+func (r *V8Runtime) parseExecutionContext(ctx map[string]interface{}) ExecutionContextDescription {
+	desc := ExecutionContextDescription{}
+	if id, ok := ctx["id"].(float64); ok {
+		desc.ID = int(id)
+	}
+	if origin, ok := ctx["origin"].(string); ok {
+		desc.Origin = origin
+	}
+	if name, ok := ctx["name"].(string); ok {
+		desc.Name = name
+	}
+	if auxData, ok := ctx["auxData"].(map[string]interface{}); ok {
+		desc.AuxData = auxData
+	}
 	return desc
 }
 

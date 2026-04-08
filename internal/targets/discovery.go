@@ -50,6 +50,11 @@ func NewDiscovery(timeout time.Duration) *Discovery {
 	}
 }
 
+// SetPorts sets the ports scanned for debugging targets.
+func (d *Discovery) SetPorts(ports []int) {
+	d.ports = ports
+}
+
 // DiscoverTargets discovers all available debugging targets using Chrome's method
 func (d *Discovery) DiscoverTargets(ctx context.Context) ([]TargetInfo, error) {
 	var mu sync.Mutex
@@ -73,6 +78,11 @@ func (d *Discovery) DiscoverTargets(ctx context.Context) ([]TargetInfo, error) {
 
 	wg.Wait()
 	return targets, nil
+}
+
+// DiscoverPort discovers targets on a specific port.
+func (d *Discovery) DiscoverPort(ctx context.Context, port int) ([]TargetInfo, error) {
+	return d.discoverPort(ctx, port)
 }
 
 // discoverPort discovers targets on a specific port (internal implementation)
@@ -130,6 +140,33 @@ func (d *Discovery) discoverPort(ctx context.Context, port int) ([]TargetInfo, e
 	}
 
 	return targets, nil
+}
+
+// GetVersion gets version information for a specific port.
+func (d *Discovery) GetVersion(ctx context.Context, port int) (*VersionInfo, error) {
+	versionURL := fmt.Sprintf("http://localhost:%d/json/version", port)
+
+	req, err := http.NewRequestWithContext(ctx, "GET", versionURL, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := d.client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+	}
+
+	var version VersionInfo
+	if err := json.NewDecoder(resp.Body).Decode(&version); err != nil {
+		return nil, fmt.Errorf("failed to parse version info: %w", err)
+	}
+
+	return &version, nil
 }
 
 // IsNodeTarget returns true if the target is a Node.js debugging target
