@@ -10,7 +10,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"time"
 
@@ -432,77 +431,6 @@ func (nd *NodeDebugger) printStackTrace() {
 	// TODO: Implement stack trace display
 }
 
-// ListProcesses lists Node.js processes with debugging enabled
-func (nd *NodeDebugger) ListProcesses(ctx context.Context) ([]NodeProcess, error) {
-	var processes []NodeProcess
-
-	// Use ps to find Node.js processes
-	cmd := exec.Command("ps", "aux")
-	output, err := cmd.Output()
-	if err != nil {
-		return nil, fmt.Errorf("failed to list processes: %w", err)
-	}
-
-	lines := strings.Split(string(output), "\n")
-	for _, line := range lines {
-		if strings.Contains(line, "node") && strings.Contains(line, "--inspect") {
-			fields := strings.Fields(line)
-			if len(fields) < 11 {
-				continue
-			}
-
-			pid, _ := strconv.Atoi(fields[1])
-
-			// Extract debug port
-			port := "9229" // default
-			for _, field := range fields {
-				if strings.HasPrefix(field, "--inspect=") {
-					parts := strings.Split(field, "=")
-					if len(parts) > 1 {
-						portParts := strings.Split(parts[1], ":")
-						port = portParts[len(portParts)-1]
-					}
-				} else if strings.HasPrefix(field, "--inspect-brk=") {
-					parts := strings.Split(field, "=")
-					if len(parts) > 1 {
-						portParts := strings.Split(parts[1], ":")
-						port = portParts[len(portParts)-1]
-					}
-				}
-			}
-
-			// Find script name
-			script := ""
-			foundNode := false
-			for _, field := range fields[10:] {
-				if foundNode && !strings.HasPrefix(field, "-") {
-					script = field
-					break
-				}
-				if strings.Contains(field, "node") {
-					foundNode = true
-				}
-			}
-
-			process := NodeProcess{
-				PID:    pid,
-				Port:   port,
-				Script: script,
-			}
-
-			// Verify the process is actually debuggable
-			url := fmt.Sprintf("http://localhost:%s/json/version", port)
-			client := &http.Client{Timeout: 500 * time.Millisecond}
-			if resp, err := client.Get(url); err == nil {
-				resp.Body.Close()
-				processes = append(processes, process)
-			}
-		}
-	}
-
-	return processes, nil
-}
-
 // StartScript starts a Node.js script with debugging enabled
 func (nd *NodeDebugger) StartScript(ctx context.Context, scriptPath string, port string, inspectBrk bool) error {
 	nd.scriptPath = scriptPath
@@ -576,31 +504,6 @@ func (nd *NodeDebugger) AddWatch(ctx context.Context, expression string) error {
 		}
 	} else {
 		fmt.Printf("Watch added: %s (will be evaluated when paused)\n", expression)
-	}
-
-	return nil
-}
-
-// RemoveWatch removes a watch expression
-func (nd *NodeDebugger) RemoveWatch(expression string) {
-	var newWatches []string
-	for _, w := range nd.watches {
-		if w != expression {
-			newWatches = append(newWatches, w)
-		}
-	}
-	nd.watches = newWatches
-}
-
-// Close closes the debugger connection
-func (nd *NodeDebugger) Close() error {
-	if nd.session != nil {
-		nd.manager.CloseSession(nd.session.ID)
-	}
-
-	if nd.nodeProcess != nil {
-		// Terminate the Node.js process we started
-		nd.nodeProcess.Kill()
 	}
 
 	return nil

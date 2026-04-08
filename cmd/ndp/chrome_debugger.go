@@ -6,13 +6,11 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"os"
 	"strings"
 	"time"
 
 	"errors"
 
-	"github.com/chromedp/cdproto/cdp"
 	"github.com/chromedp/cdproto/debugger"
 	"github.com/chromedp/cdproto/dom"
 	"github.com/chromedp/cdproto/network"
@@ -455,124 +453,6 @@ func (cd *ChromeDebugger) EvaluateJS(ctx context.Context, expression string, tab
 	}
 
 	return result, nil
-}
-
-// StartNetworkRecording starts recording network activity
-func (cd *ChromeDebugger) StartNetworkRecording() {
-	cd.recordingNetwork = true
-	cd.networkRequests = make(map[string]*NetworkRequest)
-	fmt.Println("Network recording started")
-}
-
-// StopNetworkRecording stops recording network activity
-func (cd *ChromeDebugger) StopNetworkRecording() []NetworkRequest {
-	cd.recordingNetwork = false
-
-	var requests []NetworkRequest
-	for _, req := range cd.networkRequests {
-		requests = append(requests, *req)
-	}
-
-	fmt.Printf("Network recording stopped. Captured %d requests\n", len(requests))
-
-	return requests
-}
-
-// TakeScreenshot takes a screenshot of the current page
-func (cd *ChromeDebugger) TakeScreenshot(ctx context.Context, filename string) error {
-	if cd.session == nil {
-		return errors.New("not attached to Chrome")
-	}
-
-	var buf []byte
-	err := chromedp.Run(cd.session.ChromeCtx,
-		chromedp.CaptureScreenshot(&buf),
-	)
-
-	if err != nil {
-		return fmt.Errorf("failed to capture screenshot: %w", err)
-	}
-
-	// Save to file
-	if err := os.WriteFile(filename, buf, 0644); err != nil {
-		return fmt.Errorf("failed to save screenshot: %w", err)
-	}
-
-	fmt.Printf("Screenshot saved to: %s\n", filename)
-
-	return nil
-}
-
-// GetPageHTML gets the current page HTML
-func (cd *ChromeDebugger) GetPageHTML(ctx context.Context) (string, error) {
-	if cd.session == nil {
-		return "", errors.New("not attached to Chrome")
-	}
-
-	var html string
-	err := chromedp.Run(cd.session.ChromeCtx,
-		chromedp.OuterHTML("html", &html),
-	)
-
-	if err != nil {
-		return "", fmt.Errorf("failed to get page HTML: %w", err)
-	}
-
-	return html, nil
-}
-
-// InspectElement inspects a DOM element by selector
-func (cd *ChromeDebugger) InspectElement(ctx context.Context, selector string) error {
-	if cd.session == nil {
-		return errors.New("not attached to Chrome")
-	}
-
-	var nodeID cdp.NodeID
-	err := chromedp.Run(cd.session.ChromeCtx,
-		chromedp.ActionFunc(func(ctx context.Context) error {
-			// Get document
-			doc, err := dom.GetDocument().Do(ctx)
-			if err != nil {
-				return err
-			}
-
-			// Query selector
-			nodeID, err = dom.QuerySelector(doc.NodeID, selector).Do(ctx)
-			if err != nil {
-				return err
-			}
-
-			if nodeID == 0 {
-				return fmt.Errorf("element not found: %s", selector)
-			}
-
-			// Get node details
-			node, err := dom.DescribeNode().WithNodeID(nodeID).Do(ctx)
-			if err != nil {
-				return err
-			}
-
-			fmt.Printf("Element: %s\n", node.NodeName)
-			if len(node.Attributes) > 0 {
-				fmt.Println("Attributes:")
-				for i := 0; i < len(node.Attributes); i += 2 {
-					fmt.Printf("  %s: %s\n", node.Attributes[i], node.Attributes[i+1])
-				}
-			}
-
-			return nil
-		}),
-	)
-
-	return err
-}
-
-// Close closes the Chrome debugger connection
-func (cd *ChromeDebugger) Close() error {
-	if cd.session != nil {
-		return cd.manager.CloseSession(cd.session.ID)
-	}
-	return nil
 }
 
 // Helper function to safely get string from map

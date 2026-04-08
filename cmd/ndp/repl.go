@@ -89,10 +89,6 @@ func NewREPL(verbose bool) *REPL {
 	return r
 }
 
-func (r *REPL) SetOutput(w io.Writer) {
-	r.out = w
-}
-
 func (r *REPL) print(a ...interface{}) {
 	fmt.Fprint(r.out, a...)
 }

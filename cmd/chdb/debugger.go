@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -10,7 +9,6 @@ import (
 
 	"github.com/chromedp/cdproto/debugger"
 	"github.com/chromedp/cdproto/domdebugger"
-	"github.com/chromedp/cdproto/runtime"
 	"github.com/chromedp/chromedp"
 )
 
@@ -21,10 +19,6 @@ type DebuggerController struct {
 
 	// Breakpoint tracking
 	breakpoints map[string]*Breakpoint
-
-	// Execution state
-	paused    bool
-	callStack []debugger.CallFrame
 
 	// Watch expressions
 	watches []string
@@ -168,30 +162,6 @@ func (dc *DebuggerController) SetXHRBreakpoint(ctx context.Context, urlPattern s
 	return nil
 }
 
-// SetDOMBreakpoint sets a breakpoint on DOM modification
-func (dc *DebuggerController) SetDOMBreakpoint(ctx context.Context, nodeID int64, typeVal string) error {
-	if !dc.debugger.connected {
-		return errors.New("not connected to Chrome")
-	}
-
-	// We need cdproto.NodeID
-	// The caller should have resolved selector to ID already, or we do it here?
-	// Let's assume we pass in the ID for now, or use a helper.
-	// Actually, easier to use domdebugger.SetDOMBreakpoint directly with Action.
-
-	// Wait, domdebugger.SetDOMBreakpoint takes cdp.NodeID.
-	// We'll need cdp import if we use strict types, or use int64 and cast.
-	// Importing cdp package might be cleaner.
-
-	// For now, let's keep it simple and assume standard integration.
-
-	// To avoid import cycles or new imports, let's assume we can cast.
-	// But cdp.NodeID is strict.
-	// Let's rely on the caller or `dom` package.
-
-	return errors.New("DOM breakpoints require resolving NodeID first (not yet implemented fully)")
-}
-
 // SetEventListenerBreakpoint sets a breakpoint on an event name
 func (dc *DebuggerController) SetEventListenerBreakpoint(ctx context.Context, eventName string) error {
 	if !dc.debugger.connected {
@@ -308,151 +278,4 @@ func (dc *DebuggerController) StepOut(ctx context.Context) error {
 			return debugger.StepOut().Do(ctx)
 		}),
 	)
-}
-
-// GetCallStack returns the current call stack
-func (dc *DebuggerController) GetCallStack(ctx context.Context) ([]debugger.CallFrame, error) {
-	if !dc.debugger.connected {
-		return nil, errors.New("not connected to Chrome")
-	}
-
-	// The call stack is typically received via the Paused event
-	// For now, return the cached call stack
-	return dc.callStack, nil
-}
-
-// EvaluateOnCallFrame evaluates an expression in a specific call frame
-func (dc *DebuggerController) EvaluateOnCallFrame(ctx context.Context, frameID string, expression string) (interface{}, error) {
-	if !dc.debugger.connected {
-		return nil, errors.New("not connected to Chrome")
-	}
-
-	var result *runtime.RemoteObject
-	err := chromedp.Run(dc.debugger.chromeCtx,
-		chromedp.ActionFunc(func(ctx context.Context) error {
-			res, _, err := debugger.EvaluateOnCallFrame(debugger.CallFrameID(frameID), expression).Do(ctx)
-			result = res
-			return err
-		}),
-	)
-
-	if err != nil {
-		return nil, fmt.Errorf("failed to evaluate expression: %w", err)
-	}
-
-	if result.Value != nil {
-		var value interface{}
-		if err := json.Unmarshal(result.Value, &value); err == nil {
-			return value, nil
-		}
-	}
-
-	return result.Description, nil
-}
-
-// SetupEventListeners sets up debugger event listeners
-func (dc *DebuggerController) SetupEventListeners() {
-	chromedp.ListenTarget(dc.debugger.chromeCtx, func(ev interface{}) {
-		switch e := ev.(type) {
-		case *debugger.EventPaused:
-			dc.handlePaused(e)
-		case *debugger.EventResumed:
-			dc.handleResumed()
-		// Note: EventBreakpointResolved is not available in current CDP
-		// We'll handle breakpoint resolution through other means
-		case *debugger.EventScriptParsed:
-			if dc.verbose {
-				fmt.Printf("Script parsed: %s\n", e.URL)
-			}
-		}
-	})
-}
-
-// handlePaused handles the paused event
-func (dc *DebuggerController) handlePaused(ev *debugger.EventPaused) {
-	dc.paused = true
-	// Convert to local type
-	var callStack []debugger.CallFrame
-	for _, frame := range ev.CallFrames {
-		if frame != nil {
-			callStack = append(callStack, *frame)
-		}
-	}
-	dc.callStack = callStack
-
-	fmt.Printf("\n=== Debugger Paused ===\n")
-	fmt.Printf("Reason: %s\n", ev.Reason)
-
-	if len(ev.CallFrames) > 0 {
-		frame := ev.CallFrames[0]
-		fmt.Printf("Location: %d:%d\n",
-			frame.Location.LineNumber,
-			frame.Location.ColumnNumber)
-
-		if frame.FunctionName != "" {
-			fmt.Printf("Function: %s\n", frame.FunctionName)
-		}
-	}
-
-	// Show watch expressions
-	if len(dc.watches) > 0 {
-		fmt.Println("\nWatch Expressions:")
-		for _, expr := range dc.watches {
-			if len(ev.CallFrames) > 0 {
-				value, err := dc.EvaluateOnCallFrame(context.Background(),
-					string(ev.CallFrames[0].CallFrameID), expr)
-				if err != nil {
-					fmt.Printf("  %s: <error: %v>\n", expr, err)
-				} else {
-					fmt.Printf("  %s: %v\n", expr, value)
-				}
-			}
-		}
-	}
-
-	// Show call stack
-	if len(ev.CallFrames) > 1 {
-		fmt.Println("\nCall Stack:")
-		for i, frame := range ev.CallFrames {
-			fmt.Printf("  %d. %s (line %d)\n",
-				i,
-				frame.FunctionName,
-				frame.Location.LineNumber)
-		}
-	}
-
-	fmt.Println("\nCommands: (c)ontinue, (n)ext, (s)tep in, (o)ut, (p)rint <expr>")
-}
-
-// handleResumed handles the resumed event
-func (dc *DebuggerController) handleResumed() {
-	dc.paused = false
-	dc.callStack = nil
-	fmt.Println("=== Execution Resumed ===")
-}
-
-// Note: handleBreakpointResolved is not used as EventBreakpointResolved is not available
-// in the current CDP implementation
-
-// AddWatch adds a watch expression
-func (dc *DebuggerController) AddWatch(expression string) {
-	dc.watches = append(dc.watches, expression)
-	fmt.Printf("Watch added: %s\n", expression)
-}
-
-// RemoveWatch removes a watch expression
-func (dc *DebuggerController) RemoveWatch(expression string) {
-	var newWatches []string
-	for _, w := range dc.watches {
-		if w != expression {
-			newWatches = append(newWatches, w)
-		}
-	}
-	dc.watches = newWatches
-	fmt.Printf("Watch removed: %s\n", expression)
-}
-
-// ListWatches returns all watch expressions
-func (dc *DebuggerController) ListWatches() []string {
-	return dc.watches
 }

@@ -61,12 +61,6 @@ func LoadSessionFile(port string) (*SessionFile, error) {
 	return &session, nil
 }
 
-// RemoveSessionFile removes a session file
-func RemoveSessionFile(port string) error {
-	filename := filepath.Join(GetSessionDir(), fmt.Sprintf("%s.session", port))
-	return os.Remove(filename)
-}
-
 // ListSessionFiles lists all active session files
 func ListSessionFiles() ([]SessionFile, error) {
 	dir := GetSessionDir()
@@ -120,44 +114,4 @@ func GetDefaultSession() (string, error) {
 	}
 
 	return "", fmt.Errorf("invalid default session link")
-}
-
-// GetOrSelectPort gets the port from args, env, or default session
-func GetOrSelectPort(specifiedPort string) (string, error) {
-	// 1. Use specified port if provided
-	if specifiedPort != "" {
-		return specifiedPort, nil
-	}
-
-	// 2. Check environment variable
-	if envPort := os.Getenv("NDP_PORT"); envPort != "" {
-		return envPort, nil
-	}
-
-	// 3. Check for default session
-	if defaultPort, err := GetDefaultSession(); err == nil {
-		return defaultPort, nil
-	}
-
-	// 4. List available sessions
-	sessions, err := ListSessionFiles()
-	if err != nil {
-		return "", err
-	}
-
-	if len(sessions) == 0 {
-		return "", fmt.Errorf("no active sessions. Use 'ndp node attach <port>' first")
-	}
-
-	if len(sessions) == 1 {
-		// Only one session, use it
-		return sessions[0].Port, nil
-	}
-
-	// Multiple sessions, list them
-	fmt.Println("Multiple active sessions found:")
-	for i, s := range sessions {
-		fmt.Printf("  [%d] Port %s: %s\n", i+1, s.Port, s.Title)
-	}
-	return "", fmt.Errorf("specify port with -p flag or set NDP_PORT environment variable")
 }

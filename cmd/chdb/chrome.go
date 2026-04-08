@@ -257,39 +257,6 @@ func (cd *ChromeDebugger) TakeScreenshot(ctx context.Context, filename string) e
 	return os.WriteFile(filename, buf, 0644)
 }
 
-// SetBreakpoint sets a JavaScript breakpoint
-func (cd *ChromeDebugger) SetBreakpoint(ctx context.Context, location string, condition string) error {
-	if !cd.connected {
-		return errors.New("not connected to Chrome")
-	}
-
-	// Parse location (simplified)
-	parts := strings.Split(location, ":")
-	if len(parts) < 2 {
-		return errors.New("invalid location format, use file:line")
-	}
-
-	// For simplicity, just inject a debugger statement
-	expression := fmt.Sprintf("debugger; // Breakpoint at %s", location)
-	_, err := cd.Execute(ctx, expression)
-
-	return err
-}
-
-// GetPageHTML gets the current page HTML
-func (cd *ChromeDebugger) GetPageHTML(ctx context.Context) (string, error) {
-	if !cd.connected {
-		return "", errors.New("not connected to Chrome")
-	}
-
-	var html string
-	err := chromedp.Run(cd.chromeCtx,
-		chromedp.OuterHTML("html", &html),
-	)
-
-	return html, err
-}
-
 // InspectElement inspects a DOM element
 func (cd *ChromeDebugger) InspectElement(ctx context.Context, selector string) error {
 	if !cd.connected {
