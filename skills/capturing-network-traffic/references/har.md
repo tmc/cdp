@@ -1,6 +1,6 @@
 # HAR & HARL Logging
 
-Network traffic capture using HAR (HTTP Archive) format and HARL (HAR Lines / NDJSON streaming) with both the `cdp` script engine and the main `chrome-to-har` program.
+Network traffic capture using HAR (HTTP Archive) format and HARL (HAR Lines / NDJSON streaming) with both the `cdp` script engine and the repository's main capture CLI.
 
 ## Overview
 
@@ -8,10 +8,10 @@ Two tools handle HAR capture:
 
 | Tool | Use Case |
 |------|----------|
-| `chrome-to-har` | Main program: navigate to URL, capture all network traffic to HAR file |
+| Main capture CLI | Navigate to a URL and capture network traffic to a HAR file |
 | `cdp run` | Script engine: tag-based HAR recording within automation scripts |
 
-## chrome-to-har: Full HAR Capture
+## Main CLI: Full HAR Capture
 
 ### Building
 
