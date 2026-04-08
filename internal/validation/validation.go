@@ -12,8 +12,6 @@ import (
 )
 
 var (
-	// Safe filename pattern - alphanumeric, dots, underscores, hyphens
-	safeFilenameRegex = regexp.MustCompile(`^[a-zA-Z0-9._-]+$`)
 	// Safe profile name pattern - alphanumeric, spaces, underscores, hyphens
 	safeProfileRegex = regexp.MustCompile(`^[a-zA-Z0-9 _-]+$`)
 	// Safe host pattern - alphanumeric, dots, hyphens

@@ -8,11 +8,11 @@ import (
 
 // TokenBucket implements a token bucket rate limiter
 type TokenBucket struct {
-	capacity      int
-	tokens        float64
-	refillRate    float64 // tokens per second
-	lastRefill    time.Time
-	mu            sync.Mutex
+	capacity   int
+	tokens     float64
+	refillRate float64 // tokens per second
+	lastRefill time.Time
+	mu         sync.Mutex
 }
 
 // NewTokenBucket creates a new token bucket with given capacity and refill rate
@@ -76,7 +76,6 @@ type RateLimiter struct {
 	capacity    int
 	refillRate  float64
 	auditLog    *AuditLogger
-	cleanupTicker *time.Ticker
 	stopCleanup chan struct{}
 }
 

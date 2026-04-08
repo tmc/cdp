@@ -103,7 +103,6 @@ func init() {
 	breakCmd.AddCommand(breakSetCmd)
 	breakCmd.AddCommand(breakListCmd)
 	breakCmd.AddCommand(breakRemoveCmd)
-	breakCmd.AddCommand(breakRemoveCmd)
 	breakCmd.AddCommand(breakClearCmd)
 	breakCmd.AddCommand(breakXHRCmd)
 	breakCmd.AddCommand(breakEventCmd)
@@ -114,35 +113,6 @@ func init() {
 	breakListCmd.Flags().String("tab", "", "Target tab ID")
 	breakRemoveCmd.Flags().String("tab", "", "Target tab ID")
 	breakClearCmd.Flags().String("tab", "", "Target tab ID")
-}
-
-// Implementation functions
-
-func setBreakpoint(ctx context.Context, location string, condition string) error {
-	debugger := NewChromeDebugger(port, verbose)
-	defer debugger.Close()
-
-	// Connect to first available target
-	if err := debugger.Connect(ctx, ""); err != nil {
-		return err
-	}
-
-	// Enable debugger domain
-	if err := debugger.EnableDomains(ctx, "Runtime", "Debugger"); err != nil {
-		return err
-	}
-
-	// Set breakpoint
-	if err := debugger.SetBreakpoint(ctx, location, condition); err != nil {
-		return err
-	}
-
-	fmt.Printf("✓ Breakpoint set at: %s\n", location)
-	if condition != "" {
-		fmt.Printf("  Condition: %s\n", condition)
-	}
-
-	return nil
 }
 
 func setBreakpointNew(ctx context.Context, location string, condition string, tabID string) error {

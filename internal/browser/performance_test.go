@@ -12,51 +12,6 @@ import (
 	"github.com/tmc/misc/chrome-to-har/internal/chromeprofiles"
 )
 
-// testingBWrapper wraps testing.B to implement testing.TB interface
-type testingBWrapper struct {
-	*testing.B
-}
-
-func (w *testingBWrapper) Helper() {
-	w.B.Helper()
-}
-
-func (w *testingBWrapper) Fatal(args ...interface{}) {
-	w.B.Fatal(args...)
-}
-
-func (w *testingBWrapper) Fatalf(format string, args ...interface{}) {
-	w.B.Fatalf(format, args...)
-}
-
-func (w *testingBWrapper) Error(args ...interface{}) {
-	w.B.Error(args...)
-}
-
-func (w *testingBWrapper) Errorf(format string, args ...interface{}) {
-	w.B.Errorf(format, args...)
-}
-
-func (w *testingBWrapper) Skip(args ...interface{}) {
-	w.B.Skip(args...)
-}
-
-func (w *testingBWrapper) SkipNow() {
-	w.B.SkipNow()
-}
-
-func (w *testingBWrapper) Skipf(format string, args ...interface{}) {
-	w.B.Skipf(format, args...)
-}
-
-func (w *testingBWrapper) Log(args ...interface{}) {
-	w.B.Log(args...)
-}
-
-func (w *testingBWrapper) Logf(format string, args ...interface{}) {
-	w.B.Logf(format, args...)
-}
-
 // TestPerformanceMultipleNavigations tests rapid sequential navigations
 func TestPerformanceMultipleNavigations(t *testing.T) {
 	if testing.Short() {

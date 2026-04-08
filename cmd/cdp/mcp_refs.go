@@ -11,7 +11,6 @@ import (
 	"github.com/chromedp/cdproto/cdp"
 	"github.com/chromedp/cdproto/dom"
 	"github.com/chromedp/cdproto/input"
-	"github.com/chromedp/cdproto/runtime"
 	"github.com/chromedp/chromedp"
 )
 
@@ -386,15 +385,6 @@ func typeByBackendNodeID(ctx context.Context, backendID cdp.BackendNodeID, text 
 		return fmt.Errorf("key event: %w", err)
 	}
 	return nil
-}
-
-// resolveNodeToRemoteObject resolves a BackendNodeID to a runtime.RemoteObjectID.
-func resolveNodeToRemoteObject(ctx context.Context, backendID cdp.BackendNodeID) (runtime.RemoteObjectID, error) {
-	obj, err := dom.ResolveNode().WithBackendNodeID(backendID).Do(ctx)
-	if err != nil {
-		return "", fmt.Errorf("resolve node: %w", err)
-	}
-	return obj.ObjectID, nil
 }
 
 // buildJSSnapshot extracts an accessibility-like snapshot using JavaScript

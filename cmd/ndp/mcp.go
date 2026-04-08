@@ -34,14 +34,6 @@ type ndpSession struct {
 	bundles *bundleStore
 }
 
-// getCoverageStore satisfies the coverageProvider interface for the HTTP API.
-func (s *ndpSession) getCoverageStore() coverage.Store {
-	if s.coverageCollector == nil {
-		return nil
-	}
-	return s.coverageCollector
-}
-
 type consoleMsg struct {
 	Type      string `json:"type"`
 	Text      string `json:"text"`

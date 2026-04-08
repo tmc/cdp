@@ -76,7 +76,6 @@ type Bridge struct {
 	upstream       *websocket.Conn
 
 	// ID Management
-	idCounter  int64
 	pendingReq map[int64]*Client // Map BridgeID -> Originating Client
 
 	mu sync.Mutex

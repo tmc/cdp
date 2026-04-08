@@ -1135,12 +1135,6 @@ func imageDiff(a, b []byte) (imageDiffResult, error) {
 	return imageDiffResult{Pct: pct, DiffPNG: buf.Bytes()}, nil
 }
 
-// imageDiffPercent is a convenience wrapper that returns only the diff percentage.
-func imageDiffPercent(a, b []byte) (float64, error) {
-	r, err := imageDiff(a, b)
-	return r.Pct, err
-}
-
 // Inject returns a command that installs a JavaScript snippet to run at the
 // start of every new document in the browser context, persisting across
 // navigations. It uses Page.addScriptToEvaluateOnNewDocument internally.

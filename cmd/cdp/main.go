@@ -107,11 +107,6 @@ func exitWithError(code int, errorType string, format string, args ...interface{
 	os.Exit(code)
 }
 
-// exitWithCode exits with the specified code (for success or silent failures)
-func exitWithCode(code int) {
-	os.Exit(code)
-}
-
 // filteredLogf filters out known unhandled chromedp events that are noisy but harmless
 func filteredLogf(format string, args ...interface{}) {
 	msg := fmt.Sprintf(format, args...)
@@ -843,19 +838,6 @@ func parseHeaders(headersList stringSlice) map[string]interface{} {
 		}
 	}
 	return headers
-}
-
-// applyExtraHeaders applies custom HTTP headers to a browser context
-func applyExtraHeaders(ctx context.Context, extraHeaders map[string]interface{}, verbose bool) error {
-	if len(extraHeaders) == 0 {
-		return nil
-	}
-
-	if verbose {
-		log.Printf("Applying %d extra HTTP headers", len(extraHeaders))
-	}
-
-	return chromedp.Run(ctx, network.SetExtraHTTPHeaders(extraHeaders))
 }
 
 // High-level commands that use the Page API
@@ -4145,31 +4127,6 @@ func printAliases() {
 			}
 		}
 	}
-}
-
-func printEnhancedCommands() {
-	fmt.Println("\nEnhanced Commands (prefixed with @):")
-	fmt.Println("\nWaiting:")
-	fmt.Println("  @wait <selector>      - Wait for element to appear")
-	fmt.Println("  @waitfor <ms>         - Wait for milliseconds")
-
-	fmt.Println("\nElement Interaction:")
-	fmt.Println("  @text <selector>      - Get element text")
-	fmt.Println("  @hover <selector>     - Hover over element")
-	fmt.Println("  @fill <sel> <text>    - Fill input field")
-	fmt.Println("  @clear <selector>     - Clear input field")
-	fmt.Println("  @press <key>          - Press keyboard key")
-	fmt.Println("  @select <sel> <val>   - Select dropdown option")
-
-	fmt.Println("\nElement State:")
-	fmt.Println("  @visible <selector>   - Check if element is visible")
-	fmt.Println("  @count <selector>     - Count matching elements")
-	fmt.Println("  @attr <sel> <name>    - Get attribute value")
-
-	fmt.Println("\nNetwork:")
-	fmt.Println("  @route <pattern> <action>  - Intercept requests (abort/log)")
-
-	fmt.Println("\nNote: These commands are only available when connected to remote Chrome")
 }
 
 // isNonBrowserCommand checks if a command can run without browser setup

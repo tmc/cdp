@@ -15,11 +15,9 @@ import (
 )
 
 var (
-	verbose     bool
-	timeout     int
-	port        string
-	headless    bool
-	userDataDir string
+	verbose bool
+	timeout int
+	port    string
 )
 
 var rootCmd = &cobra.Command{
@@ -73,15 +71,10 @@ func init() {
 	rootCmd.AddCommand(consoleCmd)
 	rootCmd.AddCommand(sourcesCmd)
 	rootCmd.AddCommand(overridesCmd)
-	rootCmd.AddCommand(domCmd)
 	rootCmd.AddCommand(cookiesCmd)
-	rootCmd.AddCommand(networkCmd)
 	rootCmd.AddCommand(emulateCmd)
-	rootCmd.AddCommand(storageCmd)
 	rootCmd.AddCommand(traceCmd)
-	rootCmd.AddCommand(swCmd)
 	rootCmd.AddCommand(heapCmd)
-	rootCmd.AddCommand(cssCmd)
 	rootCmd.AddCommand(auditCmd)
 	rootCmd.AddCommand(newTargetCmd)
 	rootCmd.AddCommand(bridgeCmd)

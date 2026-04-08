@@ -260,25 +260,6 @@ func (p *Proxy) getTargets() []*TargetInfo {
 	return result
 }
 
-// registerConnectionTarget associates a WebSocket path with a target ID
-func (p *Proxy) registerConnectionTarget(path string) {
-	// Extract target ID from paths like /devtools/page/TARGETID
-	if strings.HasPrefix(path, "/devtools/page/") {
-		targetID := strings.TrimPrefix(path, "/devtools/page/")
-		p.targetsMu.Lock()
-		p.connectionToTarget[path] = targetID
-		// Create a placeholder target if we don't have info yet
-		if _, ok := p.targets[targetID]; !ok {
-			p.targets[targetID] = &TargetInfo{
-				TargetID: targetID,
-				Type:     "page",
-				Attached: true,
-			}
-		}
-		p.targetsMu.Unlock()
-	}
-}
-
 func (p *Proxy) addLogEntry(entry LogEntry) {
 	p.logMu.Lock()
 	p.log = append(p.log, entry)

@@ -28,8 +28,6 @@ type dialogCollector struct {
 	mu      sync.Mutex
 	pending *dialogInfo // most recent unhandled dialog
 	history []dialogInfo
-	auto    bool   // auto-dismiss mode
-	autoAct string // "accept" or "dismiss"
 }
 
 func newDialogCollector() *dialogCollector {

@@ -44,16 +44,3 @@
 package main
 
 //go:generate go run github.com/tmc/misc/gocmddoc@latest -o README.md
-
-import _ "embed"
-
-//go:embed docs/usage.md
-var usageDoc string
-
-// Version is the current version of chrome-to-har
-const Version = "1.0.0"
-
-// GetUsageDoc returns the full usage documentation
-func GetUsageDoc() string {
-	return usageDoc
-}

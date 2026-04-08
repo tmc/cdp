@@ -40,7 +40,6 @@ type Engine struct {
 
 	// Sourced commands (dynamically loaded from source command)
 	sourcedCmds map[string]script.Cmd
-	traceExec   bool // -x flag for source command
 
 	// Element refs from last snapshot (for @e1 style refs)
 	refMap *browser.RefMap

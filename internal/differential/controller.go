@@ -8,8 +8,6 @@ import (
 	"time"
 
 	"github.com/chromedp/cdproto/har"
-
-	"github.com/tmc/misc/chrome-to-har/internal/recorder"
 )
 
 // DifferentialController manages the entire differential capture process
@@ -18,7 +16,6 @@ type DifferentialController struct {
 	diffEngine      *DiffEngine
 	reportGenerator *ReportGenerator
 	stateTracker    *StateTracker
-	recorder        *recorder.Recorder
 	workDir         string
 	verbose         bool
 }

@@ -18,12 +18,11 @@ import (
 // ProxyServer simulates a proxy server for testing
 type ProxyServer struct {
 	*httptest.Server
-	authRequired  bool
-	username      string
-	password      string
-	requestCount  int32
-	lastRequest   *http.Request
-	bypassDomains []string
+	authRequired bool
+	username     string
+	password     string
+	requestCount int32
+	lastRequest  *http.Request
 }
 
 // NewProxyServer creates a new test proxy server

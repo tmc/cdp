@@ -10,7 +10,6 @@ import (
 // OutputCapture captures stdout and stderr during a test
 type OutputCapture struct {
 	stdout     *os.File
-	stderr     *os.File
 	logBuf     *bytes.Buffer
 	outBuf     *bytes.Buffer
 	oldLog     *log.Logger

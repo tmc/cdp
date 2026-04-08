@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"log"
 	"time"
@@ -42,33 +41,4 @@ var listCmd = &cobra.Command{
 			fmt.Println()
 		}
 	},
-}
-
-func listChromeTargets(ctx context.Context) error {
-	debugger := NewChromeDebugger(port, verbose)
-
-	targets, err := debugger.ListTargets(ctx)
-	if err != nil {
-		return err
-	}
-
-	if len(targets) == 0 {
-		fmt.Println("No Chrome targets found.")
-		fmt.Println("Make sure Chrome is running with --remote-debugging-port flag")
-		return nil
-	}
-
-	fmt.Printf("Found %d Chrome target(s) on port %s:\n\n", len(targets), port)
-
-	for i, target := range targets {
-		fmt.Printf("[%d] %s - %s\n", i+1, target.Type, target.Title)
-		fmt.Printf("    URL: %s\n", target.URL)
-		fmt.Printf("    ID: %s\n", target.ID)
-		if target.DevtoolsURL != "" {
-			fmt.Printf("    DevTools: %s\n", target.DevtoolsURL)
-		}
-		fmt.Println()
-	}
-
-	return nil
 }

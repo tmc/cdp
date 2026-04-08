@@ -97,17 +97,6 @@ type options struct {
 	deleteCapture    string // Delete a capture by ID
 	minSignificance  string // Minimum significance level for reporting
 
-	// Security options
-	securityProfile       string // Security profile: strict, balanced, permissive
-	allowedRemoteHosts    string // Comma-separated list of allowed remote hosts
-	remoteAuthToken       string // Authentication token for remote connections
-	remoteUseTLS          bool   // Use TLS for remote connections
-	remoteCACert          string // Path to CA certificate for remote TLS
-	maxMemoryMB           uint64 // Maximum memory usage in MB
-	maxConcurrentReqs     int    // Maximum concurrent requests
-	enableResourceLimits  bool   // Enable resource limiting
-	scriptValidation      bool   // Enable script validation
-	allowDangerousScripts bool   // Allow potentially dangerous scripts
 }
 
 var errChromeConnection = errors.New("chrome connection error")
