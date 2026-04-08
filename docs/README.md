@@ -6,7 +6,7 @@ This directory mixes user guides, design notes, and planning documents.
 
 - [cdp.md](/Volumes/tmc/go/src/github.com/tmc/cdp/docs/cdp.md): `cmd/cdp` overview and interactive usage
 - [churl.md](/Volumes/tmc/go/src/github.com/tmc/cdp/docs/churl.md): `cmd/churl` reference and examples
-- [usage.md](/Volumes/tmc/go/src/github.com/tmc/cdp/docs/usage.md): root `chrome-to-har` usage plus the relationship to `cdp`
+- [usage.md](/Volumes/tmc/go/src/github.com/tmc/cdp/docs/usage.md): `chrome-to-har` usage plus the relationship to `cdp`
 - [testing.md](/Volumes/tmc/go/src/github.com/tmc/cdp/docs/testing.md): current `go test` workflows
 - [differential-capture.md](/Volumes/tmc/go/src/github.com/tmc/cdp/docs/differential-capture.md): differential HAR capture mode
 - [langmodel.md](/Volumes/tmc/go/src/github.com/tmc/cdp/docs/langmodel.md): language-model-oriented command usage

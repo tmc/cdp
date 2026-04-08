@@ -4,7 +4,7 @@ This repository now contains a small public Go module plus several command-line 
 
 ## Current Shape
 
-- `main.go`: the root `chrome-to-har` capture-oriented CLI
+- `cmd/chrome-to-har`: the focused HAR capture CLI
 - `cmd/cdp`: the general Chrome/CDP CLI
 - `cmd/churl`: browser-backed fetch and extraction
 - `cmd/chdb`: Chrome-oriented debugger workflow

@@ -1,46 +1,25 @@
-// Command chrome-to-har records browser activity and generates HAR (HTTP Archive) files.
+// Package cdp provides shared code for Chrome DevTools Protocol automation and
+// the command-line tools in this module.
 //
-// This tool launches Chrome/Chromium, navigates to specified URLs, and captures all
-// network traffic in the standard HAR format. It supports both interactive browsing
-// and automated capture modes.
+// The repository ships several related commands:
 //
-// Usage:
+//   - cmd/cdp for general-purpose browser automation, inspection, and MCP use
+//   - cmd/chrome-to-har for focused HAR and differential capture workflows
+//   - cmd/churl for browser-backed fetching and extraction
+//   - cmd/chdb for Chrome-oriented debugging workflows
+//   - cmd/ndp for Node.js and V8 inspector workflows
+//   - cmd/cdpscript and cmd/cdpscripttest for script execution and testing
 //
-//	chrome-to-har [flags] [URL...]
+// Most consumers will use one of those commands directly. The root package
+// exists to document the module and to house shared code used by those tools.
 //
-// Common flags:
+// Internal packages provide most of the implementation:
 //
-//	-o file        Output HAR file (default: output.har)
-//	-profile name  Use specific Chrome profile
-//	-timeout sec   Global timeout in seconds (default: 30)
-//	-headless      Run in headless mode
-//	-filter regex  Filter requests by URL pattern
-//	-block regex   Block requests matching pattern
-//	-interactive   Enable interactive JavaScript mode
+//   - internal/browser manages browser discovery, launch, and interaction
+//   - internal/recorder handles HAR and enhanced traffic capture
+//   - internal/differential compares capture runs
+//   - internal/chromeprofiles discovers and manages browser profiles
 //
-// Examples:
-//
-//	# Record a single page
-//	chrome-to-har https://example.com
-//
-//	# Use a specific Chrome profile
-//	chrome-to-har -profile "Default" https://github.com
-//
-//	# Filter only API requests
-//	chrome-to-har -filter "api\." https://example.com
-//
-//	# Block tracking scripts
-//	chrome-to-har -block "analytics|tracking" https://news.site.com
-//
-//	# Interactive mode with JavaScript console
-//	chrome-to-har -interactive https://example.com
-//
-// The tool captures detailed timing information, request/response headers,
-// cookies, and response content. The output HAR file can be analyzed using
-// various HAR viewers and development tools.
-//
-// Interactive mode provides a JavaScript console for executing commands in
-// the browser context, useful for debugging and automation tasks.
-package main
-
-//go:generate go run github.com/tmc/misc/gocmddoc@latest -o README.md
+// The broader entry point is cmd/cdp. The narrower capture-oriented entry point
+// is cmd/chrome-to-har.
+package cdp

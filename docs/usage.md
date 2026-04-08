@@ -1,15 +1,15 @@
 # Usage Guide
 
-This repository currently has two top-level browser entry points:
+This repository currently has two browser entry points:
 
-- `chrome-to-har` at the module root, focused on HAR capture and differential capture.
+- `chrome-to-har` in `cmd/chrome-to-har`, focused on HAR capture and differential capture.
 - `cdp` in `cmd/cdp`, focused on direct Chrome DevTools Protocol automation.
 
 Use `chrome-to-har` when you want a capture-oriented workflow. Use `cdp` when you want a general-purpose Chrome/CDP CLI.
 
 ## `chrome-to-har`
 
-The root command launches Chrome, navigates to a page, and writes HAR or differential capture output.
+The `chrome-to-har` command launches Chrome, navigates to a page, and writes HAR or differential capture output.
 
 ```bash
 chrome-to-har -url https://example.com -output output.har
@@ -115,7 +115,7 @@ chrome-to-har -stream \
 
 ## Differential Capture
 
-The root command also exposes differential capture mode:
+The `chrome-to-har` command also exposes differential capture mode:
 
 ```bash
 # Create a baseline capture
