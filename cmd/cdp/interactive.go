@@ -15,10 +15,10 @@ import (
 
 	"github.com/chromedp/cdproto/target"
 	"github.com/chromedp/chromedp"
-	"github.com/tmc/misc/chrome-to-har/internal/coverage"
-	"github.com/tmc/misc/chrome-to-har/internal/sourcemap"
-	"github.com/tmc/misc/chrome-to-har/internal/sources"
-	"github.com/tmc/misc/chrome-to-har/internal/tooldef"
+	"github.com/tmc/cdp/internal/coverage"
+	"github.com/tmc/cdp/internal/sourcemap"
+	"github.com/tmc/cdp/internal/sources"
+	"github.com/tmc/cdp/internal/tooldef"
 )
 
 // InteractiveMode represents an interactive CDP session

@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/tmc/misc/chrome-to-har/internal/browser"
-	"github.com/tmc/misc/chrome-to-har/internal/chromeprofiles"
-	"github.com/tmc/misc/chrome-to-har/internal/testutil"
+	"github.com/tmc/cdp/internal/browser"
+	"github.com/tmc/cdp/internal/chromeprofiles"
+	"github.com/tmc/cdp/internal/testutil"
 )
 
 // Integration tests for the complete browser package functionality

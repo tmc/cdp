@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/tmc/misc/chrome-to-har/internal/browser"
+	"github.com/tmc/cdp/internal/browser"
 )
 
 // ProxyServer simulates a proxy server for testing

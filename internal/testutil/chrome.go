@@ -17,7 +17,7 @@ import (
 	"errors"
 
 	"github.com/chromedp/chromedp"
-	"github.com/tmc/misc/chrome-to-har/internal/discovery"
+	"github.com/tmc/cdp/internal/discovery"
 )
 
 // ChromeTestHelper provides utilities for running Chrome in tests

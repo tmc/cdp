@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	"github.com/chromedp/chromedp"
-	"github.com/tmc/misc/chrome-to-har/cdpscripttest"
+	"github.com/tmc/cdp/cdpscripttest"
 )
 
 // findChromePath returns the path to a Chromium-based browser.

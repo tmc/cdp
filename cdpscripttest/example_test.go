@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/chromedp/chromedp"
-	"github.com/tmc/misc/chrome-to-har/cdpscripttest"
+	"github.com/tmc/cdp/cdpscripttest"
 )
 
 // Example shows the minimal setup for running cdpscripttest scripts.

@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/tmc/misc/chrome-to-har/internal/browser"
+	"github.com/tmc/cdp/internal/browser"
 )
 
 // TestBrowserPool manages a pool of browser instances for testing

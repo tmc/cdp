@@ -32,14 +32,14 @@ import (
 	"github.com/chromedp/cdproto/runtime"
 	"github.com/chromedp/cdproto/target"
 	"github.com/chromedp/chromedp"
+	"github.com/tmc/cdp/internal/browser"
+	"github.com/tmc/cdp/internal/cdpproxy"
+	"github.com/tmc/cdp/internal/chromeprofiles"
+	"github.com/tmc/cdp/internal/htmltomd"
+	harrecorder "github.com/tmc/cdp/internal/recorder"
+	"github.com/tmc/cdp/internal/scrub"
+	"github.com/tmc/cdp/internal/sources"
 	"github.com/tmc/macgo"
-	"github.com/tmc/misc/chrome-to-har/internal/browser"
-	"github.com/tmc/misc/chrome-to-har/internal/cdpproxy"
-	"github.com/tmc/misc/chrome-to-har/internal/chromeprofiles"
-	"github.com/tmc/misc/chrome-to-har/internal/htmltomd"
-	harrecorder "github.com/tmc/misc/chrome-to-har/internal/recorder"
-	"github.com/tmc/misc/chrome-to-har/internal/scrub"
-	"github.com/tmc/misc/chrome-to-har/internal/sources"
 )
 
 // stringSlice implements flag.Value for multiple string values

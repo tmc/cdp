@@ -13,10 +13,10 @@ import (
 	"github.com/chromedp/cdproto/cdp"
 	"github.com/chromedp/chromedp"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	"github.com/tmc/misc/chrome-to-har/internal/coverage"
-	harrecorder "github.com/tmc/misc/chrome-to-har/internal/recorder"
-	"github.com/tmc/misc/chrome-to-har/internal/scrub"
-	"github.com/tmc/misc/chrome-to-har/internal/sources"
+	"github.com/tmc/cdp/internal/coverage"
+	harrecorder "github.com/tmc/cdp/internal/recorder"
+	"github.com/tmc/cdp/internal/scrub"
+	"github.com/tmc/cdp/internal/sources"
 )
 
 // mcpSession holds browser state shared across MCP tool handlers.

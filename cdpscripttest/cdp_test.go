@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/chromedp/chromedp"
-	"github.com/tmc/misc/chrome-to-har/cdpscripttest"
+	"github.com/tmc/cdp/cdpscripttest"
 )
 
 func TestCDP(t *testing.T) {

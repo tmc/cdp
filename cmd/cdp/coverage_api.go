@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/tmc/misc/chrome-to-har/internal/coverage"
+	"github.com/tmc/cdp/internal/coverage"
 )
 
 // coverageProvider is the subset of session state needed by the coverage API.

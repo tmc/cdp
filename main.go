@@ -20,13 +20,13 @@ import (
 	"github.com/chromedp/cdproto/runtime"
 	"github.com/chromedp/chromedp"
 
-	"github.com/tmc/misc/chrome-to-har/internal/blocking"
-	"github.com/tmc/misc/chrome-to-har/internal/browser"
-	"github.com/tmc/misc/chrome-to-har/internal/chromeprofiles"
-	"github.com/tmc/misc/chrome-to-har/internal/differential"
-	"github.com/tmc/misc/chrome-to-har/internal/discovery"
+	"github.com/tmc/cdp/internal/blocking"
+	"github.com/tmc/cdp/internal/browser"
+	"github.com/tmc/cdp/internal/chromeprofiles"
+	"github.com/tmc/cdp/internal/differential"
+	"github.com/tmc/cdp/internal/discovery"
 
-	"github.com/tmc/misc/chrome-to-har/internal/recorder"
+	"github.com/tmc/cdp/internal/recorder"
 )
 
 // Custom code implementing JavaScript interactive CLI mode

@@ -10,7 +10,7 @@ import (
 
 	"github.com/chromedp/cdproto/har"
 	"github.com/chromedp/cdproto/network"
-	"github.com/tmc/misc/chrome-to-har/internal/browser"
+	"github.com/tmc/cdp/internal/browser"
 )
 
 // WebSocketRecorder extends the standard recorder with WebSocket support

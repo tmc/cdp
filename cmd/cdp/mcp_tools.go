@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/url"
 	"strings"
@@ -76,11 +77,13 @@ func registerNavigationTools(server *mcp.Server, s *mcpSession) {
 		Name:        "navigate",
 		Description: "Navigate to a URL",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input NavigateInput) (*mcp.CallToolResult, NavigateOutput, error) {
-		if err := chromedp.Run(s.activeCtx(), chromedp.Navigate(input.URL)); err != nil {
+		actx, cancel := requestToolCtx(ctx, s.activeCtx(), 45*time.Second)
+		defer cancel()
+		if err := chromedp.Run(actx, chromedp.Navigate(input.URL)); err != nil {
 			return nil, NavigateOutput{}, fmt.Errorf("navigate: %w", err)
 		}
 		var out NavigateOutput
-		if err := chromedp.Run(s.activeCtx(), chromedp.Title(&out.Title), chromedp.Location(&out.Location)); err != nil {
+		if err := chromedp.Run(actx, chromedp.Title(&out.Title), chromedp.Location(&out.Location)); err != nil {
 			return nil, NavigateOutput{}, fmt.Errorf("navigate: %w", err)
 		}
 		return nil, out, nil
@@ -90,11 +93,13 @@ func registerNavigationTools(server *mcp.Server, s *mcpSession) {
 		Name:        "navigate_back",
 		Description: "Navigate back in browser history",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input struct{}) (*mcp.CallToolResult, NavigationOutput, error) {
-		if err := chromedp.Run(s.activeCtx(), chromedp.NavigateBack()); err != nil {
+		actx, cancel := requestToolCtx(ctx, s.activeCtx(), 30*time.Second)
+		defer cancel()
+		if err := chromedp.Run(actx, chromedp.NavigateBack()); err != nil {
 			return nil, NavigationOutput{}, fmt.Errorf("navigate_back: %w", err)
 		}
 		var out NavigationOutput
-		if err := chromedp.Run(s.activeCtx(), chromedp.Title(&out.Title)); err != nil {
+		if err := chromedp.Run(actx, chromedp.Title(&out.Title)); err != nil {
 			return nil, NavigationOutput{}, fmt.Errorf("navigate_back: %w", err)
 		}
 		return nil, out, nil
@@ -104,11 +109,13 @@ func registerNavigationTools(server *mcp.Server, s *mcpSession) {
 		Name:        "navigate_forward",
 		Description: "Navigate forward in browser history",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input struct{}) (*mcp.CallToolResult, NavigationOutput, error) {
-		if err := chromedp.Run(s.activeCtx(), chromedp.NavigateForward()); err != nil {
+		actx, cancel := requestToolCtx(ctx, s.activeCtx(), 30*time.Second)
+		defer cancel()
+		if err := chromedp.Run(actx, chromedp.NavigateForward()); err != nil {
 			return nil, NavigationOutput{}, fmt.Errorf("navigate_forward: %w", err)
 		}
 		var out NavigationOutput
-		if err := chromedp.Run(s.activeCtx(), chromedp.Title(&out.Title)); err != nil {
+		if err := chromedp.Run(actx, chromedp.Title(&out.Title)); err != nil {
 			return nil, NavigationOutput{}, fmt.Errorf("navigate_forward: %w", err)
 		}
 		return nil, out, nil
@@ -118,11 +125,13 @@ func registerNavigationTools(server *mcp.Server, s *mcpSession) {
 		Name:        "reload",
 		Description: "Reload the current page",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input struct{}) (*mcp.CallToolResult, NavigationOutput, error) {
-		if err := chromedp.Run(s.activeCtx(), chromedp.Reload()); err != nil {
+		actx, cancel := requestToolCtx(ctx, s.activeCtx(), 30*time.Second)
+		defer cancel()
+		if err := chromedp.Run(actx, chromedp.Reload()); err != nil {
 			return nil, NavigationOutput{}, fmt.Errorf("reload: %w", err)
 		}
 		var out NavigationOutput
-		if err := chromedp.Run(s.activeCtx(), chromedp.Title(&out.Title)); err != nil {
+		if err := chromedp.Run(actx, chromedp.Title(&out.Title)); err != nil {
 			return nil, NavigationOutput{}, fmt.Errorf("reload: %w", err)
 		}
 		return nil, out, nil
@@ -151,7 +160,8 @@ func registerObservationTools(server *mcp.Server, s *mcpSession) {
 		Description: "Take a screenshot. Options: selector (element only), full_page, width (max px, downscales), quality (1-100, uses JPEG), format (png/jpeg/webp), annotate (draw numbered boxes on interactive elements with metadata).",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input ScreenshotInput) (*mcp.CallToolResult, any, error) {
 		cdpFmt, mimeType := screenshotFormat(input.Format, input.Quality)
-		actx := s.activeCtx()
+		actx, cancel := requestToolCtx(ctx, s.activeCtx(), 30*time.Second)
+		defer cancel()
 
 		var buf []byte
 		if input.Selector != "" && !input.FullPage {
@@ -225,6 +235,8 @@ func registerObservationTools(server *mcp.Server, s *mcpSession) {
 		Name:        "get_page_content",
 		Description: "Get the text or HTML content of the page or a specific element",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input GetPageContentInput) (*mcp.CallToolResult, any, error) {
+		actx, cancel := requestToolCtx(ctx, s.activeCtx(), 15*time.Second)
+		defer cancel()
 		format := input.Format
 		if format == "" {
 			format = "text"
@@ -233,22 +245,22 @@ func registerObservationTools(server *mcp.Server, s *mcpSession) {
 		if input.Selector != "" {
 			switch format {
 			case "html", "markdown":
-				if err := chromedp.Run(s.activeCtx(), chromedp.OuterHTML(input.Selector, &text, chromedp.ByQuery)); err != nil {
+				if err := chromedp.Run(actx, chromedp.OuterHTML(input.Selector, &text, chromedp.ByQuery)); err != nil {
 					return nil, nil, fmt.Errorf("get_page_content: %w", err)
 				}
 			default:
-				if err := chromedp.Run(s.activeCtx(), chromedp.Text(input.Selector, &text, chromedp.ByQuery)); err != nil {
+				if err := chromedp.Run(actx, chromedp.Text(input.Selector, &text, chromedp.ByQuery)); err != nil {
 					return nil, nil, fmt.Errorf("get_page_content: %w", err)
 				}
 			}
 		} else {
 			switch format {
 			case "text":
-				if err := chromedp.Run(s.activeCtx(), chromedp.Text("body", &text, chromedp.ByQuery)); err != nil {
+				if err := chromedp.Run(actx, chromedp.Text("body", &text, chromedp.ByQuery)); err != nil {
 					return nil, nil, fmt.Errorf("get_page_content: %w", err)
 				}
 			default:
-				if err := chromedp.Run(s.activeCtx(), chromedp.OuterHTML("html", &text, chromedp.ByQuery)); err != nil {
+				if err := chromedp.Run(actx, chromedp.OuterHTML("html", &text, chromedp.ByQuery)); err != nil {
 					return nil, nil, fmt.Errorf("get_page_content: %w", err)
 				}
 			}
@@ -264,7 +276,9 @@ func registerObservationTools(server *mcp.Server, s *mcpSession) {
 		Name:        "page_snapshot",
 		Description: "Get an accessibility tree snapshot of the page. Interactive elements are annotated with @ref numbers (e.g. @1, @2) that can be used with click, type_text, and other interaction tools instead of CSS selectors.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input struct{}) (*mcp.CallToolResult, any, error) {
-		result, err := buildAXSnapshot(s.activeCtx(), s.refs)
+		actx, cancel := requestToolCtx(ctx, s.activeCtx(), 15*time.Second)
+		defer cancel()
+		result, err := buildAXSnapshot(actx, s.refs)
 		if err != nil {
 			return nil, nil, fmt.Errorf("page_snapshot: %w", err)
 		}
@@ -300,14 +314,23 @@ const defaultInteractionTimeout = 30 * time.Second
 
 // interactionCtx creates a context with a timeout for interaction tools.
 // If timeoutSec > 60, it is treated as milliseconds (agents often pass e.g. 5000 meaning 5s).
-func interactionCtx(actx context.Context, timeoutSec int) (context.Context, context.CancelFunc) {
+func interactionCtx(reqCtx, actx context.Context, timeoutSec int) (context.Context, context.CancelFunc) {
 	timeout := defaultInteractionTimeout
 	if timeoutSec > 60 {
 		timeout = time.Duration(timeoutSec) * time.Millisecond
 	} else if timeoutSec > 0 {
 		timeout = time.Duration(timeoutSec) * time.Second
 	}
-	return context.WithTimeout(actx, timeout)
+	return requestToolCtx(reqCtx, actx, timeout)
+}
+
+func requestToolCtx(reqCtx, actx context.Context, timeout time.Duration) (context.Context, context.CancelFunc) {
+	ctx, cancel := context.WithTimeout(actx, timeout)
+	stop := context.AfterFunc(reqCtx, cancel)
+	return ctx, func() {
+		stop()
+		cancel()
+	}
 }
 
 // validateTarget checks that a target ID exists in the browser's target list.
@@ -324,19 +347,18 @@ func validateTarget(browserCtx context.Context, tid string) error {
 	return fmt.Errorf("target %q not found", tid)
 }
 
-// runWithTimeout runs chromedp actions with a timeout. It spawns a goroutine
-// for chromedp.Run and selects on completion vs deadline.
+// runWithTimeout runs chromedp actions with a deadline that cancels the
+// underlying operation.
 func runWithTimeout(ctx context.Context, timeout time.Duration, actions ...chromedp.Action) error {
-	done := make(chan error, 1)
-	go func() {
-		done <- chromedp.Run(ctx, actions...)
-	}()
-	select {
-	case err := <-done:
+	tctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	if err := chromedp.Run(tctx, actions...); err != nil {
+		if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+			return fmt.Errorf("timed out after %s", timeout)
+		}
 		return err
-	case <-time.After(timeout):
-		return fmt.Errorf("timed out after %s", timeout)
 	}
+	return nil
 }
 
 func registerInteractionTools(server *mcp.Server, s *mcpSession) {
@@ -344,7 +366,7 @@ func registerInteractionTools(server *mcp.Server, s *mcpSession) {
 		Name:        "click",
 		Description: "Click an element by CSS selector or @ref (e.g. @1 from page_snapshot). Timeout in seconds (default 30).",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input ClickInput) (*mcp.CallToolResult, any, error) {
-		actx, cancel := interactionCtx(s.activeCtx(), input.Timeout)
+		actx, cancel := interactionCtx(ctx, s.activeCtx(), input.Timeout)
 		defer cancel()
 		if err := chromedp.Run(actx, chromedp.ActionFunc(func(ctx context.Context) error {
 			backendID, err := resolveRefWithRecovery(ctx, s.refs, input.Selector)
@@ -373,7 +395,7 @@ func registerInteractionTools(server *mcp.Server, s *mcpSession) {
 		if input.Submit {
 			text += "\n"
 		}
-		actx, cancel := interactionCtx(s.activeCtx(), input.Timeout)
+		actx, cancel := interactionCtx(ctx, s.activeCtx(), input.Timeout)
 		defer cancel()
 		if err := chromedp.Run(actx, chromedp.ActionFunc(func(ctx context.Context) error {
 			backendID, err := resolveRefWithRecovery(ctx, s.refs, input.Selector)
@@ -398,7 +420,7 @@ func registerInteractionTools(server *mcp.Server, s *mcpSession) {
 		Name:        "wait_for",
 		Description: "Wait for an element to be visible by CSS selector or @ref. Timeout in seconds (default 30).",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input WaitForInput) (*mcp.CallToolResult, any, error) {
-		actx, cancel := interactionCtx(s.activeCtx(), input.Timeout)
+		actx, cancel := interactionCtx(ctx, s.activeCtx(), input.Timeout)
 		defer cancel()
 		if err := chromedp.Run(actx, chromedp.ActionFunc(func(ctx context.Context) error {
 			backendID, err := resolveRefWithRecovery(ctx, s.refs, input.Selector)

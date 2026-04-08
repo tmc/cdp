@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/tmc/misc/chrome-to-har/cdpscript"
+	"github.com/tmc/cdp/cdpscript"
 )
 
 type scriptCmd struct {

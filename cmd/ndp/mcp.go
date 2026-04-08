@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	"github.com/tmc/misc/chrome-to-har/internal/coverage"
+	"github.com/tmc/cdp/internal/coverage"
 )
 
 // ndpSession holds V8 state shared across MCP tool handlers.

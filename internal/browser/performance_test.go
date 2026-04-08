@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/tmc/misc/chrome-to-har/internal/browser"
-	"github.com/tmc/misc/chrome-to-har/internal/chromeprofiles"
+	"github.com/tmc/cdp/internal/browser"
+	"github.com/tmc/cdp/internal/chromeprofiles"
 )
 
 // TestPerformanceMultipleNavigations tests rapid sequential navigations

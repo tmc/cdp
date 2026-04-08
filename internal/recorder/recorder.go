@@ -20,7 +20,7 @@ import (
 	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/chromedp"
 
-	"github.com/tmc/misc/chrome-to-har/internal/scrub"
+	"github.com/tmc/cdp/internal/scrub"
 )
 
 type Annotation struct {

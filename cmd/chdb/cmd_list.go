@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
-	"github.com/tmc/misc/chrome-to-har/internal/targets"
+	"github.com/tmc/cdp/internal/targets"
 )
 
 var listCmd = &cobra.Command{

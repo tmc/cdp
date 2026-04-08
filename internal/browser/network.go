@@ -14,7 +14,7 @@ import (
 	"github.com/chromedp/cdproto/fetch"
 	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/chromedp"
-	"github.com/tmc/misc/chrome-to-har/internal/blocking"
+	"github.com/tmc/cdp/internal/blocking"
 )
 
 // Request represents an intercepted network request

@@ -18,7 +18,7 @@ import (
 	"time"
 
 	"github.com/chromedp/cdproto/har"
-	"github.com/tmc/misc/chrome-to-har/internal/testutil"
+	"github.com/tmc/cdp/internal/testutil"
 )
 
 func TestIntegrationChurl_BasicFetch(t *testing.T) {
@@ -614,7 +614,7 @@ func buildChurlIntegration(t *testing.T) string {
 	}
 
 	cmd := exec.Command("go", "build", "-o", churlBinary, ".")
-	cmd.Dir = "/Volumes/tmc/go/src/github.com/tmc/misc/chrome-to-har/cmd/churl"
+	cmd.Dir = "/Volumes/tmc/go/src/github.com/tmc/cdp/cmd/churl"
 
 	if output, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("Failed to build churl: %v\nOutput: %s", err, output)

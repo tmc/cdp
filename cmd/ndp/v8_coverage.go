@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/tmc/misc/chrome-to-har/internal/coverage"
+	"github.com/tmc/cdp/internal/coverage"
 )
 
 // V8CoverageCollector collects code coverage from a Node.js process via

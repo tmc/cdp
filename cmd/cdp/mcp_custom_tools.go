@@ -13,7 +13,7 @@ import (
 	"github.com/chromedp/cdproto/input"
 	"github.com/chromedp/chromedp"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	"github.com/tmc/misc/chrome-to-har/internal/tooldef"
+	"github.com/tmc/cdp/internal/tooldef"
 )
 
 // builtinToolNames is the set of MCP tool names registered by the cdp server.

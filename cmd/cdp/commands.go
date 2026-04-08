@@ -13,7 +13,7 @@ import (
 	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/cdproto/page"
 	"github.com/chromedp/chromedp"
-	"github.com/tmc/misc/chrome-to-har/internal/htmltomd"
+	"github.com/tmc/cdp/internal/htmltomd"
 )
 
 // Command represents a CDP command with metadata

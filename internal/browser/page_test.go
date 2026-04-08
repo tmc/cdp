@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/tmc/misc/chrome-to-har/internal/browser"
+	"github.com/tmc/cdp/internal/browser"
 )
 
 // TestPageBasicOperations tests basic page operations

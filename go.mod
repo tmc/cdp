@@ -1,4 +1,4 @@
-module github.com/tmc/misc/chrome-to-har
+module github.com/tmc/cdp
 
 go 1.26
 

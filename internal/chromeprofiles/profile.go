@@ -13,8 +13,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/tmc/misc/chrome-to-har/internal/secureio"
-	"github.com/tmc/misc/chrome-to-har/internal/validation"
+	"github.com/tmc/cdp/internal/secureio"
+	"github.com/tmc/cdp/internal/validation"
 )
 
 type profileManager struct {

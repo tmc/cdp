@@ -12,9 +12,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/tmc/misc/chrome-to-har/internal/browser"
-	"github.com/tmc/misc/chrome-to-har/internal/chromeprofiles"
-	"github.com/tmc/misc/chrome-to-har/internal/testutil"
+	"github.com/tmc/cdp/internal/browser"
+	"github.com/tmc/cdp/internal/chromeprofiles"
+	"github.com/tmc/cdp/internal/testutil"
 )
 
 // TestMain adds global test setup and teardown for browser cleanup

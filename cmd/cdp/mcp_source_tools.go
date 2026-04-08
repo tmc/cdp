@@ -10,7 +10,7 @@ import (
 	"strings"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	"github.com/tmc/misc/chrome-to-har/internal/coverage"
+	"github.com/tmc/cdp/internal/coverage"
 )
 
 // --- Source browsing tools ---

@@ -16,7 +16,7 @@ import (
 	"time"
 
 	"github.com/chromedp/cdproto/har"
-	"github.com/tmc/misc/chrome-to-har/internal/testutil"
+	"github.com/tmc/cdp/internal/testutil"
 )
 
 func TestIntegration_BasicHARCapture(t *testing.T) {

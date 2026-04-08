@@ -11,7 +11,7 @@ import (
 	"sync"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	"github.com/tmc/misc/chrome-to-har/internal/sourcemap"
+	"github.com/tmc/cdp/internal/sourcemap"
 )
 
 // --- Sourcemap types ---

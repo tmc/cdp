@@ -12,8 +12,8 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
-	"github.com/tmc/misc/chrome-to-har/internal/chromeprofiles"
-	"github.com/tmc/misc/chrome-to-har/internal/testutil"
+	"github.com/tmc/cdp/internal/chromeprofiles"
+	"github.com/tmc/cdp/internal/testutil"
 )
 
 // skipIfNoChromish skips the test if no Chromium-based browser is available

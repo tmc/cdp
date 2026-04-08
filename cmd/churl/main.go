@@ -20,11 +20,11 @@ import (
 	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/chromedp"
 
-	"github.com/tmc/misc/chrome-to-har/internal/browser"
-	"github.com/tmc/misc/chrome-to-har/internal/chromeprofiles"
-	"github.com/tmc/misc/chrome-to-har/internal/discovery"
+	"github.com/tmc/cdp/internal/browser"
+	"github.com/tmc/cdp/internal/chromeprofiles"
+	"github.com/tmc/cdp/internal/discovery"
 
-	"github.com/tmc/misc/chrome-to-har/internal/recorder"
+	"github.com/tmc/cdp/internal/recorder"
 )
 
 type options struct {

@@ -21,7 +21,7 @@ import (
 	"github.com/chromedp/cdproto/css"
 	"github.com/chromedp/cdproto/debugger"
 	"github.com/chromedp/chromedp"
-	"github.com/tmc/misc/chrome-to-har/internal/scrub"
+	"github.com/tmc/cdp/internal/scrub"
 )
 
 // ScriptInfo holds metadata and source for a parsed script.

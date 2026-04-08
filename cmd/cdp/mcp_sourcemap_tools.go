@@ -14,8 +14,8 @@ import (
 
 	"github.com/chromedp/chromedp"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	"github.com/tmc/misc/chrome-to-har/internal/coverage"
-	"github.com/tmc/misc/chrome-to-har/internal/sourcemap"
+	"github.com/tmc/cdp/internal/coverage"
+	"github.com/tmc/cdp/internal/sourcemap"
 )
 
 // syntheticMap holds a generated sourcemap for a bundle URL.

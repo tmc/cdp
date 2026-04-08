@@ -16,8 +16,8 @@ import (
 	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/cdproto/page"
 	"github.com/chromedp/chromedp"
-	"github.com/tmc/misc/chrome-to-har/internal/blocking"
-	"github.com/tmc/misc/chrome-to-har/internal/chromeprofiles"
+	"github.com/tmc/cdp/internal/blocking"
+	"github.com/tmc/cdp/internal/chromeprofiles"
 )
 
 // filteredErrorf filters out noisy chromedp error messages

@@ -12,9 +12,9 @@ import (
 	"time"
 
 	"github.com/chromedp/chromedp"
-	"github.com/tmc/misc/chrome-to-har/internal/coverage"
-	"github.com/tmc/misc/chrome-to-har/internal/sourcemap"
-	"github.com/tmc/misc/chrome-to-har/internal/testutil"
+	"github.com/tmc/cdp/internal/coverage"
+	"github.com/tmc/cdp/internal/sourcemap"
+	"github.com/tmc/cdp/internal/testutil"
 )
 
 // bundleJS is a realistic minified JavaScript bundle used as the test target.

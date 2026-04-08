@@ -36,32 +36,32 @@ var keyDefinitions = map[string]struct {
 	Code    string
 	KeyCode int64
 }{
-	"enter":     {"Enter", "Enter", 13},
-	"tab":       {"Tab", "Tab", 9},
-	"escape":    {"Escape", "Escape", 27},
-	"backspace": {"Backspace", "Backspace", 8},
-	"delete":    {"Delete", "Delete", 46},
-	"space":     {" ", "Space", 32},
-	"arrowup":   {"ArrowUp", "ArrowUp", 38},
-	"arrowdown": {"ArrowDown", "ArrowDown", 40},
-	"arrowleft": {"ArrowLeft", "ArrowLeft", 37},
-	"arrowright":{"ArrowRight", "ArrowRight", 39},
-	"home":      {"Home", "Home", 36},
-	"end":       {"End", "End", 35},
-	"pageup":    {"PageUp", "PageUp", 33},
-	"pagedown":  {"PageDown", "PageDown", 34},
-	"f1":        {"F1", "F1", 112},
-	"f2":        {"F2", "F2", 113},
-	"f3":        {"F3", "F3", 114},
-	"f4":        {"F4", "F4", 115},
-	"f5":        {"F5", "F5", 116},
-	"f6":        {"F6", "F6", 117},
-	"f7":        {"F7", "F7", 118},
-	"f8":        {"F8", "F8", 119},
-	"f9":        {"F9", "F9", 120},
-	"f10":       {"F10", "F10", 121},
-	"f11":       {"F11", "F11", 122},
-	"f12":       {"F12", "F12", 123},
+	"enter":      {"Enter", "Enter", 13},
+	"tab":        {"Tab", "Tab", 9},
+	"escape":     {"Escape", "Escape", 27},
+	"backspace":  {"Backspace", "Backspace", 8},
+	"delete":     {"Delete", "Delete", 46},
+	"space":      {" ", "Space", 32},
+	"arrowup":    {"ArrowUp", "ArrowUp", 38},
+	"arrowdown":  {"ArrowDown", "ArrowDown", 40},
+	"arrowleft":  {"ArrowLeft", "ArrowLeft", 37},
+	"arrowright": {"ArrowRight", "ArrowRight", 39},
+	"home":       {"Home", "Home", 36},
+	"end":        {"End", "End", 35},
+	"pageup":     {"PageUp", "PageUp", 33},
+	"pagedown":   {"PageDown", "PageDown", 34},
+	"f1":         {"F1", "F1", 112},
+	"f2":         {"F2", "F2", 113},
+	"f3":         {"F3", "F3", 114},
+	"f4":         {"F4", "F4", 115},
+	"f5":         {"F5", "F5", 116},
+	"f6":         {"F6", "F6", 117},
+	"f7":         {"F7", "F7", 118},
+	"f8":         {"F8", "F8", 119},
+	"f9":         {"F9", "F9", 120},
+	"f10":        {"F10", "F10", 121},
+	"f11":        {"F11", "F11", 122},
+	"f12":        {"F12", "F12", 123},
 }
 
 type DragInput struct {
@@ -87,7 +87,7 @@ func registerInputTools(server *mcp.Server, s *mcpSession) {
 		Name:        "press_key",
 		Description: "Press a keyboard key. Supports: Enter, Tab, Escape, Backspace, Delete, Space, ArrowUp/Down/Left/Right, Home, End, PageUp/PageDown, F1-F12, or any single character. Modifiers: ctrl, alt, shift, meta (comma-separated). Timeout in seconds (default 30).",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input PressKeyInput) (*mcp.CallToolResult, any, error) {
-		actx, cancel := interactionCtx(s.activeCtx(), input.Timeout)
+		actx, cancel := interactionCtx(ctx, s.activeCtx(), input.Timeout)
 		defer cancel()
 		if err := chromedp.Run(actx, chromedp.ActionFunc(func(ctx context.Context) error {
 			return pressKey(ctx, input.Key, input.Modifiers)
@@ -103,7 +103,7 @@ func registerInputTools(server *mcp.Server, s *mcpSession) {
 		Name:        "hover",
 		Description: "Hover over an element by CSS selector or @ref. Triggers mouseover events. Timeout in seconds (default 30).",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, inp HoverInput) (*mcp.CallToolResult, any, error) {
-		actx, cancel := interactionCtx(s.activeCtx(), inp.Timeout)
+		actx, cancel := interactionCtx(ctx, s.activeCtx(), inp.Timeout)
 		defer cancel()
 		backendID, err := resolveRef(s.refs, inp.Selector)
 		if err != nil {
@@ -130,7 +130,7 @@ func registerInputTools(server *mcp.Server, s *mcpSession) {
 		Name:        "focus",
 		Description: "Focus an element by CSS selector or @ref. Timeout in seconds (default 30).",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, inp FocusInput) (*mcp.CallToolResult, any, error) {
-		actx, cancel := interactionCtx(s.activeCtx(), inp.Timeout)
+		actx, cancel := interactionCtx(ctx, s.activeCtx(), inp.Timeout)
 		defer cancel()
 		backendID, err := resolveRef(s.refs, inp.Selector)
 		if err != nil {
@@ -161,7 +161,7 @@ func registerInputTools(server *mcp.Server, s *mcpSession) {
 		if steps <= 0 {
 			steps = 10
 		}
-		actx, cancel := interactionCtx(s.activeCtx(), inp.Timeout)
+		actx, cancel := interactionCtx(ctx, s.activeCtx(), inp.Timeout)
 		defer cancel()
 
 		// Get center coordinates of source and target elements.
