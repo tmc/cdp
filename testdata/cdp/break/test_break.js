@@ -1,6 +1,6 @@
 const http = require('http');
 
-// Start a dummy server to fetch from
+// Start a dummy server to fetch from.
 const server = http.createServer((req, res) => {
     res.writeHead(200);
     res.end('ok');
