@@ -1,56 +1,35 @@
-# Chrome-to-HAR Implementation Notes
+# Implementation Notes
 
-## Current Status
+This repository now contains a small public Go module plus several command-line tools built on top of shared internal packages.
 
-We have implemented the following components:
+## Current Shape
 
-1. **Browser Package**: 
-   - Created a shared browser management package in `internal/browser`
-   - Implemented Chrome launching, navigation, and interaction
-   - Added options pattern for browser configuration
+- `main.go`: the root `chrome-to-har` capture-oriented CLI
+- `cmd/cdp`: the general Chrome/CDP CLI
+- `cmd/churl`: browser-backed fetch and extraction
+- `cmd/chdb`: Chrome-oriented debugger workflow
+- `cmd/ndp`: Node/V8 debugger workflow
+- `cmd/cdpscript` and `cmd/cdpscripttest`: script execution and testing tools
+- `internal/browser`: shared browser lifecycle and interaction code
+- `internal/recorder`: HAR and enhanced capture support
 
-2. **Churl Command**:
-   - Implemented curl-like functionality running through Chrome
-   - Added support for custom headers, basic auth, and different output formats
-   - Created documentation for the command
+## What Is Settled
 
-3. **Output Formats**:
-   - Added HTML, text, HAR, and JSON output support
-   - Implemented basic text extraction from HTML
+- Browser management is shared through internal packages instead of being reimplemented per command.
+- The repository supports both capture-oriented and interactive/debugger-oriented workflows.
+- HAR capture has grown beyond plain network logging and now includes injected capture for traffic CDP does not expose directly, such as gRPC-Web and WebRTC data channel events.
 
-## Next Steps
+## What Still Needs Work
 
-1. **Chrome-to-HAR Refactoring**:
-   - Move the existing chrome-to-har code to use the new browser package
-   - Extract shared code to improve maintainability
-   - Implement differential capture mode properly
+- `cmd/cdp` remains too large and mixes several concerns in one package.
+- `cmd/ndp` still contains a wide surface area for REPL, session, debugger, and runtime behavior.
+- Some docs and command surfaces still reflect the project’s earlier extraction history.
 
-2. **Churl Enhancements**:
-   - Add support for POST data with different content types
-   - Improve the text extraction for better plain text output
-   - Add extraction of specific elements via CSS selectors
-   - Add script injection capabilities
-   - Implement better wait strategies
+## Direction
 
-3. **Documentation and Testing**:
-   - Add more comprehensive documentation
-   - Add more examples and use cases
-   - Increase test coverage
-   - Add CI/CD integration
+The likely cleanup path is:
 
-## Technical Debt
-
-1. Error handling could be improved in some areas
-2. Need to ensure all resources are properly cleaned up
-3. Better handling of Chrome crashes and recoveries
-4. More robust cookie and header handling
-
-## Future Enhancements
-
-1. **Proxy Support**: Add support for proxying requests through custom proxies
-2. **Certificate Handling**: Add support for custom certificates and ignoring certificate errors
-3. **Screenshots**: Add capability to capture screenshots of pages or elements
-4. **PDF Export**: Add PDF generation from web pages
-5. **Network Throttling**: Simulate different network conditions
-6. **User Agents**: Easy switching between different user agents
-7. **Geolocation**: Spoofing geolocation for testing region-specific content
+1. Keep the current command set small and intentional.
+2. Move more command logic out of `package main` files and into focused internal packages.
+3. Keep shared browser and recorder primitives reusable across commands.
+4. Prefer deleting dead compatibility layers over preserving parallel implementations.

@@ -278,7 +278,7 @@ churl --script-after "
 
 ```bash
 # List available Chrome profiles
-chrome-to-har --list-profiles
+cdp --list-profiles
 
 # Use specific profile (maintains cookies, localStorage, etc.)
 churl --profile "Default" https://example.com

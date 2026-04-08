@@ -73,6 +73,6 @@ Available only on `chrome://extensions` page. Key methods:
 - `cmd/cdp/mcp_extension_tools.go` — current implementation
 - `cmd/cdp/mcp_extension_tools_test.go` — tests
 - `extension/coverage/manifest.json` — our coverage extension (devtools-only, needs SW added)
-- `docs/extension-dev-tools.md` — original design
+- `docs/planning/extension-dev-tools.md` — original design
 - `docs/known-issues.md` — issues #4 and #5
 - `/tmp/collab-E794-ext-research.md` — full research report

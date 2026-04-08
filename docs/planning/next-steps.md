@@ -69,7 +69,6 @@ Single `ToolDef` struct → auto-generates CLI + cdpscript + MCP surfaces. Archi
 | [next-steps.md](next-steps.md) | This file — master task tracker |
 | [node-electron-mcp.md](node-electron-mcp.md) | ndp MCP server design (Node/Electron) |
 | [advanced-capabilities-vision.md](advanced-capabilities-vision.md) | 8 forward-looking capabilities (sourcemaps, coverage-guided exploration, runtime deps, change impact, progressive understanding, live annotation, cdpscripttest, DevTools extension) |
-| [agent-browser-gap-analysis.md](agent-browser-gap-analysis.md) | Feature parity vs vercel-labs/agent-browser (mostly closed) |
-| [planning/roadmap.md](planning/roadmap.md) | ndp roadmap: workspace persistence, TUI, domain integration |
-| [planning/visionary_roadmap.md](planning/visionary_roadmap.md) | ndp vision: AI co-pilot, time travel, multiplayer debugging, DAP bridge |
+| [roadmap.md](roadmap.md) | ndp roadmap: workspace persistence, TUI, domain integration |
+| [visionary_roadmap.md](visionary_roadmap.md) | ndp vision: AI co-pilot, time travel, multiplayer debugging, DAP bridge |
 | [chrome-devtools-mcp-parity.md](chrome-devtools-mcp-parity.md) | chrome-devtools-mcp parity plan (7 gap tools) |

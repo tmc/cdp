@@ -92,4 +92,4 @@ Each analysis took 15-30 minutes using evaluate + list_sources + search_sources 
 - `/tmp/collab-A998-codex-reverse.md` — Codex analysis
 - `/tmp/collab-A998-claude-reverse.md` — Claude Desktop analysis
 - `/tmp/collab-A998-reversing-gaps.md` — Tool gap analysis from real usage
-- `docs/reversing-tools-design.md` — Full reversing tool proposals
+- follow-on reversing proposals should live in `docs/planning/` if we keep them

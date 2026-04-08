@@ -1,173 +1,128 @@
-# chrome-to-har Usage Guide
+# Usage Guide
 
-`chrome-to-har` launches a headed Chrome browser and captures network activity to HAR format.
+This repository currently has two top-level browser entry points:
 
-## Basic Usage
+- `chrome-to-har` at the module root, focused on HAR capture and differential capture.
+- `cdp` in `cmd/cdp`, focused on direct Chrome DevTools Protocol automation.
+
+Use `chrome-to-har` when you want a capture-oriented workflow. Use `cdp` when you want a general-purpose Chrome/CDP CLI.
+
+## `chrome-to-har`
+
+The root command launches Chrome, navigates to a page, and writes HAR or differential capture output.
 
 ```bash
-chrome-to-har [-profile=/path/to/chrome/profile] [-output=output.har] [-url=https://example.com] [-verbose] [-stream]
+chrome-to-har -url https://example.com -output output.har
 ```
 
-If no profile is specified, the first available Chrome profile will be automatically selected. Use `-verbose` to see which profile was selected.
+Common flags:
 
-## Options
+- `-url`: starting URL to navigate to
+- `-output`: output HAR path
+- `-stream`: stream entries as NDJSON while capturing
+- `-filter`: apply a jq filter to streamed entries
+- `-template`: render streamed entries with a Go template
+- `-profile`: use a Chrome profile directory
+- `-wait-for`: wait for a CSS selector before capture completes
+- `-wait-stable`: wait for network and DOM stability
+- `-headless`: run Chrome headless
+- `-list-profiles`: list available Chrome profiles
 
-- `-profile`: Chrome profile directory to use (defaults to first available profile)
-- `-output`: Output HAR file (default: output.har)
-- `-diff`: Enable differential HAR capture
-- `-verbose`: Enable verbose logging
-- `-url`: Starting URL to navigate to
-- `-cookies`: Regular expression to filter cookies (default: capture all)
-- `-urls`: Regular expression to filter URLs (default: capture all)
-- `-stream`: Stream HAR entries as they are captured (outputs NDJSON)
-- `-filter`: JQ expression to filter HAR entries
-- `-template`: Go template to transform HAR entries
-- `-block`: Regular expression of URLs to block from loading
-- `-omit`: Regular expression of URLs to omit from HAR output
-- `-cookie-domains`: Comma-separated list of domains to include cookies from
-- `-headless`: Run Chrome in headless mode
+Examples:
 
-## Examples
-
-Basic usage with auto-selected profile:
 ```bash
-chrome-to-har -verbose
+# Basic capture
+chrome-to-har -url https://example.com -output example.har
+
+# Stream only API traffic
+chrome-to-har -url https://example.com \
+  -stream \
+  -urls='api\.example\.com'
+
+# Capture with a profile
+chrome-to-har -profile "Default" \
+  -url https://example.com \
+  -output session.har
+
+# Wait for an application shell before finishing
+chrome-to-har -url https://app.example.com \
+  -wait-for '#app-root' \
+  -wait-stable \
+  -output app.har
 ```
 
-Specify a profile explicitly:
+## `cdp`
+
+The `cdp` command is the general Chrome/CDP tool in this repository.
+
 ```bash
-chrome-to-har -profile="Profile 1"
+cdp -url https://example.com -js 'document.title'
 ```
 
-Stream with auto-selected profile:
+Common flags:
+
+- `-url`: starting URL
+- `-js`: JavaScript to evaluate
+- `-har`: write HAR output
+- `-screenshot`: capture a screenshot
+- `-extract`: extract text or HTML from a selector
+- `-interactive` or `-shell`: keep the browser open for manual or REPL-driven work
+- `-headless`: run Chrome headless
+- `-use-profile`: use an existing Chrome profile
+- `-remote-host` and `-remote-port`: connect to a remote Chrome instance
+
+Examples:
+
 ```bash
-chrome-to-har -verbose -stream
+# Evaluate JavaScript
+cdp -headless -url https://example.com -js 'document.title'
+
+# Capture HAR and screenshot in one run
+cdp -url https://example.com \
+  -har capture.har \
+  -screenshot full
+
+# Render page content
+cdp -url https://example.com -render body
+
+# Connect to an existing Chrome debug port
+cdp -debug-port 9222 -list-tabs
 ```
 
-## Streaming Mode
+## Streaming and Filtering
 
-When using `-stream`, entries are output in NDJSON (Newline Delimited JSON) format as they are captured:
+`chrome-to-har` supports streaming entry output as NDJSON:
 
 ```jsonl
 {"startedDateTime":"2024-01-01T00:00:00Z","request":{"method":"GET","url":"https://example.com"},"response":{"status":200}}
 {"startedDateTime":"2024-01-01T00:00:01Z","request":{"method":"POST","url":"https://api.example.com"},"response":{"status":201}}
 ```
 
-### Streaming Use Cases
-
-1. Real-time monitoring:
-   ```bash
-   chrome-to-har -stream -filter='select(.response.status >= 400)' | tee errors.log
-   ```
-
-2. Live metrics collection:
-   ```bash
-   chrome-to-har -stream -template='{{.request.url}},{{.response.status}},{{.time}}' >> metrics.csv
-   ```
-
-3. API debugging:
-   ```bash
-   chrome-to-har -stream -urls='api\.example\.com' -filter='select(.request.method == "POST")'
-   ```
-
-## Filtering
-
-### JQ Filters
-
-Filter entries using JQ expressions:
+Examples:
 
 ```bash
 # Only errors
-chrome-to-har -filter='select(.response.status >= 400)'
+chrome-to-har -stream -filter='select(.response.status >= 400)'
 
-# Specific domains
-chrome-to-har -filter='select(.request.url | contains("api.example.com"))'
+# Format a CSV-like summary
+chrome-to-har -stream \
+  -template='{{.request.method}},{{.request.url}},{{.response.status}},{{.time}}'
 
-# Complex conditions
-chrome-to-har -filter='select(.request.method == "POST" and .response.status < 300)'
+# Focus on authentication traffic
+chrome-to-har -stream \
+  -urls='auth|login|token'
 ```
 
-### Template Transformations
+## Differential Capture
 
-Transform entries using Go templates:
+The root command also exposes differential capture mode:
 
 ```bash
-# Basic request log
-chrome-to-har -template='{{.startedDateTime}} {{.request.method}} {{.request.url}} {{.response.status}}'
+# Create a baseline capture
+chrome-to-har -diff-mode -url https://example.com -capture-name baseline
 
-# JSON transformation
-chrome-to-har -template='{"url":"{{.request.url}}","duration":{{.time}}}'
-
-# CSV format
-chrome-to-har -template='{{.request.method}},{{.request.url}},{{.response.status}},{{.time}}'
+# Compare two captures
+chrome-to-har -baseline baseline -compare-with candidate -diff-output report.html
 ```
 
-## Common Use Cases
-
-1. Authentication debugging:
-   ```bash
-   chrome-to-har -urls='auth|login' -cookies='session|token'
-   ```
-
-2. Performance monitoring:
-   ```bash
-   chrome-to-har -stream -template='{"url":"{{.request.url}}","time":{{.time}}}' | jq -c 'select(.time > 1000)'
-   ```
-
-3. API testing:
-   ```bash
-   chrome-to-har -urls='api' -filter='select(.request.headers[] | select(.name == "Authorization"))' -stream
-   ```
-
-4. Security scanning:
-   ```bash
-   chrome-to-har -filter='select(.response.headers[] | select(.name|test("^X-";"i")))' -stream
-   ```
-
-5. Load testing:
-   ```bash
-   chrome-to-har -template='{{.time}}' -urls='critical-endpoint' | awk '{sum+=$1} END {print "Avg:",sum/NR}'
-   ```
-
-## Advanced Features
-
-### Cookie Management
-
-Filter and manage cookies:
-
-```bash
-# Include specific domains
-chrome-to-har -cookie-domains=example.com,api.example.com
-
-# Filter by cookie name
-chrome-to-har -cookies='session|auth|token'
-```
-
-### URL Control
-
-Control which URLs are processed:
-
-```bash
-# Block tracking scripts
-chrome-to-har -block='google-analytics|facebook|tracking'
-
-# Omit from output
-chrome-to-har -omit='\.png$|\.jpg$'
-
-# Focus on specific paths
-chrome-to-har -urls='/api/v[0-9]+'
-```
-
-### Differential Capture
-
-Capture changes between runs:
-
-```bash
-# First run
-chrome-to-har -output=baseline.har -url=https://example.com
-
-# Compare with baseline
-chrome-to-har -diff -output=diff.har -url=https://example.com
-```
-
-Would you like me to continue with the remaining files?
+See [differential-capture.md](/Volumes/tmc/go/src/github.com/tmc/cdp/docs/differential-capture.md) for more detail.
