@@ -155,34 +155,50 @@ const WebRTCCaptureScript = `(function() {
   const OrigPC = window.RTCPeerConnection || window.webkitRTCPeerConnection;
   if (!OrigPC) return;
 
-  function wrapDataChannel(dc, source) {
-    dc.addEventListener('message', function(e) {
-      let data;
-      let binary = false;
-      if (typeof e.data === 'string') {
-        data = e.data;
-      } else if (e.data instanceof ArrayBuffer) {
-        binary = true;
-        // Convert to base64 for transport.
-        const bytes = new Uint8Array(e.data);
-        let bin = '';
-        for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
-        data = btoa(bin);
-      } else if (e.data instanceof Blob) {
-        binary = true;
-        data = '[Blob ' + e.data.size + ' bytes]';
-      } else {
-        data = String(e.data);
-      }
+  function serializePayload(raw) {
+    if (typeof raw === 'string') return { data: raw, binary: false };
+    if (raw instanceof ArrayBuffer) {
+      const bytes = new Uint8Array(raw);
+      let bin = '';
+      for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+      return { data: btoa(bin), binary: true };
+    }
+    if (ArrayBuffer.isView(raw)) {
+      const bytes = new Uint8Array(raw.buffer, raw.byteOffset, raw.byteLength);
+      let bin = '';
+      for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+      return { data: btoa(bin), binary: true };
+    }
+    if (raw instanceof Blob) return { data: '[Blob ' + raw.size + ' bytes]', binary: true };
+    return { data: String(raw), binary: false };
+  }
 
+  function wrapDataChannel(dc, source) {
+    // Capture inbound messages.
+    dc.addEventListener('message', function(e) {
+      const s = serializePayload(e.data);
       console.log('CDP_DC:' + JSON.stringify({
         type: 'message',
         label: dc.label || '',
-        dir: source,
-        data: data,
-        binary: binary,
+        dir: 'incoming',
+        data: s.data,
+        binary: s.binary,
       }));
     });
+
+    // Capture outbound send() calls.
+    const origSend = dc.send.bind(dc);
+    dc.send = function(payload) {
+      const s = serializePayload(payload);
+      console.log('CDP_DC:' + JSON.stringify({
+        type: 'message',
+        label: dc.label || '',
+        dir: 'outgoing',
+        data: s.data,
+        binary: s.binary,
+      }));
+      return origSend(payload);
+    };
   }
 
   function PatchedPC(config) {
