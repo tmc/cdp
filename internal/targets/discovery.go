@@ -11,16 +11,16 @@ import (
 
 // TargetInfo represents a debugging target from the JSON API
 type TargetInfo struct {
-	ID                          string `json:"id"`
-	Type                        string `json:"type"`
-	Title                       string `json:"title"`
-	URL                         string `json:"url"`
-	Description                 string `json:"description"`
-	FaviconURL                  string `json:"faviconUrl"`
-	DevtoolsFrontendURL         string `json:"devtoolsFrontendUrl"`
-	DevtoolsFrontendURLCompat   string `json:"devtoolsFrontendUrlCompat"`
-	WebSocketDebuggerURL        string `json:"webSocketDebuggerUrl"`
-	Port                        int    `json:"-"`
+	ID                        string `json:"id"`
+	Type                      string `json:"type"`
+	Title                     string `json:"title"`
+	URL                       string `json:"url"`
+	Description               string `json:"description"`
+	FaviconURL                string `json:"faviconUrl"`
+	DevtoolsFrontendURL       string `json:"devtoolsFrontendUrl"`
+	DevtoolsFrontendURLCompat string `json:"devtoolsFrontendUrlCompat"`
+	WebSocketDebuggerURL      string `json:"webSocketDebuggerUrl"`
+	Port                      int    `json:"-"`
 }
 
 // VersionInfo represents the version information from /json/version
@@ -42,17 +42,12 @@ type Discovery struct {
 // NewDiscovery creates a new target discovery instance
 func NewDiscovery(timeout time.Duration) *Discovery {
 	return &Discovery{
-		ports: []int{9229, 9230, 9231, 9232, 9233, 9234, 9235, 9236, 9237, 9238, 9222, 9223, 9224},
+		ports:   []int{9229, 9230, 9231, 9232, 9233, 9234, 9235, 9236, 9237, 9238, 9222, 9223, 9224},
 		timeout: timeout,
 		client: &http.Client{
 			Timeout: timeout,
 		},
 	}
-}
-
-// SetPorts sets the ports to scan for debugging targets
-func (d *Discovery) SetPorts(ports []int) {
-	d.ports = ports
 }
 
 // DiscoverTargets discovers all available debugging targets using Chrome's method
@@ -78,11 +73,6 @@ func (d *Discovery) DiscoverTargets(ctx context.Context) ([]TargetInfo, error) {
 
 	wg.Wait()
 	return targets, nil
-}
-
-// DiscoverPort discovers targets on a specific port
-func (d *Discovery) DiscoverPort(ctx context.Context, port int) ([]TargetInfo, error) {
-	return d.discoverPort(ctx, port)
 }
 
 // discoverPort discovers targets on a specific port (internal implementation)
@@ -140,33 +130,6 @@ func (d *Discovery) discoverPort(ctx context.Context, port int) ([]TargetInfo, e
 	}
 
 	return targets, nil
-}
-
-// GetVersion gets version information for a specific port
-func (d *Discovery) GetVersion(ctx context.Context, port int) (*VersionInfo, error) {
-	versionURL := fmt.Sprintf("http://localhost:%d/json/version", port)
-
-	req, err := http.NewRequestWithContext(ctx, "GET", versionURL, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	resp, err := d.client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
-	}
-
-	var version VersionInfo
-	if err := json.NewDecoder(resp.Body).Decode(&version); err != nil {
-		return nil, fmt.Errorf("failed to parse version info: %w", err)
-	}
-
-	return &version, nil
 }
 
 // IsNodeTarget returns true if the target is a Node.js debugging target
