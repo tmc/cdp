@@ -159,11 +159,11 @@ The main `cdp` command is the broader general-purpose entry point. It goes beyon
 
 ## Documentation
 
-- [docs/usage.md](/Volumes/tmc/go/src/github.com/tmc/cdp/docs/usage.md)
-- [docs/cdp.md](/Volumes/tmc/go/src/github.com/tmc/cdp/docs/cdp.md)
-- [docs/churl.md](/Volumes/tmc/go/src/github.com/tmc/cdp/docs/churl.md)
-- [docs/langmodel.md](/Volumes/tmc/go/src/github.com/tmc/cdp/docs/langmodel.md)
-- [docs/differential-capture.md](/Volumes/tmc/go/src/github.com/tmc/cdp/docs/differential-capture.md)
+- [docs/usage.md](docs/usage.md)
+- [docs/cdp.md](docs/cdp.md)
+- [docs/churl.md](docs/churl.md)
+- [docs/langmodel.md](docs/langmodel.md)
+- [docs/differential-capture.md](docs/differential-capture.md)
 
 For command-level help, use:
 

@@ -125,4 +125,4 @@ chrome-to-har -diff-mode -url https://example.com -capture-name baseline
 chrome-to-har -baseline baseline -compare-with candidate -diff-output report.html
 ```
 
-See [differential-capture.md](/Volumes/tmc/go/src/github.com/tmc/cdp/docs/differential-capture.md) for more detail.
+See [differential-capture.md](differential-capture.md) for more detail.
