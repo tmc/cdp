@@ -13,6 +13,7 @@ import (
 	"github.com/chromedp/cdproto/har"
 	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/cdproto/page"
+	"github.com/chromedp/cdproto/runtime"
 	"github.com/chromedp/cdproto/target"
 	"github.com/chromedp/chromedp"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -556,15 +557,28 @@ func registerTabTools(server *mcp.Server, s *mcpSession) {
 			}, TabOutput{ID: input.ID}, nil
 		}
 		tabCtx, tabCancel := chromedp.NewContext(s.browserCtx, chromedp.WithTargetID(target.ID(input.ID)))
-		// Run a no-op to ensure the context attaches to the target.
-		if err := runWithTimeout(tabCtx, 10*time.Second); err != nil {
+		// Attach and enable Page+Runtime domains so subsequent navigate/screenshot
+		// calls work reliably. A bare no-op Run attaches but doesn't enable the
+		// domains on the new session, causing timeouts on the next tool call.
+		var out TabOutput
+		out.ID = input.ID
+		if err := runWithTimeout(tabCtx, 10*time.Second,
+			chromedp.ActionFunc(func(ctx context.Context) error {
+				if err := page.Enable().Do(ctx); err != nil {
+					return fmt.Errorf("enable page: %w", err)
+				}
+				if err := runtime.Enable().Do(ctx); err != nil {
+					return fmt.Errorf("enable runtime: %w", err)
+				}
+				return nil
+			}),
+			chromedp.Title(&out.Title),
+			chromedp.Location(&out.URL),
+		); err != nil {
 			tabCancel()
 			return nil, TabOutput{}, fmt.Errorf("switch_tab: attach: %w", err)
 		}
 		s.setActiveCtx(tabCtx, tabCancel)
-		var out TabOutput
-		out.ID = input.ID
-		_ = chromedp.Run(tabCtx, chromedp.Title(&out.Title), chromedp.Location(&out.URL))
 		return nil, out, nil
 	})
 
@@ -573,20 +587,29 @@ func registerTabTools(server *mcp.Server, s *mcpSession) {
 		Description: "Open a new browser tab, optionally navigating to a URL",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input NewTabInput) (*mcp.CallToolResult, TabOutput, error) {
 		tabCtx, tabCancel := chromedp.NewContext(s.browserCtx)
+		var actions []chromedp.Action
+		timeout := 10 * time.Second
 		if input.URL != "" {
-			if err := runWithTimeout(tabCtx, 30*time.Second, chromedp.Navigate(input.URL)); err != nil {
-				tabCancel()
-				return nil, TabOutput{}, fmt.Errorf("new_tab: %w", err)
-			}
-		} else {
-			if err := runWithTimeout(tabCtx, 10*time.Second); err != nil {
-				tabCancel()
-				return nil, TabOutput{}, fmt.Errorf("new_tab: %w", err)
-			}
+			actions = append(actions, chromedp.Navigate(input.URL))
+			timeout = 30 * time.Second
+		}
+		// Enable Page+Runtime domains on the new session to avoid timeouts
+		// in subsequent tool calls (navigate, screenshot, etc.).
+		actions = append(actions,
+			chromedp.ActionFunc(func(ctx context.Context) error {
+				if err := page.Enable().Do(ctx); err != nil {
+					return fmt.Errorf("enable page: %w", err)
+				}
+				return runtime.Enable().Do(ctx)
+			}),
+		)
+		if err := runWithTimeout(tabCtx, timeout, actions...); err != nil {
+			tabCancel()
+			return nil, TabOutput{}, fmt.Errorf("new_tab: %w", err)
 		}
 		s.setActiveCtx(tabCtx, tabCancel)
 		var out TabOutput
-		_ = chromedp.Run(tabCtx, chromedp.Title(&out.Title), chromedp.Location(&out.URL))
+		_ = runWithTimeout(tabCtx, 5*time.Second, chromedp.Title(&out.Title), chromedp.Location(&out.URL))
 		return nil, out, nil
 	})
 
