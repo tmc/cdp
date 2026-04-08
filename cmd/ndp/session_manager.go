@@ -217,19 +217,6 @@ func (sm *SessionManager) connectToTarget(ctx context.Context, target DebugTarge
 	return conn, nil
 }
 
-// GetSession retrieves a session by ID
-func (sm *SessionManager) GetSession(sessionID string) (*Session, error) {
-	sm.mu.RLock()
-	defer sm.mu.RUnlock()
-
-	session, ok := sm.sessions[sessionID]
-	if !ok {
-		return nil, fmt.Errorf("session %s not found", sessionID)
-	}
-
-	return session, nil
-}
-
 // ListTargets lists all available debug targets
 func (sm *SessionManager) ListTargets(ctx context.Context) ([]DebugTarget, error) {
 	var targets []DebugTarget

@@ -287,24 +287,6 @@ func (bm *BreakpointManager) setPendingBreakpoint(ctx context.Context, bp *Break
 	return nil
 }
 
-// SetLogPoint sets a non-breaking log point
-func (bm *BreakpointManager) SetLogPoint(ctx context.Context, location string, logMessage string) error {
-	bp, err := bm.parseLocation(location)
-	if err != nil {
-		return fmt.Errorf("invalid log point location: %w", err)
-	}
-
-	bp.Type = BreakpointTypeLog
-	bp.LogMessage = logMessage
-	bp.Enabled = true
-
-	// Create a condition that logs but doesn't break
-	logExpression := fmt.Sprintf(`console.log('[LOGPOINT] %s:', %s), false`, location, logMessage)
-	bp.Condition = logExpression
-
-	return bm.setLineBreakpoint(ctx, bp)
-}
-
 // RemoveBreakpoint removes a breakpoint
 func (bm *BreakpointManager) RemoveBreakpoint(ctx context.Context, breakpointID string) error {
 	if bm.session == nil {
@@ -340,48 +322,6 @@ func (bm *BreakpointManager) RemoveBreakpoint(ctx context.Context, breakpointID 
 	return nil
 }
 
-// EnableBreakpoint enables a disabled breakpoint
-func (bm *BreakpointManager) EnableBreakpoint(breakpointID string) error {
-	bm.mu.Lock()
-	defer bm.mu.Unlock()
-
-	bp, exists := bm.breakpoints[breakpointID]
-	if !exists {
-		return fmt.Errorf("breakpoint %s not found", breakpointID)
-	}
-
-	bp.Enabled = true
-	// In a full implementation, we would re-set the breakpoint in the debugger
-
-	return nil
-}
-
-// DisableBreakpoint disables a breakpoint without removing it
-func (bm *BreakpointManager) DisableBreakpoint(ctx context.Context, breakpointID string) error {
-	bm.mu.Lock()
-	defer bm.mu.Unlock()
-
-	bp, exists := bm.breakpoints[breakpointID]
-	if !exists {
-		return fmt.Errorf("breakpoint %s not found", breakpointID)
-	}
-
-	// Remove from debugger but keep in manager
-	err := chromedp.Run(bm.session.ChromeCtx,
-		chromedp.ActionFunc(func(ctx context.Context) error {
-			return debugger.RemoveBreakpoint(debugger.BreakpointID(bp.ID)).Do(ctx)
-		}),
-	)
-
-	if err != nil {
-		return err
-	}
-
-	bp.Enabled = false
-
-	return nil
-}
-
 // ListBreakpoints lists all breakpoints
 func (bm *BreakpointManager) ListBreakpoints() []Breakpoint {
 	bm.mu.RLock()
@@ -395,24 +335,6 @@ func (bm *BreakpointManager) ListBreakpoints() []Breakpoint {
 	return breakpoints
 }
 
-// ClearAllBreakpoints removes all breakpoints
-func (bm *BreakpointManager) ClearAllBreakpoints(ctx context.Context) error {
-	bm.mu.RLock()
-	ids := make([]string, 0, len(bm.breakpoints))
-	for id := range bm.breakpoints {
-		ids = append(ids, id)
-	}
-	bm.mu.RUnlock()
-
-	for _, id := range ids {
-		if err := bm.RemoveBreakpoint(ctx, id); err != nil && bm.verbose {
-			log.Printf("Failed to remove breakpoint %s: %v", id, err)
-		}
-	}
-
-	return nil
-}
-
 // getScripts retrieves all parsed scripts
 func (bm *BreakpointManager) getScripts(ctx context.Context) ([]*debugger.EventScriptParsed, error) {
 	// In a real implementation, we would listen to scriptParsed events
@@ -421,46 +343,4 @@ func (bm *BreakpointManager) getScripts(ctx context.Context) ([]*debugger.EventS
 	// This is a simplified version - in production, you'd maintain
 	// a list of scripts from debugger.EventScriptParsed events
 	return []*debugger.EventScriptParsed{}, nil
-}
-
-// UpdateHitCount updates the hit count for a breakpoint
-func (bm *BreakpointManager) UpdateHitCount(breakpointID string) {
-	bm.mu.Lock()
-	defer bm.mu.Unlock()
-
-	if bp, exists := bm.breakpoints[breakpointID]; exists {
-		bp.HitCount++
-	}
-}
-
-// GetBreakpoint retrieves a breakpoint by ID
-func (bm *BreakpointManager) GetBreakpoint(breakpointID string) (*Breakpoint, error) {
-	bm.mu.RLock()
-	defer bm.mu.RUnlock()
-
-	bp, exists := bm.breakpoints[breakpointID]
-	if !exists {
-		return nil, fmt.Errorf("breakpoint %s not found", breakpointID)
-	}
-
-	return bp, nil
-}
-
-// SaveBreakpoints saves all breakpoints to a file
-func (bm *BreakpointManager) SaveBreakpoints(filename string) error {
-	bm.mu.RLock()
-	defer bm.mu.RUnlock()
-
-	// Implementation would serialize breakpoints to JSON
-	// and save to file
-
-	return nil
-}
-
-// LoadBreakpoints loads breakpoints from a file
-func (bm *BreakpointManager) LoadBreakpoints(ctx context.Context, filename string) error {
-	// Implementation would deserialize breakpoints from JSON
-	// and re-set them in the current session
-
-	return nil
 }

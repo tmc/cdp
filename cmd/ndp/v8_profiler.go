@@ -1,9 +1,6 @@
 package main
 
-import (
-	"fmt"
-	"time"
-)
+import "fmt"
 
 // V8Profiler provides CPU and memory profiling capabilities
 type V8Profiler struct {
@@ -84,7 +81,7 @@ func (p *V8Profiler) StopCPUProfiling() (*V8CPUProfile, error) {
 
 // V8CPUProfile represents a CPU profiling result
 type V8CPUProfile struct {
-	Nodes      []V8CPUProfileNode  `json:"nodes"`
+	Nodes      []V8CPUProfileNode `json:"nodes"`
 	StartTime  float64            `json:"startTime"`
 	EndTime    float64            `json:"endTime"`
 	Samples    []int              `json:"samples,omitempty"`
@@ -93,12 +90,12 @@ type V8CPUProfile struct {
 
 // V8CPUProfileNode represents a node in the CPU profile call tree
 type V8CPUProfileNode struct {
-	ID            int                      `json:"id"`
-	CallFrame     V8ProfilerCallFrame     `json:"callFrame"`
-	HitCount      int                     `json:"hitCount,omitempty"`
-	Children      []int                   `json:"children,omitempty"`
-	DeoptReason   string                  `json:"deoptReason,omitempty"`
-	PositionTicks []PositionTickInfo      `json:"positionTicks,omitempty"`
+	ID            int                 `json:"id"`
+	CallFrame     V8ProfilerCallFrame `json:"callFrame"`
+	HitCount      int                 `json:"hitCount,omitempty"`
+	Children      []int               `json:"children,omitempty"`
+	DeoptReason   string              `json:"deoptReason,omitempty"`
+	PositionTicks []PositionTickInfo  `json:"positionTicks,omitempty"`
 }
 
 // V8ProfilerCallFrame represents a JavaScript call frame in profiler context
@@ -193,15 +190,15 @@ func (p *V8Profiler) TakePreciseCoverage() ([]ScriptCoverage, error) {
 // ScriptCoverage represents coverage data for a script
 type ScriptCoverage struct {
 	ScriptID  string             `json:"scriptId"`
-	URL       string            `json:"url"`
+	URL       string             `json:"url"`
 	Functions []FunctionCoverage `json:"functions"`
 }
 
 // FunctionCoverage represents coverage data for a function
 type FunctionCoverage struct {
-	FunctionName    string      `json:"functionName"`
+	FunctionName    string          `json:"functionName"`
 	Ranges          []CoverageRange `json:"ranges"`
-	IsBlockCoverage bool        `json:"isBlockCoverage"`
+	IsBlockCoverage bool            `json:"isBlockCoverage"`
 }
 
 // CoverageRange represents a coverage range
@@ -279,14 +276,14 @@ func (p *V8Profiler) TakeTypeProfile() ([]ScriptTypeProfile, error) {
 
 // ScriptTypeProfile represents type profiling data for a script
 type ScriptTypeProfile struct {
-	ScriptID string        `json:"scriptId"`
-	URL      string        `json:"url"`
+	ScriptID string             `json:"scriptId"`
+	URL      string             `json:"url"`
 	Entries  []TypeProfileEntry `json:"entries"`
 }
 
 // TypeProfileEntry represents a type profile entry
 type TypeProfileEntry struct {
-	Offset int         `json:"offset"`
+	Offset int          `json:"offset"`
 	Types  []TypeObject `json:"types"`
 }
 
@@ -382,9 +379,9 @@ type SamplingHeapProfile struct {
 
 // SamplingHeapProfileNode represents a node in the sampling heap profile
 type SamplingHeapProfileNode struct {
-	CallFrame V8ProfilerCallFrame         `json:"callFrame"`
-	SelfSize  int                        `json:"selfSize"`
-	Children  []SamplingHeapProfileNode  `json:"children"`
+	CallFrame V8ProfilerCallFrame       `json:"callFrame"`
+	SelfSize  int                       `json:"selfSize"`
+	Children  []SamplingHeapProfileNode `json:"children"`
 }
 
 // GetObjectByHeapObjectID retrieves an object by heap object ID
@@ -628,40 +625,4 @@ func (p *V8Profiler) parseSamplingHeapProfileNode(node map[string]interface{}) S
 	}
 
 	return profileNode
-}
-
-// ProfilerSession provides high-level profiling session management
-type ProfilerSession struct {
-	profiler   *V8Profiler
-	startTime  time.Time
-	cpuRunning bool
-	title      string
-}
-
-// NewProfilerSession creates a new profiler session
-func NewProfilerSession(profiler *V8Profiler, title string) *ProfilerSession {
-	return &ProfilerSession{
-		profiler: profiler,
-		title:    title,
-	}
-}
-
-// StartCPUProfiling starts a CPU profiling session
-func (s *ProfilerSession) StartCPUProfiling(samplingInterval int) error {
-	s.startTime = time.Now()
-	s.cpuRunning = true
-	return s.profiler.StartCPUProfiling(s.title, samplingInterval)
-}
-
-// StopCPUProfiling stops the CPU profiling session
-func (s *ProfilerSession) StopCPUProfiling() (*V8CPUProfile, time.Duration, error) {
-	if !s.cpuRunning {
-		return nil, 0, fmt.Errorf("CPU profiling is not running")
-	}
-
-	profile, err := s.profiler.StopCPUProfiling()
-	duration := time.Since(s.startTime)
-	s.cpuRunning = false
-
-	return profile, duration, err
 }
