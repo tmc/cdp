@@ -1,0 +1,558 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Obsidian Graph Renderer</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #1e1e1e; color: #ddd; font-family: -apple-system, BlinkMacSystemFont, system-ui, sans-serif; overflow: hidden; }
+canvas { display: block; }
+#controls {
+    position: absolute; top: 10px; right: 10px; width: 240px;
+    background: rgba(30,30,30,0.9); border: 1px solid #444; border-radius: 8px; padding: 12px;
+    font-size: 12px; z-index: 10;
+}
+#controls label { display: block; margin: 6px 0 2px; color: #aaa; }
+#controls input[type=range] { width: 100%; }
+#controls .section { margin-bottom: 10px; border-bottom: 1px solid #333; padding-bottom: 8px; }
+#info { position: absolute; bottom: 10px; left: 10px; color: #666; font-size: 11px; }
+#tooltip {
+    display: none; position: absolute; background: rgba(0,0,0,0.85); color: #fff;
+    padding: 6px 10px; border-radius: 4px; font-size: 12px; pointer-events: none; z-index: 20;
+}
+</style>
+</head>
+<body>
+<canvas id="canvas"></canvas>
+<div id="tooltip"></div>
+<div id="controls">
+    <div class="section">
+        <strong>Obsidian Graph View</strong><br>
+        <span id="stats" style="color:#888"></span>
+    </div>
+    <div class="section">
+        <label>Center Force <span id="v-center">0.1</span></label>
+        <input type="range" id="centerForce" min="0" max="1" step="0.01" value="0.1">
+        <label>Repel Force <span id="v-repel">1000</span></label>
+        <input type="range" id="repelForce" min="0" max="5000" step="50" value="1000">
+        <label>Link Distance <span id="v-dist">250</span></label>
+        <input type="range" id="linkDist" min="50" max="500" step="10" value="250">
+        <label>Link Strength <span id="v-link">1</span></label>
+        <input type="range" id="linkStrength" min="0" max="2" step="0.1" value="1">
+    </div>
+    <div class="section">
+        <label>Node Size <span id="v-nodesize">1</span></label>
+        <input type="range" id="nodeSize" min="0.5" max="3" step="0.1" value="1">
+        <label>Text Threshold <span id="v-textthresh">0.5</span></label>
+        <input type="range" id="textThresh" min="0" max="2" step="0.05" value="0.5">
+    </div>
+    <div>
+        <label><input type="checkbox" id="showArrows"> Show Arrows</label><br>
+        <label><input type="checkbox" id="showLabels" checked> Show Labels</label><br>
+        <button id="resetBtn" style="margin-top:8px; padding:4px 12px;">Reset Layout</button>
+        <button id="loadBtn" style="margin-top:4px; padding:4px 12px;">Load from Obsidian</button>
+    </div>
+</div>
+<div id="info">Scroll to zoom, drag to pan, drag nodes to move. Click node to highlight.</div>
+
+<script>
+// Obsidian-compatible graph renderer using Canvas2D
+// Replicates the PixiJS + sim.js force-directed layout
+
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+const tooltip = document.getElementById('tooltip');
+
+// --- Color scheme (Obsidian dark theme defaults) ---
+const COLORS = {
+    fill:          { a: 1.0, rgb: '#B3B3B3' },
+    fillFocused:   { a: 1.0, rgb: '#A679F9' },
+    fillTag:       { a: 1.0, rgb: '#44CF6E' },
+    fillUnresolved:{ a: 0.5, rgb: '#666666' },
+    fillAttachment:{ a: 1.0, rgb: '#E0E051' },
+    fillHighlight: { a: 1.0, rgb: '#8A5CF5' },
+    circle:        { a: 1.0, rgb: '#A679F9' },
+    line:          { a: 1.0, rgb: '#3F3F3F' },
+    lineHighlight: { a: 1.0, rgb: '#8A5CF5' },
+    text:          { a: 1.0, rgb: '#DADADA' },
+    arrow:         { a: 0.5, rgb: '#DADADA' },
+};
+
+function hexToRgb(hex) {
+    const r = parseInt(hex.slice(1,3), 16);
+    const g = parseInt(hex.slice(3,5), 16);
+    const b = parseInt(hex.slice(5,7), 16);
+    return { r, g, b };
+}
+
+function intToHex(n) {
+    return '#' + n.toString(16).padStart(6, '0');
+}
+
+// --- Force simulation (port of Obsidian's sim.js) ---
+class ForceSimulation {
+    constructor() {
+        this.nodes = [];
+        this.links = [];
+        this.alpha = 1;
+        this.alphaTarget = 0;
+        this.alphaDecay = 1 - Math.pow(0.001, 1/300);
+        this.centerStrength = 0.1;
+        this.linkStrength = 1;
+        this.linkDistance = 250;
+        this.repelStrength = 1000;
+        this.running = false;
+    }
+
+    tick() {
+        this.alpha += (this.alphaTarget - this.alpha) * this.alphaDecay;
+        if (this.alpha < 0.001) {
+            this.running = false;
+            return;
+        }
+
+        // Center force
+        for (const n of this.nodes) {
+            n.vx -= n.x * this.centerStrength * this.alpha;
+            n.vy -= n.y * this.centerStrength * this.alpha;
+        }
+
+        // Link force
+        for (const link of this.links) {
+            const s = link.source, t = link.target;
+            let dx = t.x + t.vx - s.x - s.vx;
+            let dy = t.y + t.vy - s.y - s.vy;
+            let dist = Math.sqrt(dx * dx + dy * dy) || 1;
+            let force = (dist - this.linkDistance) / dist * this.alpha * this.linkStrength;
+            dx *= force; dy *= force;
+            const w = s.weight / (s.weight + t.weight);
+            t.vx -= dx * w;
+            t.vy -= dy * w;
+            s.vx += dx * (1 - w);
+            s.vy += dy * (1 - w);
+        }
+
+        // Many-body repulsion (Barnes-Hut via simple N^2 for now)
+        const strength = -this.repelStrength;
+        for (let i = 0; i < this.nodes.length; i++) {
+            for (let j = i + 1; j < this.nodes.length; j++) {
+                const a = this.nodes[i], b = this.nodes[j];
+                let dx = b.x - a.x || (Math.random() - 0.5) * 1e-6;
+                let dy = b.y - a.y || (Math.random() - 0.5) * 1e-6;
+                let dist2 = dx * dx + dy * dy;
+                if (dist2 < 900) dist2 = Math.sqrt(900 * dist2); // distanceMin=30
+                let force = strength * this.alpha / dist2;
+                dx *= force; dy *= force;
+                a.vx -= dx; a.vy -= dy;
+                b.vx += dx; b.vy += dy;
+            }
+        }
+
+        // Velocity decay
+        for (const n of this.nodes) {
+            if (n.fx != null) { n.x = n.fx; n.vx = 0; }
+            else { n.x += n.vx *= 0.6; }
+            if (n.fy != null) { n.y = n.fy; n.vy = 0; }
+            else { n.y += n.vy *= 0.6; }
+        }
+    }
+
+    start() {
+        this.alpha = 1;
+        this.running = true;
+    }
+}
+
+// --- Graph state ---
+let sim = new ForceSimulation();
+let graphNodes = [];
+let graphLinks = [];
+let nodeLookup = {};
+let highlightNode = null;
+let dragNode = null;
+let dragOffset = { x: 0, y: 0 };
+
+// Camera
+let panX = 0, panY = 0, scale = 1;
+let isPanning = false, panStart = { x: 0, y: 0 }, panStartCam = { x: 0, y: 0 };
+
+// Settings
+let nodeScaleMult = 1;
+let showArrows = false;
+let showLabels = true;
+let textThreshold = 0.5;
+
+function getNodeSize(node) {
+    return nodeScaleMult * Math.max(8, Math.min(3 * Math.sqrt(node.weight + 1), 30));
+}
+
+function getNodeColor(node) {
+    if (highlightNode === node) return COLORS.fillHighlight;
+    if (node.type === 'focused') return COLORS.fillFocused;
+    if (node.type === 'tag') return COLORS.fillTag;
+    if (node.type === 'unresolved') return COLORS.fillUnresolved;
+    if (node.type === 'attachment') return COLORS.fillAttachment;
+    return COLORS.fill;
+}
+
+function getDisplayText(id) {
+    // Strip path and extension like Obsidian does
+    let name = id;
+    const slash = name.lastIndexOf('/');
+    if (slash >= 0) name = name.slice(slash + 1);
+    const dot = name.lastIndexOf('.');
+    if (dot > 0) name = name.slice(0, dot);
+    return name;
+}
+
+// --- Rendering ---
+function resize() {
+    canvas.width = window.innerWidth * devicePixelRatio;
+    canvas.height = window.innerHeight * devicePixelRatio;
+    canvas.style.width = window.innerWidth + 'px';
+    canvas.style.height = window.innerHeight + 'px';
+}
+
+function screenToWorld(sx, sy) {
+    return {
+        x: (sx * devicePixelRatio - canvas.width / 2 - panX) / scale,
+        y: (sy * devicePixelRatio - canvas.height / 2 - panY) / scale,
+    };
+}
+
+function worldToScreen(wx, wy) {
+    return {
+        x: (wx * scale + panX + canvas.width / 2) / devicePixelRatio,
+        y: (wy * scale + panY + canvas.height / 2) / devicePixelRatio,
+    };
+}
+
+function render() {
+    if (sim.running) sim.tick();
+
+    ctx.save();
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.translate(canvas.width / 2 + panX, canvas.height / 2 + panY);
+    ctx.scale(scale, scale);
+
+    // Draw links
+    for (const link of graphLinks) {
+        const s = link.source, t = link.target;
+        const isHighlighted = highlightNode && (highlightNode === s || highlightNode === t);
+        const color = isHighlighted ? COLORS.lineHighlight : COLORS.line;
+        const alpha = isHighlighted ? 1 : 0.4;
+
+        ctx.beginPath();
+        ctx.moveTo(s.x, s.y);
+        ctx.lineTo(t.x, t.y);
+        ctx.strokeStyle = color.rgb;
+        ctx.globalAlpha = alpha * color.a;
+        ctx.lineWidth = Math.max(1, 1 / scale);
+        ctx.stroke();
+
+        // Arrows
+        if (showArrows) {
+            const dx = t.x - s.x, dy = t.y - s.y;
+            const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+            const nodeR = getNodeSize(t);
+            const mx = t.x - (dx / dist) * nodeR;
+            const my = t.y - (dy / dist) * nodeR;
+            const angle = Math.atan2(dy, dx);
+            const arrowLen = 8 / scale;
+
+            ctx.beginPath();
+            ctx.moveTo(mx, my);
+            ctx.lineTo(mx - arrowLen * Math.cos(angle - 0.4), my - arrowLen * Math.sin(angle - 0.4));
+            ctx.moveTo(mx, my);
+            ctx.lineTo(mx - arrowLen * Math.cos(angle + 0.4), my - arrowLen * Math.sin(angle + 0.4));
+            ctx.strokeStyle = COLORS.arrow.rgb;
+            ctx.globalAlpha = COLORS.arrow.a;
+            ctx.stroke();
+        }
+    }
+
+    // Draw nodes
+    for (const node of graphNodes) {
+        const size = getNodeSize(node);
+        const color = getNodeColor(node);
+        const isNeighbor = highlightNode && (
+            node.forward[highlightNode.id] || node.reverse[highlightNode.id]
+        );
+        const isFaded = highlightNode && highlightNode !== node && !isNeighbor;
+        const alpha = isFaded ? 0.15 : color.a;
+
+        // Circle fill
+        ctx.beginPath();
+        ctx.arc(node.x, node.y, size, 0, Math.PI * 2);
+        ctx.fillStyle = color.rgb;
+        ctx.globalAlpha = alpha;
+        ctx.fill();
+
+        // Highlight ring
+        if (highlightNode === node) {
+            ctx.beginPath();
+            ctx.arc(node.x, node.y, size + Math.max(1, 1 / scale), 0, Math.PI * 2);
+            ctx.strokeStyle = COLORS.circle.rgb;
+            ctx.globalAlpha = COLORS.circle.a;
+            ctx.lineWidth = Math.max(1, 1 / scale);
+            ctx.stroke();
+        }
+
+        // Label
+        if (showLabels) {
+            const textAlpha = isFaded ? 0.08 : (highlightNode === node ? 1 : Math.clamp(2 * (scale - textThreshold), 0, 1));
+            if (textAlpha > 0.01) {
+                const fontSize = (14 + size / 4) / scale * (highlightNode === node && scale < 1 ? 1 : scale);
+                ctx.font = `${fontSize}px -apple-system, BlinkMacSystemFont, system-ui, sans-serif`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'top';
+                ctx.fillStyle = COLORS.text.rgb;
+                ctx.globalAlpha = textAlpha * COLORS.text.a;
+                ctx.fillText(getDisplayText(node.id), node.x, node.y + size + 5 / scale);
+            }
+        }
+    }
+
+    ctx.restore();
+    ctx.globalAlpha = 1;
+
+    document.getElementById('stats').textContent = `${graphNodes.length} nodes, ${graphLinks.length} edges`;
+
+    requestAnimationFrame(render);
+}
+
+// Math.clamp polyfill
+Math.clamp = Math.clamp || function(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); };
+
+// --- Input handling ---
+function findNodeAt(wx, wy) {
+    for (let i = graphNodes.length - 1; i >= 0; i--) {
+        const n = graphNodes[i];
+        const r = getNodeSize(n);
+        const dx = n.x - wx, dy = n.y - wy;
+        if (dx * dx + dy * dy < r * r) return n;
+    }
+    return null;
+}
+
+canvas.addEventListener('pointerdown', (e) => {
+    const w = screenToWorld(e.clientX, e.clientY);
+    const node = findNodeAt(w.x, w.y);
+    if (node) {
+        dragNode = node;
+        dragOffset = { x: node.x - w.x, y: node.y - w.y };
+        node.fx = node.x; node.fy = node.y;
+        sim.alpha = Math.max(sim.alpha, 0.3);
+        sim.alphaTarget = 0.3;
+        sim.running = true;
+    } else {
+        isPanning = true;
+        panStart = { x: e.clientX, y: e.clientY };
+        panStartCam = { x: panX, y: panY };
+    }
+});
+
+canvas.addEventListener('pointermove', (e) => {
+    const w = screenToWorld(e.clientX, e.clientY);
+    if (dragNode) {
+        dragNode.fx = w.x + dragOffset.x;
+        dragNode.fy = w.y + dragOffset.y;
+    } else if (isPanning) {
+        panX = panStartCam.x + (e.clientX - panStart.x) * devicePixelRatio;
+        panY = panStartCam.y + (e.clientY - panStart.y) * devicePixelRatio;
+    } else {
+        const node = findNodeAt(w.x, w.y);
+        if (node !== highlightNode) {
+            highlightNode = node;
+        }
+        if (node) {
+            tooltip.style.display = 'block';
+            tooltip.style.left = e.clientX + 12 + 'px';
+            tooltip.style.top = e.clientY - 8 + 'px';
+            const fwd = Object.keys(node.forward).length;
+            const rev = Object.keys(node.reverse).length;
+            tooltip.textContent = `${getDisplayText(node.id)} (${node.type || 'file'}) - ${fwd} out, ${rev} in`;
+        } else {
+            tooltip.style.display = 'none';
+        }
+    }
+});
+
+canvas.addEventListener('pointerup', () => {
+    if (dragNode) {
+        dragNode.fx = null; dragNode.fy = null;
+        sim.alphaTarget = 0;
+        dragNode = null;
+    }
+    isPanning = false;
+});
+
+canvas.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
+    const mx = e.clientX * devicePixelRatio - canvas.width / 2;
+    const my = e.clientY * devicePixelRatio - canvas.height / 2;
+    panX = mx - (mx - panX) * zoomFactor;
+    panY = my - (my - panY) * zoomFactor;
+    scale *= zoomFactor;
+}, { passive: false });
+
+// --- Controls ---
+function bindSlider(id, valId, setter) {
+    const el = document.getElementById(id);
+    el.addEventListener('input', () => {
+        document.getElementById(valId).textContent = el.value;
+        setter(parseFloat(el.value));
+    });
+}
+
+bindSlider('centerForce', 'v-center', v => { sim.centerStrength = v; sim.alpha = Math.max(sim.alpha, 0.3); sim.running = true; });
+bindSlider('repelForce', 'v-repel', v => { sim.repelStrength = v; sim.alpha = Math.max(sim.alpha, 0.3); sim.running = true; });
+bindSlider('linkDist', 'v-dist', v => { sim.linkDistance = v; sim.alpha = Math.max(sim.alpha, 0.3); sim.running = true; });
+bindSlider('linkStrength', 'v-link', v => { sim.linkStrength = v; sim.alpha = Math.max(sim.alpha, 0.3); sim.running = true; });
+bindSlider('nodeSize', 'v-nodesize', v => { nodeScaleMult = v; });
+bindSlider('textThresh', 'v-textthresh', v => { textThreshold = v; });
+
+document.getElementById('showArrows').addEventListener('change', (e) => { showArrows = e.target.checked; });
+document.getElementById('showLabels').addEventListener('change', (e) => { showLabels = e.target.checked; });
+document.getElementById('resetBtn').addEventListener('click', () => {
+    for (const n of graphNodes) {
+        n.x = (Math.random() - 0.5) * 400;
+        n.y = (Math.random() - 0.5) * 400;
+        n.vx = n.vy = 0;
+    }
+    sim.start();
+    panX = panY = 0; scale = 1;
+});
+
+// --- Load from Obsidian via CDP ---
+document.getElementById('loadBtn').addEventListener('click', async () => {
+    try {
+        const port = prompt('Obsidian debug port:', '9444');
+        const list = await fetch(`http://localhost:${port}/json/list`).then(r => r.json());
+        const target = list.find(p => p.url && p.url.startsWith('app://obsidian'));
+        if (!target) { alert('No Obsidian target found'); return; }
+
+        const ws = new WebSocket(target.webSocketDebuggerUrl);
+        ws.onopen = () => {
+            ws.send(JSON.stringify({id: 1, method: 'Runtime.evaluate', params: {
+                expression: `(function() {
+                    var mc = app.metadataCache;
+                    var rl = mc.resolvedLinks || {};
+                    var ul = mc.unresolvedLinks || {};
+                    var nodes = {};
+                    app.vault.getFiles().forEach(f => {
+                        if (f.extension === 'md') nodes[f.path] = { type: '' };
+                    });
+                    var edges = [];
+                    for (var s in rl) for (var t in rl[s]) {
+                        edges.push([s, t]);
+                        if (!nodes[t]) nodes[t] = { type: 'attachment' };
+                    }
+                    for (var s in ul) for (var t in ul[s]) {
+                        edges.push([s, t]);
+                        if (!nodes[t]) nodes[t] = { type: 'unresolved' };
+                    }
+                    return JSON.stringify({nodes: nodes, edges: edges});
+                })()`,
+                returnByValue: true
+            }}));
+        };
+        ws.onmessage = (e) => {
+            const r = JSON.parse(e.data);
+            if (r.id === 1) {
+                const data = JSON.parse(r.result.result.value);
+                loadGraphData(data.nodes, data.edges);
+                ws.close();
+            }
+        };
+    } catch(e) { alert('Error: ' + e.message); }
+});
+
+// --- Load graph data ---
+function loadGraphData(nodeMap, edges) {
+    graphNodes = [];
+    graphLinks = [];
+    nodeLookup = {};
+
+    for (const [id, info] of Object.entries(nodeMap)) {
+        const node = {
+            id, type: info.type || '',
+            x: (Math.random() - 0.5) * 400,
+            y: (Math.random() - 0.5) * 400,
+            vx: 0, vy: 0, fx: null, fy: null,
+            weight: 0, forward: {}, reverse: {},
+        };
+        graphNodes.push(node);
+        nodeLookup[id] = node;
+    }
+
+    for (const [src, tgt] of edges) {
+        const s = nodeLookup[src], t = nodeLookup[tgt];
+        if (s && t) {
+            graphLinks.push({ source: s, target: t });
+            s.forward[tgt] = true;
+            t.reverse[src] = true;
+            s.weight++;
+            t.weight++;
+        }
+    }
+
+    sim.nodes = graphNodes;
+    sim.links = graphLinks;
+    sim.start();
+}
+
+// --- Load pre-extracted data or demo ---
+async function init() {
+    resize();
+    window.addEventListener('resize', resize);
+
+    // Try loading extracted data
+    try {
+        const resp = await fetch('graph-data.json');
+        if (resp.ok) {
+            const data = await resp.json();
+            // Convert from Obsidian's extracted format
+            const nodeMap = {};
+            for (const n of data.nodes) {
+                nodeMap[n.id] = { type: n.type };
+            }
+            const edges = data.links.map(l => [l.source, l.target]);
+            loadGraphData(nodeMap, edges);
+
+            // Restore positions if available
+            for (const n of data.nodes) {
+                const node = nodeLookup[n.id];
+                if (node && n.x != null) {
+                    node.x = n.x; node.y = n.y;
+                }
+            }
+        } else {
+            throw new Error('no data');
+        }
+    } catch(e) {
+        // Generate demo graph
+        const nodeMap = {};
+        const edges = [];
+        const topics = ['ml','deeplearning','python','golang','docker','k8s','data-engineering','bayesian-inference','physics','research','hub','spoke1','spoke2','central','note1','orphan'];
+        const links = [
+            ['hub','golang'],['hub','docker'],['hub','k8s'],['hub','ml'],['hub','central'],['hub','spoke1'],['hub','spoke2'],
+            ['bayesian-inference','ml'],['bayesian-inference','deeplearning'],['bayesian-inference','note1'],
+            ['central','hub'],['data-engineering','docker'],['data-engineering','k8s'],['data-engineering','ml'],['data-engineering','python'],
+            ['deeplearning','ml'],['deeplearning','python'],['docker','k8s'],['golang','docker'],['golang','k8s'],
+            ['ml','python'],['physics','ml'],['research','ml'],['research','python'],
+        ];
+        for (const t of topics) nodeMap[t + '.md'] = { type: '' };
+        nodeMap['missing.md'] = { type: 'unresolved' };
+        edges.push(...links.map(([s,t]) => [s+'.md', t+'.md']));
+        loadGraphData(nodeMap, edges);
+    }
+
+    render();
+}
+
+init();
+</script>
+</body>
+</html>

@@ -1,0 +1,1037 @@
+{
+  "nodes": [
+    {
+      "id": "README.md",
+      "type": "",
+      "x": 469.0373840332031,
+      "y": -136.39892578125,
+      "weight": 1,
+      "forward": [
+        "LICENSE"
+      ],
+      "reverse": []
+    },
+    {
+      "id": "LICENSE",
+      "type": "unresolved",
+      "x": 430.9590759277344,
+      "y": 107.26385498046875,
+      "weight": 1,
+      "forward": [],
+      "reverse": [
+        "README.md"
+      ]
+    },
+    {
+      "id": "claude-mcp-report.md",
+      "type": "",
+      "x": -654.80126953125,
+      "y": 130.27593994140625,
+      "weight": 2,
+      "forward": [
+        "wiki-links",
+        "wiki-link"
+      ],
+      "reverse": []
+    },
+    {
+      "id": "wiki-links",
+      "type": "unresolved",
+      "x": -640.1665649414062,
+      "y": -113.1948013305664,
+      "weight": 1,
+      "forward": [],
+      "reverse": [
+        "claude-mcp-report.md"
+      ]
+    },
+    {
+      "id": "wiki-link",
+      "type": "unresolved",
+      "x": -462.7803955078125,
+      "y": 278.0711364746094,
+      "weight": 1,
+      "forward": [],
+      "reverse": [
+        "claude-mcp-report.md"
+      ]
+    },
+    {
+      "id": "docs/design-obsidian-graph-features.md",
+      "type": "",
+      "x": 221.3382110595703,
+      "y": -607.3624267578125,
+      "weight": 0,
+      "forward": [],
+      "reverse": []
+    },
+    {
+      "id": "docs/nlm-kg-design.md",
+      "type": "",
+      "x": -539.5155639648438,
+      "y": 392.27020263671875,
+      "weight": 0,
+      "forward": [],
+      "reverse": []
+    },
+    {
+      "id": "docs/plugin-system.md",
+      "type": "",
+      "x": 471.88140869140625,
+      "y": -403.87432861328125,
+      "weight": 0,
+      "forward": [],
+      "reverse": []
+    },
+    {
+      "id": "internal/note/testdata/empty-file.md",
+      "type": "",
+      "x": 375.8056945800781,
+      "y": 537.3721923828125,
+      "weight": 0,
+      "forward": [],
+      "reverse": []
+    },
+    {
+      "id": "internal/note/testdata/invalid-frontmatter.md",
+      "type": "",
+      "x": 345.8331298828125,
+      "y": -491.6757507324219,
+      "weight": 0,
+      "forward": [],
+      "reverse": []
+    },
+    {
+      "id": "internal/note/testdata/minimal-note.md",
+      "type": "",
+      "x": -524.8363647460938,
+      "y": -193.4238739013672,
+      "weight": 0,
+      "forward": [],
+      "reverse": []
+    },
+    {
+      "id": "internal/note/testdata/no-frontmatter.md",
+      "type": "",
+      "x": 307.7948303222656,
+      "y": 393.09918212890625,
+      "weight": 0,
+      "forward": [],
+      "reverse": []
+    },
+    {
+      "id": "internal/note/testdata/valid-note.md",
+      "type": "",
+      "x": -101.31568145751953,
+      "y": -569.144287109375,
+      "weight": 0,
+      "forward": [],
+      "reverse": []
+    },
+    {
+      "id": "test-notes/bayesian-inference.md",
+      "type": "",
+      "x": -332.8678283691406,
+      "y": -102.1461410522461,
+      "weight": 3,
+      "forward": [
+        "test-notes/ml.md",
+        "test-notes/deeplearning.md",
+        "test-notes/note1.md"
+      ],
+      "reverse": []
+    },
+    {
+      "id": "test-notes/central.md",
+      "type": "",
+      "x": 261.8364562988281,
+      "y": 134.32229614257812,
+      "weight": 2,
+      "forward": [
+        "test-notes/hub.md"
+      ],
+      "reverse": [
+        "test-notes/hub.md"
+      ]
+    },
+    {
+      "id": "test-notes/daily.md",
+      "type": "",
+      "x": 642.5010375976562,
+      "y": -95.37611389160156,
+      "weight": 0,
+      "forward": [],
+      "reverse": []
+    },
+    {
+      "id": "test-notes/data-engineering.md",
+      "type": "",
+      "x": -75.37407684326172,
+      "y": 368.7579650878906,
+      "weight": 5,
+      "forward": [
+        "test-notes/docker.md",
+        "test-notes/k8s.md",
+        "test-notes/ml.md",
+        "test-notes/python.md"
+      ],
+      "reverse": [
+        "test-notes/ml-pipeline-architecture.md"
+      ]
+    },
+    {
+      "id": "test-notes/deeplearning.md",
+      "type": "",
+      "x": -444.3534240722656,
+      "y": 59.5972900390625,
+      "weight": 6,
+      "forward": [
+        "test-notes/ml.md",
+        "test-notes/python.md"
+      ],
+      "reverse": [
+        "test-notes/bayesian-inference.md",
+        "test-notes/information-theory.md",
+        "test-notes/ml.md",
+        "test-notes/python.md"
+      ]
+    },
+    {
+      "id": "test-notes/docker.md",
+      "type": "",
+      "x": -26.48272705078125,
+      "y": 644.8724365234375,
+      "weight": 6,
+      "forward": [
+        "test-notes/k8s.md"
+      ],
+      "reverse": [
+        "test-notes/data-engineering.md",
+        "test-notes/golang.md",
+        "test-notes/hub.md",
+        "test-notes/k8s.md",
+        "test-notes/ml-pipeline-architecture.md"
+      ]
+    },
+    {
+      "id": "test-notes/golang.md",
+      "type": "",
+      "x": 26.221467971801758,
+      "y": 462.2540283203125,
+      "weight": 6,
+      "forward": [
+        "test-notes/docker.md",
+        "test-notes/k8s.md"
+      ],
+      "reverse": [
+        "test-notes/hub.md",
+        "test-notes/k8s.md",
+        "test-notes/python.md",
+        "test-notes/rust.md"
+      ]
+    },
+    {
+      "id": "test-notes/good.md",
+      "type": "",
+      "x": 517.7864379882812,
+      "y": 401.8328552246094,
+      "weight": 1,
+      "forward": [],
+      "reverse": [
+        "test-notes/messy.md"
+      ]
+    },
+    {
+      "id": "test-notes/hub.md",
+      "type": "",
+      "x": 116.27120971679688,
+      "y": 342.027099609375,
+      "weight": 12,
+      "forward": [
+        "test-notes/golang.md",
+        "test-notes/docker.md",
+        "test-notes/k8s.md",
+        "test-notes/ml.md",
+        "test-notes/central.md",
+        "test-notes/spoke1.md",
+        "test-notes/spoke2.md",
+        "test-notes/spoke3.md"
+      ],
+      "reverse": [
+        "test-notes/central.md",
+        "test-notes/spoke1.md",
+        "test-notes/spoke2.md",
+        "test-notes/spoke3.md"
+      ]
+    },
+    {
+      "id": "test-notes/important.md",
+      "type": "",
+      "x": -215.30722045898438,
+      "y": -78.15079498291016,
+      "weight": 1,
+      "forward": [
+        "test-notes/research.md"
+      ],
+      "reverse": []
+    },
+    {
+      "id": "test-notes/information-theory.md",
+      "type": "",
+      "x": -238.67474365234375,
+      "y": -195.84608459472656,
+      "weight": 4,
+      "forward": [
+        "test-notes/deeplearning.md",
+        "test-notes/ml.md",
+        "test-notes/math.md",
+        "test-notes/quantum.md"
+      ],
+      "reverse": []
+    },
+    {
+      "id": "test-notes/island1.md",
+      "type": "",
+      "x": 350.5280456542969,
+      "y": -232.21160888671875,
+      "weight": 2,
+      "forward": [
+        "test-notes/island2.md"
+      ],
+      "reverse": [
+        "test-notes/island2.md"
+      ]
+    },
+    {
+      "id": "test-notes/island2.md",
+      "type": "",
+      "x": 591.781494140625,
+      "y": -290.1804504394531,
+      "weight": 2,
+      "forward": [
+        "test-notes/island1.md"
+      ],
+      "reverse": [
+        "test-notes/island1.md"
+      ]
+    },
+    {
+      "id": "test-notes/isolated.md",
+      "type": "",
+      "x": 564.6652221679688,
+      "y": 41.225128173828125,
+      "weight": 0,
+      "forward": [],
+      "reverse": []
+    },
+    {
+      "id": "test-notes/k8s.md",
+      "type": "",
+      "x": -211.49964904785156,
+      "y": 551.4434204101562,
+      "weight": 7,
+      "forward": [
+        "test-notes/docker.md",
+        "test-notes/golang.md"
+      ],
+      "reverse": [
+        "test-notes/data-engineering.md",
+        "test-notes/docker.md",
+        "test-notes/golang.md",
+        "test-notes/hub.md",
+        "test-notes/ml-pipeline-architecture.md"
+      ]
+    },
+    {
+      "id": "test-notes/linear-algebra.md",
+      "type": "",
+      "x": 95.74829864501953,
+      "y": -20.6453914642334,
+      "weight": 3,
+      "forward": [
+        "test-notes/math.md",
+        "test-notes/ml.md",
+        "test-notes/quantum.md"
+      ],
+      "reverse": []
+    },
+    {
+      "id": "test-notes/math.md",
+      "type": "",
+      "x": 94.133544921875,
+      "y": -239.39898681640625,
+      "weight": 7,
+      "forward": [
+        "test-notes/physics.md",
+        "test-notes/ml.md"
+      ],
+      "reverse": [
+        "test-notes/information-theory.md",
+        "test-notes/linear-algebra.md",
+        "test-notes/physics.md",
+        "test-notes/quantum.md",
+        "test-notes/scientific-computing.md"
+      ]
+    },
+    {
+      "id": "test-notes/messy.md",
+      "type": "",
+      "x": 629.5317993164062,
+      "y": 183.96405029296875,
+      "weight": 1,
+      "forward": [
+        "test-notes/good.md"
+      ],
+      "reverse": []
+    },
+    {
+      "id": "test-notes/ml-pipeline-architecture.md",
+      "type": "",
+      "x": -322.3886413574219,
+      "y": 432.1380615234375,
+      "weight": 5,
+      "forward": [
+        "test-notes/docker.md",
+        "test-notes/k8s.md",
+        "test-notes/python.md",
+        "test-notes/ml.md",
+        "test-notes/data-engineering.md"
+      ],
+      "reverse": []
+    },
+    {
+      "id": "test-notes/ml.md",
+      "type": "",
+      "x": -166.24252319335938,
+      "y": 102.5385513305664,
+      "weight": 11,
+      "forward": [
+        "test-notes/deeplearning.md",
+        "test-notes/python.md"
+      ],
+      "reverse": [
+        "test-notes/bayesian-inference.md",
+        "test-notes/data-engineering.md",
+        "test-notes/deeplearning.md",
+        "test-notes/hub.md",
+        "test-notes/information-theory.md",
+        "test-notes/linear-algebra.md",
+        "test-notes/math.md",
+        "test-notes/ml-pipeline-architecture.md",
+        "test-notes/python.md"
+      ]
+    },
+    {
+      "id": "test-notes/note1.md",
+      "type": "",
+      "x": -32.152286529541016,
+      "y": 76.1002426147461,
+      "weight": 5,
+      "forward": [
+        "test-notes/note2.md",
+        "test-notes/note3.md"
+      ],
+      "reverse": [
+        "test-notes/bayesian-inference.md",
+        "test-notes/note2.md",
+        "test-notes/note3.md"
+      ]
+    },
+    {
+      "id": "test-notes/note2.md",
+      "type": "",
+      "x": -3.1987876892089844,
+      "y": -169.27500915527344,
+      "weight": 2,
+      "forward": [
+        "test-notes/note1.md"
+      ],
+      "reverse": [
+        "test-notes/note1.md"
+      ]
+    },
+    {
+      "id": "test-notes/note3.md",
+      "type": "",
+      "x": -181.69602966308594,
+      "y": 280.6456298828125,
+      "weight": 2,
+      "forward": [
+        "test-notes/note1.md"
+      ],
+      "reverse": [
+        "test-notes/note1.md"
+      ]
+    },
+    {
+      "id": "test-notes/orphan.md",
+      "type": "",
+      "x": 149.7686309814453,
+      "y": -129.544677734375,
+      "weight": 1,
+      "forward": [
+        "foobar"
+      ],
+      "reverse": []
+    },
+    {
+      "id": "foobar",
+      "type": "unresolved",
+      "x": -122.18159484863281,
+      "y": -153.8177032470703,
+      "weight": 2,
+      "forward": [],
+      "reverse": [
+        "test-notes/orphan.md",
+        "test-notes/physics.md"
+      ]
+    },
+    {
+      "id": "test-notes/physics.md",
+      "type": "",
+      "x": -222.11505126953125,
+      "y": -361.7820129394531,
+      "weight": 6,
+      "forward": [
+        "test-notes/math.md",
+        "test-notes/quantum.md",
+        "foobar"
+      ],
+      "reverse": [
+        "test-notes/math.md",
+        "test-notes/quantum.md",
+        "test-notes/scientific-computing.md"
+      ]
+    },
+    {
+      "id": "test-notes/python.md",
+      "type": "",
+      "x": -298.5107727050781,
+      "y": 253.194580078125,
+      "weight": 9,
+      "forward": [
+        "test-notes/ml.md",
+        "test-notes/deeplearning.md",
+        "test-notes/golang.md"
+      ],
+      "reverse": [
+        "test-notes/data-engineering.md",
+        "test-notes/deeplearning.md",
+        "test-notes/ml-pipeline-architecture.md",
+        "test-notes/ml.md",
+        "test-notes/rust.md",
+        "test-notes/scientific-computing.md"
+      ]
+    },
+    {
+      "id": "test-notes/quantum.md",
+      "type": "",
+      "x": 12.719751358032227,
+      "y": -354.8438415527344,
+      "weight": 6,
+      "forward": [
+        "test-notes/physics.md",
+        "test-notes/math.md"
+      ],
+      "reverse": [
+        "test-notes/information-theory.md",
+        "test-notes/linear-algebra.md",
+        "test-notes/physics.md",
+        "test-notes/scientific-computing.md"
+      ]
+    },
+    {
+      "id": "test-notes/related1.md",
+      "type": "",
+      "x": -229.48504638671875,
+      "y": -626.5751342773438,
+      "weight": 2,
+      "forward": [
+        "test-notes/related2.md"
+      ],
+      "reverse": [
+        "test-notes/related2.md"
+      ]
+    },
+    {
+      "id": "test-notes/related2.md",
+      "type": "",
+      "x": 26.23386573791504,
+      "y": -646.8776245117188,
+      "weight": 2,
+      "forward": [
+        "test-notes/related1.md"
+      ],
+      "reverse": [
+        "test-notes/related1.md"
+      ]
+    },
+    {
+      "id": "test-notes/research.md",
+      "type": "",
+      "x": -105.4358139038086,
+      "y": -333.7688293457031,
+      "weight": 2,
+      "forward": [
+        "another note"
+      ],
+      "reverse": [
+        "test-notes/important.md"
+      ]
+    },
+    {
+      "id": "another note",
+      "type": "unresolved",
+      "x": 138.59408569335938,
+      "y": -431.83502197265625,
+      "weight": 1,
+      "forward": [],
+      "reverse": [
+        "test-notes/research.md"
+      ]
+    },
+    {
+      "id": "test-notes/rust.md",
+      "type": "",
+      "x": -19.735942840576172,
+      "y": 221.13531494140625,
+      "weight": 3,
+      "forward": [
+        "test-notes/golang.md",
+        "test-notes/python.md"
+      ],
+      "reverse": [
+        "test-notes/scientific-computing.md"
+      ]
+    },
+    {
+      "id": "test-notes/scientific-computing.md",
+      "type": "",
+      "x": -101.49736022949219,
+      "y": -35.61911392211914,
+      "weight": 5,
+      "forward": [
+        "test-notes/python.md",
+        "test-notes/rust.md",
+        "test-notes/physics.md",
+        "test-notes/math.md",
+        "test-notes/quantum.md"
+      ],
+      "reverse": []
+    },
+    {
+      "id": "test-notes/spoke1.md",
+      "type": "",
+      "x": 358.59942626953125,
+      "y": 263.6410217285156,
+      "weight": 2,
+      "forward": [
+        "test-notes/hub.md"
+      ],
+      "reverse": [
+        "test-notes/hub.md"
+      ]
+    },
+    {
+      "id": "test-notes/spoke2.md",
+      "type": "",
+      "x": 198.10464477539062,
+      "y": 581.8495483398438,
+      "weight": 2,
+      "forward": [
+        "test-notes/hub.md"
+      ],
+      "reverse": [
+        "test-notes/hub.md"
+      ]
+    },
+    {
+      "id": "test-notes/spoke3.md",
+      "type": "",
+      "x": -74.58586883544922,
+      "y": 527.3232421875,
+      "weight": 2,
+      "forward": [
+        "test-notes/hub.md"
+      ],
+      "reverse": [
+        "test-notes/hub.md"
+      ]
+    },
+    {
+      "id": "test-notes/test.md",
+      "type": "",
+      "x": -392.96038818359375,
+      "y": -505.6202697753906,
+      "weight": 1,
+      "forward": [
+        "missing"
+      ],
+      "reverse": []
+    },
+    {
+      "id": "missing",
+      "type": "unresolved",
+      "x": -572.6614990234375,
+      "y": -338.5994567871094,
+      "weight": 1,
+      "forward": [],
+      "reverse": [
+        "test-notes/test.md"
+      ]
+    }
+  ],
+  "links": [
+    {
+      "source": "README.md",
+      "target": "LICENSE"
+    },
+    {
+      "source": "claude-mcp-report.md",
+      "target": "wiki-links"
+    },
+    {
+      "source": "claude-mcp-report.md",
+      "target": "wiki-link"
+    },
+    {
+      "source": "test-notes/bayesian-inference.md",
+      "target": "test-notes/ml.md"
+    },
+    {
+      "source": "test-notes/bayesian-inference.md",
+      "target": "test-notes/deeplearning.md"
+    },
+    {
+      "source": "test-notes/bayesian-inference.md",
+      "target": "test-notes/note1.md"
+    },
+    {
+      "source": "test-notes/central.md",
+      "target": "test-notes/hub.md"
+    },
+    {
+      "source": "test-notes/data-engineering.md",
+      "target": "test-notes/docker.md"
+    },
+    {
+      "source": "test-notes/data-engineering.md",
+      "target": "test-notes/k8s.md"
+    },
+    {
+      "source": "test-notes/data-engineering.md",
+      "target": "test-notes/ml.md"
+    },
+    {
+      "source": "test-notes/data-engineering.md",
+      "target": "test-notes/python.md"
+    },
+    {
+      "source": "test-notes/deeplearning.md",
+      "target": "test-notes/ml.md"
+    },
+    {
+      "source": "test-notes/deeplearning.md",
+      "target": "test-notes/python.md"
+    },
+    {
+      "source": "test-notes/docker.md",
+      "target": "test-notes/k8s.md"
+    },
+    {
+      "source": "test-notes/golang.md",
+      "target": "test-notes/docker.md"
+    },
+    {
+      "source": "test-notes/golang.md",
+      "target": "test-notes/k8s.md"
+    },
+    {
+      "source": "test-notes/hub.md",
+      "target": "test-notes/golang.md"
+    },
+    {
+      "source": "test-notes/hub.md",
+      "target": "test-notes/docker.md"
+    },
+    {
+      "source": "test-notes/hub.md",
+      "target": "test-notes/k8s.md"
+    },
+    {
+      "source": "test-notes/hub.md",
+      "target": "test-notes/ml.md"
+    },
+    {
+      "source": "test-notes/hub.md",
+      "target": "test-notes/central.md"
+    },
+    {
+      "source": "test-notes/hub.md",
+      "target": "test-notes/spoke1.md"
+    },
+    {
+      "source": "test-notes/hub.md",
+      "target": "test-notes/spoke2.md"
+    },
+    {
+      "source": "test-notes/hub.md",
+      "target": "test-notes/spoke3.md"
+    },
+    {
+      "source": "test-notes/important.md",
+      "target": "test-notes/research.md"
+    },
+    {
+      "source": "test-notes/information-theory.md",
+      "target": "test-notes/deeplearning.md"
+    },
+    {
+      "source": "test-notes/information-theory.md",
+      "target": "test-notes/ml.md"
+    },
+    {
+      "source": "test-notes/information-theory.md",
+      "target": "test-notes/math.md"
+    },
+    {
+      "source": "test-notes/information-theory.md",
+      "target": "test-notes/quantum.md"
+    },
+    {
+      "source": "test-notes/island1.md",
+      "target": "test-notes/island2.md"
+    },
+    {
+      "source": "test-notes/island2.md",
+      "target": "test-notes/island1.md"
+    },
+    {
+      "source": "test-notes/k8s.md",
+      "target": "test-notes/docker.md"
+    },
+    {
+      "source": "test-notes/k8s.md",
+      "target": "test-notes/golang.md"
+    },
+    {
+      "source": "test-notes/linear-algebra.md",
+      "target": "test-notes/math.md"
+    },
+    {
+      "source": "test-notes/linear-algebra.md",
+      "target": "test-notes/ml.md"
+    },
+    {
+      "source": "test-notes/linear-algebra.md",
+      "target": "test-notes/quantum.md"
+    },
+    {
+      "source": "test-notes/math.md",
+      "target": "test-notes/physics.md"
+    },
+    {
+      "source": "test-notes/math.md",
+      "target": "test-notes/ml.md"
+    },
+    {
+      "source": "test-notes/messy.md",
+      "target": "test-notes/good.md"
+    },
+    {
+      "source": "test-notes/ml-pipeline-architecture.md",
+      "target": "test-notes/docker.md"
+    },
+    {
+      "source": "test-notes/ml-pipeline-architecture.md",
+      "target": "test-notes/k8s.md"
+    },
+    {
+      "source": "test-notes/ml-pipeline-architecture.md",
+      "target": "test-notes/python.md"
+    },
+    {
+      "source": "test-notes/ml-pipeline-architecture.md",
+      "target": "test-notes/ml.md"
+    },
+    {
+      "source": "test-notes/ml-pipeline-architecture.md",
+      "target": "test-notes/data-engineering.md"
+    },
+    {
+      "source": "test-notes/ml.md",
+      "target": "test-notes/deeplearning.md"
+    },
+    {
+      "source": "test-notes/ml.md",
+      "target": "test-notes/python.md"
+    },
+    {
+      "source": "test-notes/note1.md",
+      "target": "test-notes/note2.md"
+    },
+    {
+      "source": "test-notes/note1.md",
+      "target": "test-notes/note3.md"
+    },
+    {
+      "source": "test-notes/note2.md",
+      "target": "test-notes/note1.md"
+    },
+    {
+      "source": "test-notes/note3.md",
+      "target": "test-notes/note1.md"
+    },
+    {
+      "source": "test-notes/orphan.md",
+      "target": "foobar"
+    },
+    {
+      "source": "test-notes/physics.md",
+      "target": "test-notes/math.md"
+    },
+    {
+      "source": "test-notes/physics.md",
+      "target": "test-notes/quantum.md"
+    },
+    {
+      "source": "test-notes/physics.md",
+      "target": "foobar"
+    },
+    {
+      "source": "test-notes/python.md",
+      "target": "test-notes/ml.md"
+    },
+    {
+      "source": "test-notes/python.md",
+      "target": "test-notes/deeplearning.md"
+    },
+    {
+      "source": "test-notes/python.md",
+      "target": "test-notes/golang.md"
+    },
+    {
+      "source": "test-notes/quantum.md",
+      "target": "test-notes/physics.md"
+    },
+    {
+      "source": "test-notes/quantum.md",
+      "target": "test-notes/math.md"
+    },
+    {
+      "source": "test-notes/related1.md",
+      "target": "test-notes/related2.md"
+    },
+    {
+      "source": "test-notes/related2.md",
+      "target": "test-notes/related1.md"
+    },
+    {
+      "source": "test-notes/research.md",
+      "target": "another note"
+    },
+    {
+      "source": "test-notes/rust.md",
+      "target": "test-notes/golang.md"
+    },
+    {
+      "source": "test-notes/rust.md",
+      "target": "test-notes/python.md"
+    },
+    {
+      "source": "test-notes/scientific-computing.md",
+      "target": "test-notes/python.md"
+    },
+    {
+      "source": "test-notes/scientific-computing.md",
+      "target": "test-notes/rust.md"
+    },
+    {
+      "source": "test-notes/scientific-computing.md",
+      "target": "test-notes/physics.md"
+    },
+    {
+      "source": "test-notes/scientific-computing.md",
+      "target": "test-notes/math.md"
+    },
+    {
+      "source": "test-notes/scientific-computing.md",
+      "target": "test-notes/quantum.md"
+    },
+    {
+      "source": "test-notes/spoke1.md",
+      "target": "test-notes/hub.md"
+    },
+    {
+      "source": "test-notes/spoke2.md",
+      "target": "test-notes/hub.md"
+    },
+    {
+      "source": "test-notes/spoke3.md",
+      "target": "test-notes/hub.md"
+    },
+    {
+      "source": "test-notes/test.md",
+      "target": "missing"
+    }
+  ],
+  "settings": {
+    "scale": 0.665791284604559,
+    "nodeScale": 1.2255497538988587,
+    "textAlpha": 0.4131418904299876,
+    "fNodeSizeMult": 1,
+    "fLineSizeMult": 1,
+    "fTextShowMult": 0,
+    "fShowArrow": false,
+    "panX": 490.5,
+    "panY": 458.5,
+    "width": 981,
+    "height": 917,
+    "colors": {
+      "fill": {
+        "a": 1,
+        "rgb": 11776947
+      },
+      "fillFocused": {
+        "a": 1,
+        "rgb": 10914553
+      },
+      "fillTag": {
+        "a": 1,
+        "rgb": 4509550
+      },
+      "fillUnresolved": {
+        "a": 0.5,
+        "rgb": 6710886
+      },
+      "fillAttachment": {
+        "a": 1,
+        "rgb": 14737009
+      },
+      "arrow": {
+        "a": 0.5,
+        "rgb": 14342874
+      },
+      "circle": {
+        "a": 1,
+        "rgb": 10914553
+      },
+      "line": {
+        "a": 1,
+        "rgb": 4144959
+      },
+      "text": {
+        "a": 1,
+        "rgb": 14342874
+      },
+      "fillHighlight": {
+        "a": 1,
+        "rgb": 9067765
+      },
+      "lineHighlight": {
+        "a": 1,
+        "rgb": 9067765
+      }
+    }
+  }
+}
