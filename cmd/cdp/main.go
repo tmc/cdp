@@ -1449,6 +1449,8 @@ func main() {
 			SaveSources:     saveSources,
 			NoScrub:         noScrub,
 			APIPort:         apiPort,
+			HarlStream:      harlStream,
+			HarlFile:        harlFile,
 		})
 		return
 	}
@@ -4191,10 +4193,80 @@ func handleEnhancedMode(command string, interactive bool, cfg fullCaptureConfig)
 
 			defer chromeCancel()
 
+			// Set up HARL streaming (network recording) if requested.
+			var enhancedRec *harrecorder.Recorder
+			if cfg.HarlStream {
+				recOpts := []harrecorder.Option{
+					harrecorder.WithVerbose(cfg.Verbose),
+					harrecorder.WithStreaming(true),
+					harrecorder.WithOutputDir(cfg.OutputDir),
+				}
+				if !cfg.NoScrub {
+					recOpts = append(recOpts, harrecorder.WithScrubber(scrub.New()))
+				}
+				var err error
+				enhancedRec, err = harrecorder.New(recOpts...)
+				if err != nil {
+					exitWithError(ExitGeneralError, ErrorTypeGeneral, "Failed to create recorder: %v", err)
+				}
+
+				if err := chromedp.Run(chromeCtx, network.Enable()); err != nil {
+					log.Printf("Warning: failed to enable network monitoring: %v", err)
+				} else {
+					chromedp.ListenTarget(chromeCtx, enhancedRec.HandleNetworkEvent(chromeCtx))
+
+					// Enable Fetch domain interception for response body capture.
+					if err := chromedp.Run(chromeCtx, fetch.Enable().WithPatterns([]*fetch.RequestPattern{
+						{URLPattern: "*", RequestStage: fetch.RequestStageResponse},
+					})); err != nil {
+						if cfg.Verbose {
+							log.Printf("Warning: failed to enable Fetch domain: %v", err)
+						}
+					} else {
+						chromedp.ListenTarget(chromeCtx, enhancedRec.HandleFetchEvent(chromeCtx))
+					}
+
+					// Inject JS capture scripts for gRPC-Web streaming and WebRTC.
+					for name, script := range map[string]string{
+						"fetch-capture":  harrecorder.FetchCaptureScript,
+						"webrtc-capture": harrecorder.WebRTCCaptureScript,
+					} {
+						if err := chromedp.Run(chromeCtx, chromedp.ActionFunc(func(ctx context.Context) error {
+							_, err := page.AddScriptToEvaluateOnNewDocument(script).Do(ctx)
+							return err
+						})); err != nil {
+							if cfg.Verbose {
+								log.Printf("Warning: failed to inject %s script: %v", name, err)
+							}
+						}
+					}
+
+					// Route structured capture console messages to recorder.
+					chromedp.ListenTarget(chromeCtx, func(ev interface{}) {
+						if ce, ok := ev.(*runtime.EventConsoleAPICalled); ok {
+							enhancedRec.HandleConsoleCapture(ce)
+						}
+					})
+
+					if cfg.Verbose {
+						if cfg.OutputDir != "" {
+							log.Printf("Streaming HAR entries as NDJSON to %s/{domain}.jsonl", cfg.OutputDir)
+						} else if cfg.HarlFile == "-" {
+							log.Println("Streaming HAR entries as NDJSON to stdout")
+						} else {
+							log.Printf("Streaming HAR entries as NDJSON to %s", cfg.HarlFile)
+						}
+					}
+				}
+			}
+
 			// Start interactive mode with reconnection support
 			im := NewInteractiveMode(chromeCtx, chromeCancel, launched, cfg, cfg.ToolsDir)
 			if sc != nil {
 				im.SetSourceCollector(sc)
+			}
+			if enhancedRec != nil {
+				im.SetRecorder(enhancedRec, cfg.OutputDir)
 			}
 
 			if err := im.Run(); err != nil {
@@ -4302,6 +4374,8 @@ type fullCaptureConfig struct {
 	NoScrub           bool
 	APIPort           int
 	LoadExtensions    string
+	HarlStream        bool   // stream HAR entries as NDJSON
+	HarlFile          string // file to stream NDJSON to (use "-" for stdout)
 }
 
 // resolveDebugPort checks if the desired port is available. If it's in use
