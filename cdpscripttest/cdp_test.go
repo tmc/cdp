@@ -3,6 +3,7 @@
 package cdpscripttest_test
 
 import (
+	"path/filepath"
 	"testing"
 
 	"github.com/chromedp/chromedp"
@@ -10,6 +11,10 @@ import (
 )
 
 func TestCDP(t *testing.T) {
+	if matches, _ := filepath.Glob("testdata/blur-*.txt"); len(matches) == 0 {
+		t.Skip("no blur fixtures found")
+	}
+
 	opts := append(chromedp.DefaultExecAllocatorOptions[:],
 		chromedp.Flag("headless", true),
 		chromedp.Flag("no-proxy-server", true),

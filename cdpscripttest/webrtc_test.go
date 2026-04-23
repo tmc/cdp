@@ -5,6 +5,7 @@ package cdpscripttest_test
 import (
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"testing"
 
@@ -38,6 +39,12 @@ func findChromePath() string {
 }
 
 func TestWebRTC(t *testing.T) {
+	rtcMatches, _ := filepath.Glob("testdata/rtc-*.txt")
+	networkMatches, _ := filepath.Glob("testdata/network-*.txt")
+	if len(rtcMatches) == 0 && len(networkMatches) == 0 {
+		t.Skip("no webrtc or network fixtures found")
+	}
+
 	opts := append(chromedp.DefaultExecAllocatorOptions[:],
 		cdpscripttest.WebRTCAllocatorOptions()...,
 	)

@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Keyboard Press Fixture</title>
+<style>
+body {
+	font-family: sans-serif;
+	margin: 2rem;
+}
+
+#result {
+	display: none;
+	margin-top: 1rem;
+	padding: 0.75rem;
+	background: #eef2ff;
+	border: 1px solid #8094d9;
+}
+</style>
+<script>
+window.addEventListener("DOMContentLoaded", function() {
+	const input = document.getElementById("command");
+	const result = document.getElementById("result");
+
+	input.addEventListener("input", function() {
+		if (input.value === "") {
+			return;
+		}
+		result.textContent = "Typed: " + input.value;
+		result.style.display = "block";
+	});
+});
+</script>
+</head>
+<body>
+<main>
+	<h1>Keyboard Fixture</h1>
+	<label for="command">Command</label>
+	<input id="command" name="command" autocomplete="off">
+	<p id="result" aria-live="polite"></p>
+</main>
+</body>
+</html>

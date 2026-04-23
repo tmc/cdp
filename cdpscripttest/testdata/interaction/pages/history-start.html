@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Reload Fixture</title>
+<style>
+body {
+	font-family: sans-serif;
+	margin: 2rem;
+}
+
+#reloaded-marker {
+	display: none;
+	margin-top: 1rem;
+	padding: 0.5rem 0.75rem;
+	background: #eef6ee;
+	border: 1px solid #8fb38f;
+}
+</style>
+<script>
+window.addEventListener("DOMContentLoaded", function() {
+	const key = "history-start-loads";
+	const previous = Number(sessionStorage.getItem(key) || "0");
+	const next = previous + 1;
+	sessionStorage.setItem(key, String(next));
+
+	document.getElementById("page-id").textContent = "history-start";
+	document.getElementById("load-count").textContent = String(next);
+
+	if (next > 1) {
+		const marker = document.getElementById("reloaded-marker");
+		marker.textContent = "Reloaded " + next + " times";
+		marker.style.display = "block";
+	}
+});
+</script>
+</head>
+<body>
+<main>
+	<h1 id="page-id"></h1>
+	<p>Loads: <span id="load-count"></span></p>
+	<p id="reloaded-marker"></p>
+</main>
+</body>
+</html>

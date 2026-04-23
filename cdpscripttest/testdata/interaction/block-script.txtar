@@ -1,0 +1,12 @@
+-- meta.yaml --
+name: Block Script
+description: Block a local script request and assert the fallback path.
+headless: true
+timeout: 20s
+
+-- main.cdp --
+block */interaction/pages/assets/feature.js
+goto $FIXTURE_BASE_URL/interaction/pages/block-script.html
+wait '#status'
+assert visible '#status'
+assert text '#status' blocked

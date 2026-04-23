@@ -1,0 +1,14 @@
+-- meta.yaml --
+name: Snapshot Refs
+description: Use snapshot refs to click an interactive element.
+headless: true
+timeout: 20s
+
+-- main.cdp --
+goto $FIXTURE_BASE_URL/interaction/pages/snapshot-refs.html
+wait '#snapshot-zone'
+snapshot -i --selector '#snapshot-zone'
+click @e1
+wait '#result'
+assert visible '#result'
+assert text '#result' Snapshot activated

@@ -1,0 +1,3 @@
+fill #name $ARG1
+fill #email $ARG2
+click #submit

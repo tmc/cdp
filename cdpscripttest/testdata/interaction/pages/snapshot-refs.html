@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Snapshot Fixture</title>
+<style>
+body {
+	font-family: sans-serif;
+	margin: 2rem;
+}
+
+#result {
+	display: none;
+	margin-top: 1rem;
+	padding: 0.75rem;
+	background: #eef6ee;
+	border: 1px solid #8fb38f;
+}
+</style>
+<script>
+window.addEventListener("DOMContentLoaded", function() {
+	const button = document.getElementById("snapshot-button");
+	const result = document.getElementById("result");
+
+	button.addEventListener("click", function() {
+		result.textContent = "Snapshot activated";
+		result.style.display = "block";
+	});
+});
+</script>
+</head>
+<body>
+<main>
+	<section id="snapshot-zone">
+		<button id="snapshot-button" type="button">Activate snapshot action</button>
+	</section>
+	<p id="result" aria-live="polite"></p>
+</main>
+</body>
+</html>
