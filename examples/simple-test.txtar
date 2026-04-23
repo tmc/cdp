@@ -1,5 +1,5 @@
 # Simple Test Script
-# Usage: cdp script simple-test.txtar
+# Usage: cdp run simple-test.txtar
 
 -- meta.yaml --
 name: Simple Test

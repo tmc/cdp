@@ -5,23 +5,28 @@ CDP scripts use Go's txtar (text archive) format to bundle automation logic and 
 ## Running Scripts
 
 ```bash
-# Build the cdp tool
+# Build either entry point
 go build -o cdp ./cmd/cdp
+go build -o cdpscript ./cmd/cdpscript
 
 # Run a script
 cdp run script.txtar
+cdpscript script.txtar
+cdpscript script.txtar one two
 
 # With options
 cdp run -v script.txtar                          # Verbose logging
 cdp run -o /tmp/output script.txtar              # Output dir for artifacts
-cdp run --tab <id> --port 9222 script.txtar      # Connect to existing tab
+cdpscript --tab <id> --port 9222 script.txtar    # Connect to existing tab
 ```
 
 ## Script Structure
 
-A txtar file has a comment section followed by `-- filename --` delimited files:
+A txtar file has an optional comment section followed by `-- filename --`
+delimited files. The comment section can hold a shebang:
 
-```
+```text
+#!/usr/bin/env cdpscript
 -- meta.yaml --
 name: My Test Script
 description: What this script does
@@ -49,9 +54,9 @@ document.querySelector('#foo').click();
 ### Optional Files
 
 - **meta.yaml** - Script metadata and configuration
-- **\*.js** - JavaScript files (used with `jsfile` command)
-- **\*.cdp** - Helper scripts (used with `source` command)
-- **\*.json** - Data files accessible from the workdir
+- **extra files** - Extracted into the script workdir before execution
+- **\*.js** - JavaScript files loaded with `jsfile`
+- **external \*.cdp files** - Helper scripts loaded from disk with `source`
 
 ## Metadata (meta.yaml)
 
@@ -68,6 +73,8 @@ env:                     # Environment variables
   USERNAME: "test@test.com"
 ```
 
+Only these fields are read by the engine today.
+
 ## Script Commands Reference
 
 ### Navigation
@@ -83,7 +90,7 @@ reload                        # Reload page
 wait <selector>               # Wait for element to appear
 wait 2s                       # Wait for duration
 wait 500ms                    # Millisecond precision
-wait for h1                   # "for" is ignored, same as "wait h1"
+wait h1                       # Wait for an h1 element
 ```
 
 ### DOM Interaction
@@ -106,10 +113,10 @@ jsfile helper.js              # Execute JS from embedded file
 
 ### Extraction
 ```
-extract <selector>            # Extract text, print it, set $EXTRACTED env var
-title                         # Print page title, set $TITLE env var
-url                           # Print current URL, set $URL env var
-render [selector]             # Render page/element as markdown, set $RENDERED
+extract <selector>            # Extract text, print it, set ${EXTRACTED}
+title                         # Print page title, set ${TITLE}
+url                           # Print current URL, set ${URL}
+render [selector]             # Render page/element as markdown, set ${RENDERED}
 render --term [selector]      # Render as terminal-formatted text
 ```
 
@@ -153,13 +160,14 @@ fill @e2 test@example.com
 
 ### Source Command (Include Scripts)
 ```
-source helper.cdp                    # Execute inline
-source -x helper.cdp                 # Trace execution (show each command)
-source -as send-msg helper.cdp       # Register as reusable command
+source examples/lib/screenshot.cdp   # Execute inline
+source -x examples/lib/screenshot.cdp
+source -as send-msg examples/lib/screenshot.cdp
 send-msg "Hello"                     # Call registered command
 ```
 
-Sourced scripts receive arguments as `$ARG1`, `$ARG2`, etc., and `$ARGC` for count.
+Sourced scripts receive arguments as `${ARG1}`, `${ARG2}`, etc., and `${ARGC}`
+for count.
 
 ### HAR Recording & Tagging (Advanced)
 ```
@@ -186,7 +194,10 @@ goto ${BASE_URL}/login
 fill #username ${USERNAME}
 ```
 
-Commands like `extract`, `title`, and `url` set environment variables (`$EXTRACTED`, `$TITLE`, `$URL`) that subsequent commands can reference.
+Commands like `extract`, `title`, and `url` set environment variables
+(`${EXTRACTED}`, `${TITLE}`, `${URL}`) that subsequent commands can reference.
+Top-level script arguments are available as `${ARG1}`, `${ARG2}`, and
+`${ARGC}`.
 
 ## Conditions
 

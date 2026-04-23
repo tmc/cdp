@@ -12,10 +12,10 @@ env:
 goto ${BASE_URL}
 
 # Wait for page to load
-wait for h1
+wait h1
 
 # Extract the title
-extract h1 as page_title
+extract h1
 
 # Take a screenshot
 screenshot screenshot.png

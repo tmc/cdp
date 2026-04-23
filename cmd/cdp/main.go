@@ -1069,7 +1069,10 @@ func main() {
 		case "run":
 			cmd := newScriptCmd()
 			if err := cmd.run(os.Args[2:]); err != nil {
-				exitWithError(ExitGeneralError, ErrorTypeGeneral, "%v", err)
+				if errors.Is(err, flag.ErrHelp) {
+					return
+				}
+				exitWithError(scriptExitCode(err), scriptErrorType(err), "%v", err)
 			}
 			return
 		}

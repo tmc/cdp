@@ -25,6 +25,12 @@ import (
 	"rsc.io/script"
 )
 
+type archiveData struct {
+	Metadata Metadata
+	Main     string
+	Files    []txtar.File
+}
+
 // Engine executes CDP scripts using the rsc.io/script framework.
 type Engine struct {
 	engine     *script.Engine
@@ -106,31 +112,72 @@ func WithRecorder(rec *recorder.Recorder) Option {
 	}
 }
 
-// ExecuteTxtar runs a script from a txtar archive.
-func (e *Engine) ExecuteTxtar(ctx context.Context, path string) error {
+func readArchive(path string) (*archiveData, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return fmt.Errorf("failed to read script: %w", err)
+		return nil, fmt.Errorf("failed to read script: %w", err)
 	}
 
 	archive := txtar.Parse(data)
-
-	// Parse metadata
-	var mainScript string
+	out := &archiveData{}
 	for _, f := range archive.Files {
 		switch f.Name {
 		case "meta.yaml":
-			if err := yaml.Unmarshal(f.Data, &e.metadata); err != nil {
-				return fmt.Errorf("failed to parse meta.yaml: %w", err)
+			if err := yaml.Unmarshal(f.Data, &out.Metadata); err != nil {
+				return nil, fmt.Errorf("failed to parse meta.yaml: %w", err)
 			}
 		case "main.cdp":
-			mainScript = string(f.Data)
+			out.Main = string(f.Data)
+		default:
+			out.Files = append(out.Files, f)
 		}
 	}
-
-	if mainScript == "" {
-		return fmt.Errorf("no main.cdp found in archive")
+	if out.Main == "" {
+		return nil, fmt.Errorf("no main.cdp found in archive")
 	}
+	return out, nil
+}
+
+// HelpText returns the script-scoped help text for a txtar-backed script.
+func HelpText(path string) (string, error) {
+	archive, err := readArchive(path)
+	if err != nil {
+		return "", err
+	}
+
+	name := archive.Metadata.Name
+	if name == "" {
+		name = filepath.Base(path)
+	}
+
+	var b strings.Builder
+	b.WriteString(name)
+	b.WriteString("\n\n")
+	if archive.Metadata.Description != "" {
+		b.WriteString(archive.Metadata.Description)
+		b.WriteString("\n\n")
+	}
+	b.WriteString("Usage: ")
+	b.WriteString(name)
+	b.WriteString(" [args...]\n")
+	return b.String(), nil
+}
+
+func appendArgEnv(env []string, argv []string) []string {
+	for i, arg := range argv {
+		env = append(env, fmt.Sprintf("ARG%d=%s", i+1, arg))
+	}
+	env = append(env, fmt.Sprintf("ARGC=%d", len(argv)))
+	return env
+}
+
+// ExecuteTxtar runs a script from a txtar archive.
+func (e *Engine) ExecuteTxtar(ctx context.Context, path string, argv []string) error {
+	archive, err := readArchive(path)
+	if err != nil {
+		return err
+	}
+	e.metadata = archive.Metadata
 
 	// Initialize browser
 	if err := e.initBrowser(ctx); err != nil {
@@ -143,6 +190,7 @@ func (e *Engine) ExecuteTxtar(ctx context.Context, path string) error {
 	for k, v := range e.metadata.Env {
 		env = append(env, k+"="+v)
 	}
+	env = appendArgEnv(env, argv)
 
 	// Create script state
 	workDir, err := os.MkdirTemp("", "cdpscript-*")
@@ -153,9 +201,6 @@ func (e *Engine) ExecuteTxtar(ctx context.Context, path string) error {
 
 	// Write embedded files to workdir so commands like jsfile can access them
 	for _, f := range archive.Files {
-		if f.Name == "meta.yaml" || f.Name == "main.cdp" {
-			continue // Skip metadata and main script
-		}
 		filePath := filepath.Join(workDir, f.Name)
 		// Create parent directories if needed
 		if dir := filepath.Dir(filePath); dir != workDir {
@@ -182,7 +227,7 @@ func (e *Engine) ExecuteTxtar(ctx context.Context, path string) error {
 		logWriter = os.Stderr
 	}
 
-	return e.engine.Execute(state, "main.cdp", bufio.NewReader(strings.NewReader(mainScript)), logWriter)
+	return e.engine.Execute(state, "main.cdp", bufio.NewReader(strings.NewReader(archive.Main)), logWriter)
 }
 
 // initBrowser initializes the browser instance.
@@ -647,13 +692,13 @@ func (e *Engine) cmdPress() script.Cmd {
 
 func (e *Engine) cmdBack() script.Cmd {
 	return simpleCmd("go back in history", "", func(s *script.State, args []string) error {
-		return chromedp.Run(e.browser.Context(), chromedp.NavigateBack())
+		return e.navigateHistory(-1)
 	})
 }
 
 func (e *Engine) cmdForward() script.Cmd {
 	return simpleCmd("go forward in history", "", func(s *script.State, args []string) error {
-		return chromedp.Run(e.browser.Context(), chromedp.NavigateForward())
+		return e.navigateHistory(1)
 	})
 }
 
@@ -661,6 +706,25 @@ func (e *Engine) cmdReload() script.Cmd {
 	return simpleCmd("reload page", "", func(s *script.State, args []string) error {
 		return chromedp.Run(e.browser.Context(), chromedp.Reload())
 	})
+}
+
+func (e *Engine) navigateHistory(offset int64) error {
+	return chromedp.Run(e.browser.Context(), chromedp.ActionFunc(func(ctx context.Context) error {
+		current, entries, err := page.GetNavigationHistory().Do(ctx)
+		if err != nil {
+			return fmt.Errorf("reading navigation history: %w", err)
+		}
+
+		target := current + offset
+		if target < 0 || target >= int64(len(entries)) {
+			return fmt.Errorf("no history entry at offset %d", offset)
+		}
+
+		if e.verbose {
+			fmt.Fprintf(os.Stderr, "[history] current=%d target=%d url=%s\n", current, target, entries[target].URL)
+		}
+		return page.NavigateToHistoryEntry(entries[target].ID).Do(ctx)
+	}))
 }
 
 func (e *Engine) cmdSource() script.Cmd {
@@ -856,7 +920,7 @@ func (e *Engine) cmdAssert() script.Cmd {
 					return nil, fmt.Errorf("failed to check existence: %w", err)
 				}
 				if count == 0 {
-					return nil, fmt.Errorf("assertion failed: no elements found for selector %q", selector)
+					return nil, fmt.Errorf("%w: no elements found for selector %q", ErrAssertionFailed, selector)
 				}
 				if e.verbose {
 					fmt.Fprintf(os.Stderr, "[assert] exists %s: found %d elements\n", selector, count)
@@ -873,7 +937,7 @@ func (e *Engine) cmdAssert() script.Cmd {
 					return nil, fmt.Errorf("failed to get text: %w", err)
 				}
 				if !strings.Contains(text, expected) {
-					return nil, fmt.Errorf("assertion failed: text %q does not contain %q", text, expected)
+					return nil, fmt.Errorf("%w: text %q does not contain %q", ErrAssertionFailed, text, expected)
 				}
 				if e.verbose {
 					fmt.Fprintf(os.Stderr, "[assert] text %s contains %q\n", selector, expected)
@@ -895,7 +959,7 @@ func (e *Engine) cmdAssert() script.Cmd {
 					return nil, fmt.Errorf("failed to check visibility: %w", err)
 				}
 				if !visible {
-					return nil, fmt.Errorf("assertion failed: element %q is not visible", selector)
+					return nil, fmt.Errorf("%w: element %q is not visible", ErrAssertionFailed, selector)
 				}
 				if e.verbose {
 					fmt.Fprintf(os.Stderr, "[assert] visible %s: true\n", selector)

@@ -1,7 +1,7 @@
 # AI Studio Chat Script
 #
 # This script demonstrates interacting with Google AI Studio Live.
-# Usage: cdp script aistudio-chat.txtar
+# Usage: cdp run aistudio-chat.txtar
 #
 # Requires a Chrome profile with Google login (use -profile Default)
 
@@ -23,7 +23,7 @@ env:
 goto https://aistudio.google.com/live?model=${MODEL}
 
 # Wait for the chat interface to load
-wait for textarea[placeholder="Start typing a prompt"]
+wait textarea[placeholder="Start typing a prompt"]
 wait 2s
 
 # Take initial screenshot
@@ -54,14 +54,13 @@ js {
 }
 
 # Wait for response (adjust timeout as needed)
-wait until network idle
 wait 5s
 
 # Take screenshot of the response
 screenshot screenshots/aistudio-response.png
 
 # Extract any response text (if visible)
-# extract .model-response as response_text
+# extract .model-response
 
 log "AI Studio chat completed"
 

@@ -2,8 +2,13 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
+	"io"
+	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/tmc/cdp/cdpscript"
 )
@@ -15,12 +20,17 @@ type scriptCmd struct {
 	output  string
 	tabID   string
 	port    int
+	stdout  io.Writer
+	stderr  io.Writer
 }
 
 func newScriptCmd() *scriptCmd {
 	c := &scriptCmd{
-		fs: flag.NewFlagSet("run", flag.ExitOnError),
+		fs:     flag.NewFlagSet("run", flag.ContinueOnError),
+		stdout: os.Stdout,
+		stderr: os.Stderr,
 	}
+	c.fs.SetOutput(c.stderr)
 	c.fs.BoolVar(&c.verbose, "verbose", false, "Enable verbose logging")
 	c.fs.BoolVar(&c.verbose, "v", false, "Enable verbose logging (short)")
 	c.fs.StringVar(&c.output, "output", "", "Output directory for artifacts")
@@ -31,13 +41,29 @@ func newScriptCmd() *scriptCmd {
 }
 
 func (c *scriptCmd) run(args []string) error {
-	c.fs.Parse(args)
+	if err := c.fs.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return err
+		}
+		return fmt.Errorf("%w: %v", cdpscript.ErrUsage, err)
+	}
 
 	if c.fs.NArg() < 1 {
-		return fmt.Errorf("usage: cdp run [options] <script.txtar>")
+		return fmt.Errorf("%w: usage: cdp run [options] <script.txtar>", cdpscript.ErrUsage)
 	}
 
 	scriptPath := c.fs.Arg(0)
+	scriptArgs := c.fs.Args()[1:]
+	if scriptHelpWanted(scriptArgs) {
+		text, err := cdpscript.HelpText(scriptPath)
+		if err != nil {
+			return err
+		}
+		if _, err := io.WriteString(c.stdout, text); err != nil {
+			return err
+		}
+		return flag.ErrHelp
+	}
 
 	// Create engine with options
 	opts := []cdpscript.Option{
@@ -53,6 +79,42 @@ func (c *scriptCmd) run(args []string) error {
 	engine := cdpscript.New(opts...)
 
 	// Execute
-	ctx := context.Background()
-	return engine.ExecuteTxtar(ctx, scriptPath)
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	return engine.ExecuteTxtar(ctx, scriptPath, scriptArgs)
+}
+
+func scriptHelpWanted(args []string) bool {
+	for _, arg := range args {
+		if arg == "-h" || arg == "--help" {
+			return true
+		}
+	}
+	return false
+}
+
+func scriptExitCode(err error) int {
+	switch {
+	case err == nil:
+		return 0
+	case errors.Is(err, flag.ErrHelp):
+		return 0
+	case errors.Is(err, cdpscript.ErrUsage):
+		return 2
+	case errors.Is(err, cdpscript.ErrAssertionFailed):
+		return 3
+	case errors.Is(err, context.Canceled):
+		return 130
+	default:
+		return 1
+	}
+}
+
+func scriptErrorType(err error) string {
+	switch {
+	case errors.Is(err, cdpscript.ErrUsage):
+		return ErrorTypeUsage
+	default:
+		return ErrorTypeGeneral
+	}
 }
