@@ -73,7 +73,8 @@ env:                     # Environment variables
   USERNAME: "test@test.com"
 ```
 
-Only these fields are read by the engine today.
+Only these fields are read by the engine today. `meta.yaml` is optional; use it
+only for script-local defaults.
 
 ## Script Commands Reference
 
@@ -181,7 +182,8 @@ har output.har                # Write HAR file
 
 ## Variables
 
-Use `${VAR_NAME}` to reference environment variables set in meta.yaml:
+Use `${VAR_NAME}` to reference environment variables. Values can come from the
+runner, from `meta.yaml`, or from commands that set variables:
 
 ```yaml
 -- meta.yaml --

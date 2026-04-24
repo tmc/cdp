@@ -10,7 +10,7 @@ CDP is a command-line tool for Chrome DevTools Protocol interaction, providing i
 ## Active Development (Tracked in Beads)
 
 ### High Priority
-- **CDP Script Format Implementation** - See `CDP_SCRIPT_FORMAT.md`
+- **CDP Script Format Implementation** - See `skills/writing-cdp-scripts/references/script-format.md`
   - Core parser (beads: chrome-to-har-*)
   - Command execution engine
   - Browser integration

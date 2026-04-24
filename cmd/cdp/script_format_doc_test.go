@@ -7,8 +7,17 @@ import (
 	"testing"
 )
 
-func TestScriptFormatDocDoesNotAdvertiseUnsupportedFeatures(t *testing.T) {
+func TestScriptFormatDocPointsToCanonicalReference(t *testing.T) {
 	doc := readDocFile(t, "CDP_SCRIPT_FORMAT.md")
+
+	want := "skills/writing-cdp-scripts/references/script-format.md"
+	if !strings.Contains(doc, want) {
+		t.Fatalf("CDP_SCRIPT_FORMAT.md should point to %q", want)
+	}
+}
+
+func TestCanonicalScriptFormatDocDoesNotAdvertiseUnsupportedFeatures(t *testing.T) {
+	doc := readDocFile(t, filepath.Join("..", "..", "skills", "writing-cdp-scripts", "references", "script-format.md"))
 
 	disallowed := []string{
 		"#!/usr/bin/env cdp script",
@@ -34,7 +43,7 @@ func TestScriptFormatDocDoesNotAdvertiseUnsupportedFeatures(t *testing.T) {
 
 	for _, s := range disallowed {
 		if strings.Contains(doc, s) {
-			t.Errorf("CDP_SCRIPT_FORMAT.md still mentions unsupported feature %q", s)
+			t.Errorf("canonical script format doc still mentions unsupported feature %q", s)
 		}
 	}
 }
