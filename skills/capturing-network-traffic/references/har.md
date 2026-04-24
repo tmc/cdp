@@ -132,10 +132,7 @@ In cdp scripts, HAR recording is tag-based. You tag network activity sections, a
 ### Basic Example
 
 ```
--- meta.yaml --
-name: HAR Recording Example
-headless: true
-timeout: 60s
+# HAR Recording Example
 
 -- main.cdp --
 # Start recording - tags network requests as "homepage"
@@ -198,14 +195,12 @@ These are stored in HAR custom fields for debugging, documentation, or test evid
 ### Complete Test Example with HAR
 
 ```
--- meta.yaml --
-name: E2E Checkout Flow with HAR
-description: Records full network activity for the checkout flow
-browser: brave
-headless: true
-timeout: 120s
-env:
-  BASE_URL: "https://staging.shop.example.com"
+# E2E Checkout Flow with HAR
+#
+# Records full network activity for the checkout flow.
+#
+# Usage:
+#   BASE_URL=https://staging.shop.example.com cdpscript checkout-har.txtar
 
 -- main.cdp --
 # Phase 1: Browse products

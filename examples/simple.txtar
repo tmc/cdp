@@ -1,11 +1,7 @@
--- metadata.yaml --
-name: Simple CDP Script Example
-description: A simple example that navigates to example.com and extracts the title
-browser: chrome
-headless: true
-timeout: 30s
-env:
-  BASE_URL: "https://example.com"
+# Simple CDP Script Example
+#
+# Usage:
+#   BASE_URL=https://example.com cdpscript examples/simple.txtar
 
 -- main.cdp --
 # Navigate to the site

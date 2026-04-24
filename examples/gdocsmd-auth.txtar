@@ -1,17 +1,3 @@
--- meta.yaml --
-name: gdocsmd OAuth Token Generator
-description: Automate OAuth flow to generate token.json for gdocsmd scripttests
-browser: brave
-headless: false
-timeout: 180s
-env:
-  # Path to credentials.json from Google Cloud Console
-  CREDENTIALS_FILE: "credentials.json"
-  # Output path for the token
-  TOKEN_FILE: "token.json"
-  # OAuth scopes for Google Docs API
-  SCOPES: "https://www.googleapis.com/auth/documents.readonly"
-
 -- main.cdp --
 # gdocsmd OAuth Token Generator
 #

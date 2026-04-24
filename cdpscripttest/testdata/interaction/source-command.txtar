@@ -1,9 +1,3 @@
--- meta.yaml --
-name: Source Command
-description: Register a sourced helper command and use it on a local page.
-headless: true
-timeout: 20s
-
 -- main.cdp --
 source -as submit-form $FIXTURE_ROOT/testdata/interaction/source-helper.cdp
 goto $FIXTURE_BASE_URL/interaction/pages/form-submit.html

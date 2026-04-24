@@ -17,6 +17,7 @@ cdpscript script.txtar one two
 # With options
 cdp run -v script.txtar                          # Verbose logging
 cdp run -o /tmp/output script.txtar              # Output dir for artifacts
+cdpscript --headless --timeout 45s script.txtar  # Browser/selector timeout
 cdpscript --tab <id> --port 9222 script.txtar    # Connect to existing tab
 ```
 
@@ -27,14 +28,12 @@ delimited files. The comment section can hold a shebang:
 
 ```text
 #!/usr/bin/env cdpscript
--- meta.yaml --
-name: My Test Script
-description: What this script does
-browser: chrome
-headless: true
-timeout: 30s
-env:
-  BASE_URL: "https://example.com"
+# My Test Script
+#
+# What this script does.
+#
+# Usage:
+#   BASE_URL=https://example.com cdpscript script.txtar
 
 -- main.cdp --
 # Main automation script goes here
@@ -53,28 +52,16 @@ document.querySelector('#foo').click();
 
 ### Optional Files
 
-- **meta.yaml** - Script metadata and configuration
 - **extra files** - Extracted into the script workdir before execution
 - **\*.js** - JavaScript files loaded with `jsfile`
 - **external \*.cdp files** - Helper scripts loaded from disk with `source`
 
-## Metadata (meta.yaml)
+## Header Comments
 
-```yaml
-name: Script Name
-description: What it does
-version: "1.0"
-browser: chrome          # chrome, brave, chromium, edge
-profile: "Profile 1"    # Chrome profile name to copy
-headless: true           # Run headless (default: false in meta)
-timeout: 30s             # Overall timeout
-env:                     # Environment variables
-  BASE_URL: "https://example.com"
-  USERNAME: "test@test.com"
-```
-
-Only these fields are read by the engine today. `meta.yaml` is optional; use it
-only for script-local defaults.
+Use the txtar comment section for human-facing information such as purpose,
+inputs, and examples. It is not parsed as runtime configuration. Runtime
+inputs should come from CLI flags, environment variables, positional
+arguments, or runner options.
 
 ## Script Commands Reference
 
@@ -183,14 +170,9 @@ har output.har                # Write HAR file
 ## Variables
 
 Use `${VAR_NAME}` to reference environment variables. Values can come from the
-runner, from `meta.yaml`, or from commands that set variables:
+runner or from commands that set variables:
 
-```yaml
--- meta.yaml --
-env:
-  BASE_URL: "https://example.com"
-  USERNAME: "admin"
-
+```text
 -- main.cdp --
 goto ${BASE_URL}/login
 fill #username ${USERNAME}
@@ -206,21 +188,18 @@ Top-level script arguments are available as `${ARG1}`, `${ARG2}`, and
 Scripts support conditions based on engine state:
 
 ```
-[headless] screenshot headless-only.png     # Only run if headless
 [has-tab] log Connected to existing tab     # Only if connected to tab
 ```
 
 ## Complete Example
 
 ```
--- meta.yaml --
-name: Login Flow Test
-description: Tests the login flow with screenshots at each step
-browser: brave
-headless: true
-timeout: 60s
-env:
-  BASE_URL: "https://staging.example.com"
+# Login Flow Test
+#
+# Tests the login flow with screenshots at each step.
+#
+# Usage:
+#   BASE_URL=https://staging.example.com cdpscript login.txtar
 
 -- main.cdp --
 # Navigate to login page

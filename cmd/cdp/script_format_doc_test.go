@@ -21,6 +21,7 @@ func TestCanonicalScriptFormatDocDoesNotAdvertiseUnsupportedFeatures(t *testing.
 
 	disallowed := []string{
 		"#!/usr/bin/env cdp script",
+		"meta.yaml",
 		"metadata.yaml",
 		"imports:",
 		"wait until",

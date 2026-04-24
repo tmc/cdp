@@ -1,9 +1,3 @@
--- meta.yaml --
-name: Reload Page
-description: Reload an offline page and assert the deterministic load marker.
-headless: true
-timeout: 20s
-
 -- main.cdp --
 goto $FIXTURE_BASE_URL/interaction/pages/history-start.html
 wait '#page-id'

@@ -1,9 +1,3 @@
--- meta.yaml --
-name: Keyboard Press
-description: Press character keys into a focused input and assert the mirrored text.
-headless: true
-timeout: 20s
-
 -- main.cdp --
 goto $FIXTURE_BASE_URL/interaction/pages/keyboard-enter.html
 wait '#command'

@@ -1,9 +1,3 @@
--- meta.yaml --
-name: AI Studio FC Golden
-description: Verified working end-to-end function calling automation
-browser: brave
-timeout: 300s
-
 -- main.cdp --
 # Start fresh
 goto https://aistudio.google.com/prompts/new_chat

@@ -8,7 +8,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 	"time"
 
@@ -16,31 +15,31 @@ import (
 	"github.com/chromedp/cdproto/page"
 	"github.com/chromedp/chromedp"
 	"github.com/tmc/cdp/internal/browser"
-	"github.com/tmc/cdp/internal/chromeprofiles"
 	"github.com/tmc/cdp/internal/discovery"
 	"github.com/tmc/cdp/internal/htmltomd"
 	"github.com/tmc/cdp/internal/recorder"
 	"github.com/tmc/cdp/internal/termmd"
 	"golang.org/x/tools/txtar"
-	"gopkg.in/yaml.v3"
 	"rsc.io/script"
 )
 
+const defaultScriptTimeout = 30 * time.Second
+
 type archiveData struct {
-	Metadata Metadata
-	Main     string
-	Files    []txtar.File
+	Comment string
+	Main    string
+	Files   []txtar.File
 }
 
 // Engine executes CDP scripts using the rsc.io/script framework.
 type Engine struct {
-	engine     *script.Engine
-	browser    *browser.Browser
-	profileMgr chromeprofiles.ProfileManager
-	verbose    bool
-	outputDir  string
-	env        []string
-	metadata   Metadata
+	engine    *script.Engine
+	browser   *browser.Browser
+	verbose   bool
+	outputDir string
+	env       []string
+	headless  bool
+	timeout   time.Duration
 
 	// Remote tab connection
 	remoteTabID string
@@ -54,18 +53,6 @@ type Engine struct {
 
 	// HAR recorder for capturing network activity with tags
 	recorder *recorder.Recorder
-}
-
-// Metadata represents script metadata from meta.yaml.
-type Metadata struct {
-	Name        string            `yaml:"name"`
-	Description string            `yaml:"description"`
-	Version     string            `yaml:"version"`
-	Browser     string            `yaml:"browser"`
-	Profile     string            `yaml:"profile"`
-	Headless    bool              `yaml:"headless"`
-	Timeout     time.Duration     `yaml:"timeout"`
-	Env         map[string]string `yaml:"env"`
 }
 
 // New creates a new CDP script engine.
@@ -99,6 +86,16 @@ func WithOutputDir(dir string) Option {
 	return func(e *Engine) { e.outputDir = dir }
 }
 
+// WithHeadless controls whether the launched browser runs headless.
+func WithHeadless(v bool) Option {
+	return func(e *Engine) { e.headless = v }
+}
+
+// WithTimeout sets the default timeout for browser startup and selector waits.
+func WithTimeout(d time.Duration) Option {
+	return func(e *Engine) { e.timeout = d }
+}
+
 // WithEnv adds initial environment variables for script execution.
 // Each entry must have the form "key=value".
 func WithEnv(env ...string) Option {
@@ -127,18 +124,15 @@ func readArchive(path string) (*archiveData, error) {
 	}
 
 	archive := txtar.Parse(data)
-	out := &archiveData{}
+	out := &archiveData{
+		Comment: cleanArchiveComment(string(archive.Comment)),
+	}
 	for _, f := range archive.Files {
-		switch f.Name {
-		case "meta.yaml":
-			if err := yaml.Unmarshal(f.Data, &out.Metadata); err != nil {
-				return nil, fmt.Errorf("failed to parse meta.yaml: %w", err)
-			}
-		case "main.cdp":
+		if f.Name == "main.cdp" {
 			out.Main = string(f.Data)
-		default:
-			out.Files = append(out.Files, f)
+			continue
 		}
+		out.Files = append(out.Files, f)
 	}
 	if out.Main == "" {
 		return nil, fmt.Errorf("no main.cdp found in archive")
@@ -153,22 +147,43 @@ func HelpText(path string) (string, error) {
 		return "", err
 	}
 
-	name := archive.Metadata.Name
-	if name == "" {
-		name = filepath.Base(path)
-	}
+	name := filepath.Base(path)
 
 	var b strings.Builder
 	b.WriteString(name)
 	b.WriteString("\n\n")
-	if archive.Metadata.Description != "" {
-		b.WriteString(archive.Metadata.Description)
+	if archive.Comment != "" {
+		b.WriteString(archive.Comment)
 		b.WriteString("\n\n")
 	}
 	b.WriteString("Usage: ")
 	b.WriteString(name)
 	b.WriteString(" [args...]\n")
 	return b.String(), nil
+}
+
+func cleanArchiveComment(comment string) string {
+	var out []string
+	for _, line := range strings.Split(comment, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "#!") {
+			continue
+		}
+		if trimmed == "#" {
+			out = append(out, "")
+			continue
+		}
+		if strings.HasPrefix(trimmed, "# ") {
+			out = append(out, strings.TrimPrefix(trimmed, "# "))
+			continue
+		}
+		if strings.HasPrefix(trimmed, "#") {
+			out = append(out, strings.TrimPrefix(trimmed, "#"))
+			continue
+		}
+		out = append(out, line)
+	}
+	return strings.TrimSpace(strings.Join(out, "\n"))
 }
 
 func appendArgEnv(env []string, argv []string) []string {
@@ -179,25 +194,12 @@ func appendArgEnv(env []string, argv []string) []string {
 	return env
 }
 
-func appendMapEnv(env []string, vars map[string]string) []string {
-	keys := make([]string, 0, len(vars))
-	for key := range vars {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-	for _, key := range keys {
-		env = append(env, key+"="+vars[key])
-	}
-	return env
-}
-
 // ExecuteTxtar runs a script from a txtar archive.
 func (e *Engine) ExecuteTxtar(ctx context.Context, path string, argv []string) error {
 	archive, err := readArchive(path)
 	if err != nil {
 		return err
 	}
-	e.metadata = archive.Metadata
 
 	// Initialize browser
 	if err := e.initBrowser(ctx); err != nil {
@@ -207,7 +209,6 @@ func (e *Engine) ExecuteTxtar(ctx context.Context, path string, argv []string) e
 
 	// Build initial environment
 	env := []string{}
-	env = appendMapEnv(env, e.metadata.Env)
 	env = append(env, e.env...)
 	env = appendArgEnv(env, argv)
 
@@ -265,43 +266,18 @@ func (e *Engine) initBrowser(ctx context.Context) error {
 		fmt.Fprintf(os.Stderr, "[engine] Using browser: %s\n", chromePath)
 	}
 
-	// Setup profile if specified
-	if e.metadata.Profile != "" {
-		var err error
-		e.profileMgr, err = chromeprofiles.NewProfileManager(
-			chromeprofiles.WithVerbose(e.verbose),
-		)
-		if err != nil {
-			return fmt.Errorf("failed to create profile manager: %w", err)
-		}
-		if err := e.profileMgr.SetupWorkdir(); err != nil {
-			return fmt.Errorf("failed to setup profile workdir: %w", err)
-		}
-		if err := e.profileMgr.CopyProfile(e.metadata.Profile, nil); err != nil {
-			return fmt.Errorf("failed to copy profile: %w", err)
-		}
-	}
-
 	// Build browser options
-	timeout := e.metadata.Timeout
-	if timeout == 0 {
-		timeout = 30 * time.Second
-	}
-
 	browserOpts := []browser.Option{
-		browser.WithHeadless(e.metadata.Headless),
-		browser.WithTimeout(int(timeout.Seconds())),
+		browser.WithHeadless(e.headless),
+		browser.WithTimeout(int(e.scriptTimeout().Seconds())),
 		browser.WithChromePath(chromePath),
 	}
 	if e.verbose {
 		browserOpts = append(browserOpts, browser.WithVerbose(true))
 	}
-	if e.metadata.Profile != "" {
-		browserOpts = append(browserOpts, browser.WithProfile(e.metadata.Profile))
-	}
 
 	// Create and launch browser
-	br, err := browser.New(ctx, e.profileMgr, browserOpts...)
+	br, err := browser.New(ctx, nil, browserOpts...)
 	if err != nil {
 		return fmt.Errorf("failed to create browser: %w", err)
 	}
@@ -348,25 +324,19 @@ func (e *Engine) connectToRemoteTab(ctx context.Context) error {
 }
 
 func (e *Engine) detectBrowserPath() string {
-	browserType := strings.ToLower(e.metadata.Browser)
-	candidates := discovery.DiscoverBrowsers()
-
-	if browserType != "" {
-		for _, c := range candidates {
-			if strings.Contains(strings.ToLower(c.Name), browserType) {
-				return c.Path
-			}
-		}
-	}
 	return discovery.FindBestBrowser()
+}
+
+func (e *Engine) scriptTimeout() time.Duration {
+	if e.timeout > 0 {
+		return e.timeout
+	}
+	return defaultScriptTimeout
 }
 
 func (e *Engine) cleanup() {
 	if e.browser != nil {
 		e.browser.Close()
-	}
-	if e.profileMgr != nil {
-		e.profileMgr.Cleanup()
 	}
 }
 
@@ -434,7 +404,7 @@ func (e *Engine) commands() map[string]script.Cmd {
 // conditions returns the conditions for the script engine.
 func (e *Engine) conditions() map[string]script.Cond {
 	return map[string]script.Cond{
-		"headless": script.BoolCondition("running headless", e.metadata.Headless),
+		"headless": script.BoolCondition("running headless", e.headless),
 		"has-tab":  script.BoolCondition("connected to existing tab", e.remoteTabID != ""),
 	}
 }
@@ -482,11 +452,7 @@ func (e *Engine) cmdWait() script.Cmd {
 		if e.verbose {
 			fmt.Fprintf(os.Stderr, "[wait] for selector: %s\n", arg)
 		}
-		timeout := e.metadata.Timeout
-		if timeout == 0 {
-			timeout = 30 * time.Second
-		}
-		return e.browser.WaitForSelector(arg, timeout)
+		return e.browser.WaitForSelector(arg, e.scriptTimeout())
 	})
 }
 

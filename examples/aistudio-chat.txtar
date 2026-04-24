@@ -4,20 +4,6 @@
 # Usage: cdp run aistudio-chat.txtar
 #
 # Requires a Chrome profile with Google login (use -profile Default)
-
--- meta.yaml --
-name: AI Studio Chat
-description: Interact with Google AI Studio Live
-version: "1.0"
-author: Claude
-browser: brave
-profile: Default
-headless: false
-timeout: 5m
-env:
-  MODEL: gemini-2.5-flash-native-audio-preview-12-2025
-  MESSAGE: "What is the weather like today?"
-
 -- main.cdp --
 # Navigate to AI Studio Live
 goto https://aistudio.google.com/live?model=${MODEL}

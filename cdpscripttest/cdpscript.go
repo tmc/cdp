@@ -2,6 +2,7 @@ package cdpscripttest
 
 import (
 	"context"
+	"time"
 
 	"github.com/tmc/cdp/cdpscript"
 )
@@ -17,6 +18,12 @@ type CDPScriptRunOptions struct {
 	// OutputDir sets the output directory for relative artifacts.
 	OutputDir string
 
+	// Headless controls whether the launched browser runs headless.
+	Headless bool
+
+	// Timeout sets the default timeout for browser startup and selector waits.
+	Timeout time.Duration
+
 	// Verbose enables runtime logging.
 	Verbose bool
 }
@@ -27,6 +34,10 @@ func RunCDPScript(ctx context.Context, path string, opts CDPScriptRunOptions) er
 	engineOpts := []cdpscript.Option{
 		cdpscript.WithVerbose(opts.Verbose),
 		cdpscript.WithEnv(opts.Env...),
+		cdpscript.WithHeadless(opts.Headless),
+	}
+	if opts.Timeout > 0 {
+		engineOpts = append(engineOpts, cdpscript.WithTimeout(opts.Timeout))
 	}
 	if opts.OutputDir != "" {
 		engineOpts = append(engineOpts, cdpscript.WithOutputDir(opts.OutputDir))

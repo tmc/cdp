@@ -1,8 +1,3 @@
--- meta.yaml --
-name: AI Studio Function Calling Setup
-description: Sets up function calling with custom tool definitions in Google AI Studio
-timeout: 60s
-
 -- main.cdp --
 # AI Studio Function Calling Setup
 #

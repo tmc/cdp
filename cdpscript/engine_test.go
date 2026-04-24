@@ -20,28 +20,13 @@ func TestAppendArgEnv(t *testing.T) {
 	}
 }
 
-func TestAppendMapEnv(t *testing.T) {
-	got := appendMapEnv([]string{"BASE_URL=https://example.com"}, map[string]string{
-		"B": "two",
-		"A": "one",
-	})
-	want := []string{
-		"BASE_URL=https://example.com",
-		"A=one",
-		"B=two",
-	}
-	if strings.Join(got, "\n") != strings.Join(want, "\n") {
-		t.Fatalf("appendMapEnv mismatch:\n got: %q\nwant: %q", got, want)
-	}
-}
-
 func TestHelpText(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "hello.cdpscript")
 	data := `#!/usr/bin/env cdpscript
--- meta.yaml --
-name: hello-world
-description: Say hello.
+# hello-world
+#
+# Say hello.
 
 -- main.cdp --
 log hello
@@ -55,12 +40,22 @@ log hello
 		t.Fatal(err)
 	}
 	for _, want := range []string{
+		"hello.cdpscript",
 		"hello-world",
 		"Say hello.",
-		"Usage: hello-world [args...]",
+		"Usage: hello.cdpscript [args...]",
 	} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("help text missing %q:\n%s", want, text)
 		}
+	}
+}
+
+func TestCleanArchiveComment(t *testing.T) {
+	comment := "#!/usr/bin/env cdpscript\n# Title\n#\n# Details\nplain line\n"
+	got := cleanArchiveComment(comment)
+	want := "Title\n\nDetails\nplain line"
+	if got != want {
+		t.Fatalf("cleanArchiveComment = %q, want %q", got, want)
 	}
 }

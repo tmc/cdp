@@ -1,9 +1,4 @@
-# Test source command
--- meta.yaml --
-name: Source Command Test
-timeout: 30s
-
--- main.cdp --
+# Test source command-- main.cdp --
 log === Testing has-tab condition ===
 [has-tab] log Has existing tab - skipping navigation
 [!has-tab] log No existing tab - would navigate here

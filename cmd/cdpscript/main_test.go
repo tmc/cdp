@@ -17,9 +17,9 @@ func TestScriptCmdHelpAfterScriptPath(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "demo.cdpscript")
 	data := `#!/usr/bin/env cdpscript
--- meta.yaml --
-name: demo
-description: Demonstrate script help.
+# demo
+#
+# Demonstrate script help.
 
 -- main.cdp --
 log demo
@@ -42,9 +42,10 @@ log demo
 		t.Fatalf("unexpected stderr:\n%s", stderr.String())
 	}
 	for _, want := range []string{
+		"demo.cdpscript",
 		"demo",
 		"Demonstrate script help.",
-		"Usage: demo [args...]",
+		"Usage: demo.cdpscript [args...]",
 	} {
 		if !strings.Contains(stdout.String(), want) {
 			t.Fatalf("stdout missing %q:\n%s", want, stdout.String())

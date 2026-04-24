@@ -1,9 +1,3 @@
--- meta.yaml --
-name: AI Studio Function Calling Complete
-description: Full function calling setup, conversation, and response handling
-browser: brave
-timeout: 300s
-
 -- main.cdp --
 # AI Studio Function Calling - Complete Workflow
 # Usage: cdp run --tab <TAB_ID> examples/aistudio-fc-complete.txtar

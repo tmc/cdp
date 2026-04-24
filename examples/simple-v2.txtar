@@ -1,10 +1,4 @@
-# Simple test for rsc.io/script engine
--- meta.yaml --
-name: Simple Test V2
-headless: false
-timeout: 30s
-
--- main.cdp --
+# Simple test for rsc.io/script engine-- main.cdp --
 # Navigate to example.com
 goto https://example.com
 

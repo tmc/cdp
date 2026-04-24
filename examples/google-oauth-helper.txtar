@@ -1,12 +1,7 @@
--- meta.yaml --
-name: Google OAuth Helper
-description: Automate Google OAuth consent flow for API tools like gdocsmd
-browser: brave
-headless: false
-timeout: 120s
-env:
-  # Set this to the OAuth URL from gdocsmd or similar tool
-  OAUTH_URL: ""
+# Google OAuth Helper
+#
+# Usage:
+#   OAUTH_URL="https://accounts.google.com/..." cdpscript examples/google-oauth-helper.txtar
 
 -- main.cdp --
 # Google OAuth Consent Flow Helper

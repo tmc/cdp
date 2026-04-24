@@ -1,15 +1,4 @@
-# AI Studio Chat Script - Supports existing tab or opens new one
--- meta.yaml --
-name: AI Studio Chat v3
-description: Send a message to Google AI Studio Live (with tab reuse support)
-browser: brave
-profile: Default
-headless: false
-timeout: 5m
-env:
-  MODEL: gemini-2.5-flash-native-audio-preview-12-2025
-
--- main.cdp --
+# AI Studio Chat Script - Supports existing tab or opens new one-- main.cdp --
 # If no existing tab, navigate to AI Studio
 [!has-tab] goto https://aistudio.google.com/live?model=$MODEL
 

@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/tmc/cdp/cdpscript"
 )
@@ -16,12 +17,14 @@ import (
 type scriptCmd struct {
 	fs *flag.FlagSet
 
-	verbose bool
-	output  string
-	tabID   string
-	port    int
-	stdout  io.Writer
-	stderr  io.Writer
+	verbose  bool
+	output   string
+	headless bool
+	timeout  time.Duration
+	tabID    string
+	port     int
+	stdout   io.Writer
+	stderr   io.Writer
 }
 
 func newScriptCmd() *scriptCmd {
@@ -35,6 +38,8 @@ func newScriptCmd() *scriptCmd {
 	c.fs.BoolVar(&c.verbose, "v", false, "Enable verbose logging (short)")
 	c.fs.StringVar(&c.output, "output", "", "Output directory for artifacts")
 	c.fs.StringVar(&c.output, "o", "", "Output directory (short)")
+	c.fs.BoolVar(&c.headless, "headless", false, "Run launched browser headless")
+	c.fs.DurationVar(&c.timeout, "timeout", 30*time.Second, "Default timeout for browser startup and selector waits")
 	c.fs.StringVar(&c.tabID, "tab", "", "Connect to existing browser tab by ID (from /json/list)")
 	c.fs.IntVar(&c.port, "port", 9222, "Chrome remote debugging port")
 	return c
@@ -68,6 +73,8 @@ func (c *scriptCmd) run(args []string) error {
 	// Create engine with options
 	opts := []cdpscript.Option{
 		cdpscript.WithVerbose(c.verbose),
+		cdpscript.WithHeadless(c.headless),
+		cdpscript.WithTimeout(c.timeout),
 	}
 	if c.output != "" {
 		opts = append(opts, cdpscript.WithOutputDir(c.output))

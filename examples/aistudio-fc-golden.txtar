@@ -1,9 +1,3 @@
--- meta.yaml --
-name: AI Studio FC Loop Sync
-description: End-to-end loop with synchronous steps
-browser: brave
-timeout: 300s
-
 -- main.cdp --
 # Start fresh
 goto https://aistudio.google.com/prompts/new_chat?model=gemini-3-flash-preview

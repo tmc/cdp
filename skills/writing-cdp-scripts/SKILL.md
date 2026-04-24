@@ -1,6 +1,6 @@
 ---
 name: writing-cdp-scripts
-description: Writes and explains txtar-based cdp automation scripts, including meta.yaml, main.cdp, helper JavaScript files, sourced helper scripts, assertions, and artifact output. Use when the task involves authoring, debugging, or reviewing cdp run scripts.
+description: Writes and explains txtar-based cdp automation scripts, including txtar header comments, main.cdp, helper JavaScript files, sourced helper scripts, assertions, and artifact output. Use when the task involves authoring, debugging, or reviewing cdp run scripts.
 ---
 
 # Writing CDP Scripts
@@ -11,7 +11,7 @@ Use this skill when the task needs a reusable `cdp run` script rather than ad ho
 
 - Scripts are txtar archives
 - `main.cdp` is required
-- `meta.yaml`, helper `.js`, and helper `.cdp` files are optional
+- txtar header comments, helper `.js`, and helper `.cdp` files are optional
 
 ## Use this skill for
 

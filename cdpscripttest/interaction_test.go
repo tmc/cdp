@@ -32,6 +32,8 @@ func TestInteractionFixtures(t *testing.T) {
 			opts := cdpscripttest.CDPScriptRunOptions{
 				Verbose:   testing.Verbose(),
 				OutputDir: t.TempDir(),
+				Headless:  true,
+				Timeout:   20 * time.Second,
 				Env: []string{
 					"FIXTURE_BASE_URL=" + baseURL,
 					"FIXTURE_ROOT=" + root,

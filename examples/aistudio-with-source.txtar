@@ -1,15 +1,4 @@
-# AI Studio with sourced commands
--- meta.yaml --
-name: AI Studio with Source
-description: Demonstrates the source command
-browser: brave
-profile: Default
-headless: false
-timeout: 5m
-env:
-  MODEL: gemini-2.5-flash-native-audio-preview-12-2025
-
--- main.cdp --
+# AI Studio with sourced commands-- main.cdp --
 # Register a reusable send command
 source -as send-msg examples/lib/aistudio-send.cdp
 

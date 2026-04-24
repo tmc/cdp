@@ -7,10 +7,7 @@ Screenshot capture, PDF export, and visual testing with the cdp tool.
 ### In Scripts (txtar)
 
 ```
--- meta.yaml --
-name: Screenshot Example
-headless: true
-timeout: 30s
+# Screenshot Example
 
 -- main.cdp --
 goto https://example.com
@@ -81,12 +78,10 @@ cdp> screenshot light.png
 ## Multi-Step Screenshot Sequences
 
 ```
--- meta.yaml --
-name: Login Flow Screenshots
-headless: true
-timeout: 60s
-env:
-  BASE_URL: "https://staging.example.com"
+# Login Flow Screenshots
+#
+# Usage:
+#   BASE_URL=https://staging.example.com cdpscript screenshots.txtar
 
 -- main.cdp --
 # Step 1: Landing page

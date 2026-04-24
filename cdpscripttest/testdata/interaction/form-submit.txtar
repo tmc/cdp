@@ -1,9 +1,3 @@
--- meta.yaml --
-name: Form Submit
-description: Fill a local form and assert the submitted result.
-headless: true
-timeout: 20s
-
 -- main.cdp --
 goto $FIXTURE_BASE_URL/interaction/pages/form-submit.html
 wait '#signup-form'

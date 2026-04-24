@@ -1,11 +1,7 @@
--- meta.yaml --
-name: Google Doc to Markdown
-description: Extract content from a Google Doc and convert to Markdown
-browser: brave
-headless: false
-timeout: 60s
-env:
-  GDOC_URL: "https://docs.google.com/document/d/YOUR_DOC_ID/edit"
+# Google Doc to Markdown
+#
+# Usage:
+#   GDOC_URL="https://docs.google.com/document/d/YOUR_DOC_ID/edit" cdpscript examples/gdoc-to-markdown.txtar
 
 -- main.cdp --
 # Google Doc to Markdown Converter

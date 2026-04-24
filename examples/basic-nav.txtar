@@ -1,13 +1,5 @@
 # Basic Navigation Test
 # Tests goto, wait, and screenshot commands
-
--- meta.yaml --
-name: Basic Navigation
-description: Test basic navigation commands
-version: "1.0"
-headless: false
-timeout: 30s
-
 -- main.cdp --
 # Navigate to a simple page
 goto https://www.google.com
