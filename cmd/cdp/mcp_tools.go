@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	cdproto "github.com/chromedp/cdproto/cdp"
 	"github.com/chromedp/cdproto/dom"
 	"github.com/chromedp/cdproto/har"
 	"github.com/chromedp/cdproto/network"
@@ -365,11 +366,17 @@ func runWithTimeout(ctx context.Context, timeout time.Duration, actions ...chrom
 func registerInteractionTools(server *mcp.Server, s *mcpSession) {
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "click",
-		Description: "Click an element by CSS selector or @ref (e.g. @1 from page_snapshot). Timeout in seconds (default 30).",
+		Description: "Click an element by CSS selector, @ref (e.g. @1 from page_snapshot), or viewport coordinates as coord:x,y. Timeout in seconds (default 30).",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input ClickInput) (*mcp.CallToolResult, any, error) {
 		actx, cancel := interactionCtx(ctx, s.activeCtx(), input.Timeout)
 		defer cancel()
 		if err := chromedp.Run(actx, chromedp.ActionFunc(func(ctx context.Context) error {
+			if p, ok, err := parseCoordSelector(input.Selector); ok || err != nil {
+				if err != nil {
+					return err
+				}
+				return clickAt(ctx, p)
+			}
 			backendID, err := resolveRefWithRecovery(ctx, s.refs, input.Selector)
 			if err != nil {
 				return err
@@ -451,6 +458,13 @@ type EvaluateInput struct {
 	AwaitPromise bool   `json:"await_promise,omitempty"`
 }
 
+type RawCDPInput struct {
+	Method  string         `json:"method"`
+	Params  map[string]any `json:"params,omitempty"`
+	Target  string         `json:"target,omitempty"`
+	Timeout int            `json:"timeout,omitempty"`
+}
+
 func registerJavaScriptTools(server *mcp.Server, s *mcpSession) {
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "evaluate",
@@ -476,6 +490,72 @@ func registerJavaScriptTools(server *mcp.Server, s *mcpSession) {
 			},
 		}, nil, nil
 	})
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "raw_cdp",
+		Description: "Execute a raw Chrome DevTools Protocol method. Defaults to the active target; set target to \"browser\" for browser-level methods. Example: method Runtime.evaluate with params {\"expression\":\"document.title\"}.",
+	}, func(ctx context.Context, req *mcp.CallToolRequest, input RawCDPInput) (*mcp.CallToolResult, any, error) {
+		method, target, err := validateRawCDPInput(input)
+		if err != nil {
+			return nil, nil, fmt.Errorf("raw_cdp: %w", err)
+		}
+		timeout := 15 * time.Second
+		if input.Timeout > 0 {
+			timeout = time.Duration(input.Timeout) * time.Second
+		}
+		actx, cancel := requestToolCtx(ctx, s.activeCtx(), timeout)
+		defer cancel()
+		var result map[string]any
+		if err := chromedp.Run(actx, chromedp.ActionFunc(func(ctx context.Context) error {
+			execCtx := ctx
+			if target == "browser" {
+				c := chromedp.FromContext(ctx)
+				if c == nil || c.Browser == nil {
+					return fmt.Errorf("browser executor unavailable")
+				}
+				execCtx = cdproto.WithExecutor(ctx, c.Browser)
+			}
+			return cdproto.Execute(execCtx, method, input.Params, &result)
+		})); err != nil {
+			return nil, nil, fmt.Errorf("raw_cdp: %w", err)
+		}
+		if result == nil {
+			result = map[string]any{}
+		}
+		data, err := json.Marshal(result)
+		if err != nil {
+			return nil, nil, fmt.Errorf("raw_cdp: marshal result: %w", err)
+		}
+		return &mcp.CallToolResult{
+			Content: []mcp.Content{
+				&mcp.TextContent{Text: string(data)},
+			},
+		}, nil, nil
+	})
+}
+
+func validateRawCDPInput(input RawCDPInput) (method, target string, err error) {
+	method = strings.TrimSpace(input.Method)
+	if method == "" {
+		return "", "", fmt.Errorf("method is required")
+	}
+	if strings.ContainsAny(method, " \t\r\n") || strings.Count(method, ".") != 1 {
+		return "", "", fmt.Errorf("invalid method %q", input.Method)
+	}
+	switch method {
+	case "Browser.close", "Target.closeTarget":
+		return "", "", fmt.Errorf("%s is not allowed", method)
+	}
+	target = strings.TrimSpace(input.Target)
+	if target == "" {
+		target = "target"
+	}
+	switch target {
+	case "target", "browser":
+		return method, target, nil
+	default:
+		return "", "", fmt.Errorf("invalid target %q", input.Target)
+	}
 }
 
 // --- Tab management tools ---

@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -19,6 +21,11 @@ type refEntry struct {
 	BackendNodeID cdp.BackendNodeID
 	Role          string
 	Name          string
+}
+
+type viewportPoint struct {
+	X float64
+	Y float64
 }
 
 // refRegistry holds the current @ref→element mapping.
@@ -310,6 +317,29 @@ func resolveRefWithRecovery(ctx context.Context, refs *refRegistry, selector str
 	return recovered, nil
 }
 
+func parseCoordSelector(selector string) (viewportPoint, bool, error) {
+	coord, ok := strings.CutPrefix(strings.TrimSpace(selector), "coord:")
+	if !ok {
+		return viewportPoint{}, false, nil
+	}
+	parts := strings.Split(coord, ",")
+	if len(parts) != 2 {
+		return viewportPoint{}, true, fmt.Errorf("invalid coordinate selector %q: want coord:x,y", selector)
+	}
+	x, err := strconv.ParseFloat(strings.TrimSpace(parts[0]), 64)
+	if err != nil {
+		return viewportPoint{}, true, fmt.Errorf("invalid x coordinate %q: %w", parts[0], err)
+	}
+	y, err := strconv.ParseFloat(strings.TrimSpace(parts[1]), 64)
+	if err != nil {
+		return viewportPoint{}, true, fmt.Errorf("invalid y coordinate %q: %w", parts[1], err)
+	}
+	if x < 0 || y < 0 || math.IsInf(x, 0) || math.IsInf(y, 0) || math.IsNaN(x) || math.IsNaN(y) {
+		return viewportPoint{}, true, fmt.Errorf("invalid coordinate selector %q: coordinates must be finite non-negative numbers", selector)
+	}
+	return viewportPoint{X: x, Y: y}, true, nil
+}
+
 // recoverRef searches the AX tree for a node matching the given role and name,
 // updates the ref entry, and returns the new BackendNodeID.
 func recoverRef(ctx context.Context, refs *refRegistry, ref int, entry refEntry) (cdp.BackendNodeID, error) {
@@ -363,12 +393,18 @@ func clickByBackendNodeID(ctx context.Context, backendID cdp.BackendNodeID) erro
 	x := (q[0] + q[2] + q[4] + q[6]) / 4
 	y := (q[1] + q[3] + q[5] + q[7]) / 4
 
-	// Dispatch mousePressed + mouseReleased.
-	if err := input.DispatchMouseEvent(input.MousePressed, x, y).
+	return clickAt(ctx, viewportPoint{X: x, Y: y})
+}
+
+func clickAt(ctx context.Context, p viewportPoint) error {
+	if err := input.DispatchMouseEvent(input.MouseMoved, p.X, p.Y).Do(ctx); err != nil {
+		return fmt.Errorf("mouse moved: %w", err)
+	}
+	if err := input.DispatchMouseEvent(input.MousePressed, p.X, p.Y).
 		WithButton(input.Left).WithClickCount(1).Do(ctx); err != nil {
 		return fmt.Errorf("mouse pressed: %w", err)
 	}
-	if err := input.DispatchMouseEvent(input.MouseReleased, x, y).
+	if err := input.DispatchMouseEvent(input.MouseReleased, p.X, p.Y).
 		WithButton(input.Left).WithClickCount(1).Do(ctx); err != nil {
 		return fmt.Errorf("mouse released: %w", err)
 	}

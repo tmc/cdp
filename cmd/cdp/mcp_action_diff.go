@@ -20,9 +20,9 @@ import (
 // --- Action diff tool ---
 
 type ActionDiffInput struct {
-	Action string `json:"action"`            // "click", "type", or "navigate"
-	Params string `json:"params,omitempty"`   // JSON params for the action: selector, text, url, etc.
-	Width  int    `json:"width,omitempty"`    // max width for returned images
+	Action string `json:"action"`           // "click", "type", or "navigate"
+	Params string `json:"params,omitempty"` // JSON params for the action: selector, text, url, etc.
+	Width  int    `json:"width,omitempty"`  // max width for returned images
 }
 
 // actionDiffParams holds parsed action parameters.
@@ -38,7 +38,7 @@ func registerActionDiffTool(server *mcp.Server, s *mcpSession) {
 		Name: "action_diff",
 		Description: `Execute an action and return before/after/diff screenshots with change percentage.
 Actions: "click" (needs selector), "type" (needs selector + text), "navigate" (needs url).
-Params is a JSON string, e.g. {"selector": "@1"} or {"url": "https://example.com"}.`,
+Params is a JSON string, e.g. {"selector": "@1"}, {"selector": "coord:100,200"}, or {"url": "https://example.com"}.`,
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input ActionDiffInput) (*mcp.CallToolResult, any, error) {
 		actx := s.activeCtx()
 
@@ -129,6 +129,12 @@ func executeAction(ctx context.Context, s *mcpSession, action string, params act
 			return fmt.Errorf("click requires selector")
 		}
 		return chromedp.Run(ctx, chromedp.ActionFunc(func(ctx context.Context) error {
+			if p, ok, err := parseCoordSelector(params.Selector); ok || err != nil {
+				if err != nil {
+					return err
+				}
+				return clickAt(ctx, p)
+			}
 			backendID, err := resolveRefWithRecovery(ctx, s.refs, params.Selector)
 			if err != nil {
 				return err
