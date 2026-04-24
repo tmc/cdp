@@ -5,7 +5,7 @@ NDP provides unified debugging for Node.js and Chrome applications using the Chr
 
 ## Current State (v1.0.0)
 
-✅ **Core Features**: Node.js process attachment via Inspector Protocol, Chrome/Chromium debugging, session management, CPU/heap profiling, breakpoint management, watch expressions, interactive REPL, target discovery, V8 Inspector integration
+✅ **Core Features**: Node.js process attachment via Inspector Protocol, Chrome/Chromium debugging, attach session files, CPU/heap profiling, breakpoint management, watch expressions, interactive REPL, target discovery, V8 Inspector integration
 
 ## Future Development
 
@@ -22,7 +22,7 @@ Most planned features would benefit from being tracked as beads when needed. Key
 - Performance tools (event loop monitoring, async traces, memory leaks)
 
 ### Chrome/Browser Features
-- Tab management (group operations, filtering, session save/restore)
+- Tab management (group operations, filtering)
 - Extension debugging (background pages, content scripts)
 - Network features (request interception, WebSocket monitoring, HAR export)
 

@@ -4,16 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"net/http"
-	"os"
-	"path/filepath"
-	"strings"
 	"sync"
 	"time"
-
-	"errors"
 
 	cdptarget "github.com/chromedp/cdproto/target"
 	"github.com/chromedp/chromedp"
@@ -64,34 +58,19 @@ type CDPConnection struct {
 	verbose   bool
 }
 
-// SessionManager manages debug sessions and connections
+// SessionManager provides stateless target discovery and connection helpers.
 type SessionManager struct {
-	sessions  map[string]*Session
-	configDir string
-	verbose   bool
-	mu        sync.RWMutex
+	verbose bool
 }
 
 // NewSessionManager creates a new session manager
 func NewSessionManager(verbose bool) *SessionManager {
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		homeDir = "."
-	}
-
-	configDir := filepath.Join(homeDir, ".ndp", "sessions")
-	os.MkdirAll(configDir, 0755)
-
-	return &SessionManager{
-		sessions:  make(map[string]*Session),
-		configDir: configDir,
-		verbose:   verbose,
-	}
+	return &SessionManager{verbose: verbose}
 }
 
 // CreateSession creates a new debug session
 func (sm *SessionManager) CreateSession(ctx context.Context, target DebugTarget) (*Session, error) {
-	sessionID := fmt.Sprintf("%s-%d", target.Type, time.Now().Unix())
+	sessionID := fmt.Sprintf("%s-%d", target.Type, time.Now().UnixNano())
 
 	session := &Session{
 		ID:      sessionID,
@@ -111,10 +90,6 @@ func (sm *SessionManager) CreateSession(ctx context.Context, target DebugTarget)
 	session.Context = conn.Context
 	session.Cancel = conn.Cancel
 	session.ChromeCtx = conn.ChromeCtx
-
-	sm.mu.Lock()
-	sm.sessions[sessionID] = session
-	sm.mu.Unlock()
 
 	// Store in global tracker
 	globalSessionTracker.SetCurrentSession(session)
@@ -218,11 +193,8 @@ func (sm *SessionManager) connectToTarget(ctx context.Context, target DebugTarge
 
 // GetSession retrieves a session by ID.
 func (sm *SessionManager) GetSession(sessionID string) (*Session, error) {
-	sm.mu.RLock()
-	defer sm.mu.RUnlock()
-
-	session, ok := sm.sessions[sessionID]
-	if !ok {
+	session := globalSessionTracker.GetCurrentSession()
+	if session == nil || session.ID != sessionID {
 		return nil, fmt.Errorf("session %s not found", sessionID)
 	}
 
@@ -338,163 +310,10 @@ func (sm *SessionManager) findChromeTargets(ctx context.Context) ([]DebugTarget,
 	return targets, nil
 }
 
-// SaveSession saves a session to disk
-func (sm *SessionManager) SaveSession(ctx context.Context, name string) error {
-	sm.mu.RLock()
-	defer sm.mu.RUnlock()
-
-	if len(sm.sessions) == 0 {
-		return errors.New("no active sessions to save")
-	}
-
-	// Get the first active session (can be extended to handle multiple)
-	var session *Session
-	for _, s := range sm.sessions {
-		session = s
-		break
-	}
-
-	if session == nil {
-		return errors.New("no session found")
-	}
-
-	session.Name = name
-
-	// Gather session state
-	session.mu.Lock()
-
-	manager := NewBreakpointManager(sm.verbose)
-	manager.SetSession(session)
-	if err := manager.LoadBreakpoints(""); err != nil && sm.verbose {
-		log.Printf("Warning: failed to load persisted breakpoints: %v", err)
-	}
-	if breakpoints := manager.ListBreakpoints(); len(breakpoints) > 0 {
-		session.State["breakpoints"] = breakpoints
-	}
-
-	if err := chromedp.Run(session.ChromeCtx,
-		chromedp.ActionFunc(func(ctx context.Context) error {
-			// Basic session state capture - simplified for now
-			session.State["connected"] = true
-			session.State["timestamp"] = time.Now()
-			return nil
-		}),
-	); err != nil && sm.verbose {
-		log.Printf("Warning: failed to get session state: %v", err)
-	}
-
-	session.mu.Unlock()
-
-	// Save to file
-	filename := filepath.Join(sm.configDir, fmt.Sprintf("%s.json", name))
-
-	data, err := json.MarshalIndent(session, "", "  ")
-	if err != nil {
-		return fmt.Errorf("failed to marshal session: %w", err)
-	}
-
-	if err := ioutil.WriteFile(filename, data, 0644); err != nil {
-		return fmt.Errorf("failed to save session: %w", err)
-	}
-
-	if sm.verbose {
-		log.Printf("Session saved to %s", filename)
-	}
-
-	return nil
-}
-
-// LoadSession loads a session from disk
-func (sm *SessionManager) LoadSession(ctx context.Context, name string) error {
-	filename := filepath.Join(sm.configDir, fmt.Sprintf("%s.json", name))
-
-	data, err := ioutil.ReadFile(filename)
-	if err != nil {
-		return fmt.Errorf("failed to read session file: %w", err)
-	}
-
-	var session Session
-	if err := json.Unmarshal(data, &session); err != nil {
-		return fmt.Errorf("failed to unmarshal session: %w", err)
-	}
-
-	// Reconnect to target
-	conn, err := sm.connectToTarget(ctx, session.Target)
-	if err != nil {
-		return fmt.Errorf("failed to reconnect to target: %w", err)
-	}
-
-	session.Connection = conn
-	session.Context = conn.Context
-	session.Cancel = conn.Cancel
-	session.ChromeCtx = conn.ChromeCtx
-
-	// Restore session state
-	if breakpoints, ok := session.State["breakpoints"]; ok && breakpoints != nil {
-		manager := NewBreakpointManager(sm.verbose)
-		manager.SetSession(&session)
-		if persisted, err := json.Marshal(breakpoints); err == nil {
-			filename := BreakpointFile(session.Target.Port)
-			if err := os.WriteFile(filename, persisted, 0600); err != nil && sm.verbose {
-				log.Printf("Warning: failed to persist restored breakpoints: %v", err)
-			}
-		}
-		if err := manager.LoadBreakpoints(""); err == nil {
-			for _, bp := range manager.ListBreakpoints() {
-				if err := manager.SetBreakpoint(ctx, bp.Location, bp.Condition); err != nil && sm.verbose {
-					log.Printf("Warning: failed to restore breakpoint %s: %v", bp.Location, err)
-				}
-			}
-		}
-	}
-
-	sm.mu.Lock()
-	sm.sessions[session.ID] = &session
-	sm.mu.Unlock()
-
-	if sm.verbose {
-		log.Printf("Session %s loaded successfully", name)
-	}
-
-	return nil
-}
-
-// ListSessions lists saved sessions
-func (sm *SessionManager) ListSessions() ([]SessionInfo, error) {
-	files, err := ioutil.ReadDir(sm.configDir)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read sessions directory: %w", err)
-	}
-
-	var sessions []SessionInfo
-	for _, file := range files {
-		if filepath.Ext(file.Name()) != ".json" {
-			continue
-		}
-
-		name := strings.TrimSuffix(file.Name(), ".json")
-		sessions = append(sessions, SessionInfo{
-			Name:    name,
-			Created: file.ModTime().Format(time.RFC3339),
-		})
-	}
-
-	return sessions, nil
-}
-
-// SessionInfo contains basic session information
-type SessionInfo struct {
-	Name    string `json:"name"`
-	Created string `json:"created"`
-}
-
 // CloseSession closes a debug session
 func (sm *SessionManager) CloseSession(sessionID string) error {
-	sm.mu.Lock()
-	defer sm.mu.Unlock()
-
-	session, ok := sm.sessions[sessionID]
-	if !ok {
+	session := globalSessionTracker.GetCurrentSession()
+	if session == nil || session.ID != sessionID {
 		return fmt.Errorf("session %s not found", sessionID)
 	}
 
@@ -502,7 +321,7 @@ func (sm *SessionManager) CloseSession(sessionID string) error {
 		session.Cancel()
 	}
 
-	delete(sm.sessions, sessionID)
+	globalSessionTracker.SetCurrentSession(nil)
 
 	if sm.verbose {
 		log.Printf("Closed session %s", sessionID)

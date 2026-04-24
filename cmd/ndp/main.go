@@ -88,8 +88,8 @@ var chromeCmd = &cobra.Command{
 
 var sessionCmd = &cobra.Command{
 	Use:   "session",
-	Short: "Manage debug sessions",
-	Long:  "Save, load, and manage debugging sessions across targets",
+	Short: "Inspect debug session files",
+	Long:  "List attach session files written by ndp node attach.",
 }
 
 var callCmd = &cobra.Command{
@@ -382,8 +382,6 @@ func init() {
 	chromeCmd.AddCommand(chromeConsoleCmd)
 
 	// Session commands
-	sessionCmd.AddCommand(sessionSaveCmd)
-	sessionCmd.AddCommand(sessionLoadCmd)
 	sessionCmd.AddCommand(sessionListCmd)
 
 	// Call command
@@ -658,57 +656,26 @@ var chromeConsoleCmd = &cobra.Command{
 	},
 }
 
-// Session commands
-var sessionSaveCmd = &cobra.Command{
-	Use:   "save <name>",
-	Short: "Save current debug session",
-	Args:  cobra.ExactArgs(1),
-	Run: func(cmd *cobra.Command, args []string) {
-		ctx := createContext()
-		manager := NewSessionManager(verbose)
-
-		if err := manager.SaveSession(ctx, args[0]); err != nil {
-			log.Fatalf("Failed to save session: %v", err)
-		}
-
-		fmt.Printf("Session '%s' saved successfully\n", args[0])
-	},
-}
-
-var sessionLoadCmd = &cobra.Command{
-	Use:   "load <name>",
-	Short: "Load debug session",
-	Args:  cobra.ExactArgs(1),
-	Run: func(cmd *cobra.Command, args []string) {
-		ctx := createContext()
-		manager := NewSessionManager(verbose)
-
-		if err := manager.LoadSession(ctx, args[0]); err != nil {
-			log.Fatalf("Failed to load session: %v", err)
-		}
-
-		fmt.Printf("Session '%s' loaded successfully\n", args[0])
-	},
-}
-
 var sessionListCmd = &cobra.Command{
 	Use:   "list",
-	Short: "List saved sessions",
+	Short: "List attach session files",
 	Run: func(cmd *cobra.Command, args []string) {
-		manager := NewSessionManager(verbose)
-		sessions, err := manager.ListSessions()
+		sessions, err := ListSessionFiles()
 		if err != nil {
 			log.Fatalf("Failed to list sessions: %v", err)
 		}
 
 		if len(sessions) == 0 {
-			fmt.Println("No saved sessions found")
+			fmt.Println("No session files found")
 			return
 		}
 
-		fmt.Println("Saved sessions:")
+		fmt.Println("Session files:")
 		for _, s := range sessions {
-			fmt.Printf("  - %s (created: %s)\n", s.Name, s.Created)
+			fmt.Printf("  - port %s: %s\n", s.Port, s.Title)
+			if s.URL != "" {
+				fmt.Printf("    %s\n", s.URL)
+			}
 		}
 	},
 }
