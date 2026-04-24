@@ -48,7 +48,7 @@ chrome-to-har --url https://example.com --output out.har
 Capture network activity with `cdp`:
 
 ```bash
-cdp --url https://example.com --har out.har --timeout 10
+cdp --headless --url https://example.com --har out.har --timeout 10
 ```
 
 Use `--shell` when you want to browse interactively while recording:
