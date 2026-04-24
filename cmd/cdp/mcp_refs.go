@@ -4,16 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"math"
-	"strconv"
 	"strings"
 	"sync"
 
 	"github.com/chromedp/cdproto/accessibility"
 	"github.com/chromedp/cdproto/cdp"
 	"github.com/chromedp/cdproto/dom"
-	"github.com/chromedp/cdproto/input"
 	"github.com/chromedp/chromedp"
+	"github.com/tmc/cdp/internal/cdpinput"
 )
 
 // refEntry maps a @ref number to a DOM backend node.
@@ -23,10 +21,7 @@ type refEntry struct {
 	Name          string
 }
 
-type viewportPoint struct {
-	X float64
-	Y float64
-}
+type viewportPoint = cdpinput.ViewportPoint
 
 // refRegistry holds the current @ref→element mapping.
 // It is rebuilt on each page_snapshot call.
@@ -318,26 +313,7 @@ func resolveRefWithRecovery(ctx context.Context, refs *refRegistry, selector str
 }
 
 func parseCoordSelector(selector string) (viewportPoint, bool, error) {
-	coord, ok := strings.CutPrefix(strings.TrimSpace(selector), "coord:")
-	if !ok {
-		return viewportPoint{}, false, nil
-	}
-	parts := strings.Split(coord, ",")
-	if len(parts) != 2 {
-		return viewportPoint{}, true, fmt.Errorf("invalid coordinate selector %q: want coord:x,y", selector)
-	}
-	x, err := strconv.ParseFloat(strings.TrimSpace(parts[0]), 64)
-	if err != nil {
-		return viewportPoint{}, true, fmt.Errorf("invalid x coordinate %q: %w", parts[0], err)
-	}
-	y, err := strconv.ParseFloat(strings.TrimSpace(parts[1]), 64)
-	if err != nil {
-		return viewportPoint{}, true, fmt.Errorf("invalid y coordinate %q: %w", parts[1], err)
-	}
-	if x < 0 || y < 0 || math.IsInf(x, 0) || math.IsInf(y, 0) || math.IsNaN(x) || math.IsNaN(y) {
-		return viewportPoint{}, true, fmt.Errorf("invalid coordinate selector %q: coordinates must be finite non-negative numbers", selector)
-	}
-	return viewportPoint{X: x, Y: y}, true, nil
+	return cdpinput.ParseCoordSelector(selector)
 }
 
 // recoverRef searches the AX tree for a node matching the given role and name,
@@ -397,18 +373,7 @@ func clickByBackendNodeID(ctx context.Context, backendID cdp.BackendNodeID) erro
 }
 
 func clickAt(ctx context.Context, p viewportPoint) error {
-	if err := input.DispatchMouseEvent(input.MouseMoved, p.X, p.Y).Do(ctx); err != nil {
-		return fmt.Errorf("mouse moved: %w", err)
-	}
-	if err := input.DispatchMouseEvent(input.MousePressed, p.X, p.Y).
-		WithButton(input.Left).WithClickCount(1).Do(ctx); err != nil {
-		return fmt.Errorf("mouse pressed: %w", err)
-	}
-	if err := input.DispatchMouseEvent(input.MouseReleased, p.X, p.Y).
-		WithButton(input.Left).WithClickCount(1).Do(ctx); err != nil {
-		return fmt.Errorf("mouse released: %w", err)
-	}
-	return nil
+	return cdpinput.ClickAt(ctx, p)
 }
 
 // typeByBackendNodeID focuses the element and types text via key events.

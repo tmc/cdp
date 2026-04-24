@@ -1,0 +1,7 @@
+-- main.cdp --
+goto $FIXTURE_BASE_URL/interaction/pages/coordinate-click.html
+wait '#target'
+click coord:100,100
+wait '#result'
+assert visible '#result'
+assert text '#result' Coordinate activated

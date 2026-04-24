@@ -85,6 +85,7 @@ wait h1                       # Wait for an h1 element
 ```
 click <selector>              # Click element
 click @e3                     # Click by accessibility ref
+click coord:100,200           # Click viewport coordinates
 fill <selector> <text>        # Fill input field
 fill @e5 Hello World          # Fill by accessibility ref
 type <selector> <text>        # Alias for fill

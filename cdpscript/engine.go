@@ -15,6 +15,7 @@ import (
 	"github.com/chromedp/cdproto/page"
 	"github.com/chromedp/chromedp"
 	"github.com/tmc/cdp/internal/browser"
+	"github.com/tmc/cdp/internal/cdpinput"
 	"github.com/tmc/cdp/internal/discovery"
 	"github.com/tmc/cdp/internal/htmltomd"
 	"github.com/tmc/cdp/internal/recorder"
@@ -468,6 +469,15 @@ func (e *Engine) cmdClick() script.Cmd {
 		page := e.browser.GetCurrentPage()
 		if page == nil {
 			return fmt.Errorf("no active page")
+		}
+
+		if p, ok, err := cdpinput.ParseCoordSelector(target); ok || err != nil {
+			if err != nil {
+				return err
+			}
+			return chromedp.Run(e.browser.Context(), chromedp.ActionFunc(func(ctx context.Context) error {
+				return cdpinput.ClickAt(ctx, p)
+			}))
 		}
 
 		// Check if target is a ref

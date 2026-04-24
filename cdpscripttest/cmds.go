@@ -18,6 +18,7 @@ import (
 
 	"github.com/chromedp/cdproto/page"
 	"github.com/chromedp/chromedp"
+	"github.com/tmc/cdp/internal/cdpinput"
 	"rsc.io/script"
 	"rsc.io/script/scripttest"
 )
@@ -305,14 +306,14 @@ func parseWaitTimeout(args []string) (time.Duration, []string) {
 	return 0, args
 }
 
-// Click returns a command that clicks a CSS selector.
+// Click returns a command that clicks a CSS selector or coord:x,y point.
 //
-// Usage: click <selector>
+// Usage: click <selector|coord:x,y>
 func Click() script.Cmd {
 	return script.Command(
 		script.CmdUsage{
-			Summary: "click a CSS selector",
-			Args:    "<selector>",
+			Summary: "click a CSS selector or viewport coordinate",
+			Args:    "<selector|coord:x,y>",
 		},
 		func(s *script.State, args ...string) (script.WaitFunc, error) {
 			if len(args) != 1 {
@@ -324,6 +325,15 @@ func Click() script.Cmd {
 			}
 			sel := args[0]
 			return func(s *script.State) (stdout, stderr string, err error) {
+				if p, ok, err := cdpinput.ParseCoordSelector(sel); ok || err != nil {
+					if err != nil {
+						return "", "", err
+					}
+					err = chromedp.Run(cs.cdpCtx, chromedp.ActionFunc(func(ctx context.Context) error {
+						return cdpinput.ClickAt(ctx, p)
+					}))
+					return "", "", err
+				}
 				stdout, err = runWithWaitTimeout(cs, "click", sel, 0,
 					chromedp.Click(sel, chromedp.ByQuery),
 				)
