@@ -20,6 +20,21 @@ func TestAppendArgEnv(t *testing.T) {
 	}
 }
 
+func TestAppendMapEnv(t *testing.T) {
+	got := appendMapEnv([]string{"BASE_URL=https://example.com"}, map[string]string{
+		"B": "two",
+		"A": "one",
+	})
+	want := []string{
+		"BASE_URL=https://example.com",
+		"A=one",
+		"B=two",
+	}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("appendMapEnv mismatch:\n got: %q\nwant: %q", got, want)
+	}
+}
+
 func TestHelpText(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "hello.cdpscript")

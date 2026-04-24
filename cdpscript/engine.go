@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -38,6 +39,7 @@ type Engine struct {
 	profileMgr chromeprofiles.ProfileManager
 	verbose    bool
 	outputDir  string
+	env        []string
 	metadata   Metadata
 
 	// Remote tab connection
@@ -95,6 +97,12 @@ func WithVerbose(v bool) Option {
 // WithOutputDir sets the output directory.
 func WithOutputDir(dir string) Option {
 	return func(e *Engine) { e.outputDir = dir }
+}
+
+// WithEnv adds initial environment variables for script execution.
+// Each entry must have the form "key=value".
+func WithEnv(env ...string) Option {
+	return func(e *Engine) { e.env = append(e.env, env...) }
 }
 
 // WithRemoteTab configures the engine to connect to an existing browser tab.
@@ -171,6 +179,18 @@ func appendArgEnv(env []string, argv []string) []string {
 	return env
 }
 
+func appendMapEnv(env []string, vars map[string]string) []string {
+	keys := make([]string, 0, len(vars))
+	for key := range vars {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		env = append(env, key+"="+vars[key])
+	}
+	return env
+}
+
 // ExecuteTxtar runs a script from a txtar archive.
 func (e *Engine) ExecuteTxtar(ctx context.Context, path string, argv []string) error {
 	archive, err := readArchive(path)
@@ -187,9 +207,8 @@ func (e *Engine) ExecuteTxtar(ctx context.Context, path string, argv []string) e
 
 	// Build initial environment
 	env := []string{}
-	for k, v := range e.metadata.Env {
-		env = append(env, k+"="+v)
-	}
+	env = appendMapEnv(env, e.metadata.Env)
+	env = append(env, e.env...)
 	env = appendArgEnv(env, argv)
 
 	// Create script state

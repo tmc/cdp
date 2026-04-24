@@ -53,6 +53,10 @@
 //	-- setup.js --
 //	document.getElementById('result').textContent = 'ok';
 //
+// For cdpscript-format txtars containing main.cdp, use RunCDPScript. That path
+// delegates to the real cdpscript runtime instead of the legacy cdpscripttest
+// command table, so runtime behavior stays aligned.
+//
 // # Commands
 //
 // The default command set includes scripttest's defaults (env, echo, exec,
