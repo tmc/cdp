@@ -1381,31 +1381,24 @@ func (im *InteractiveMode) executeCommand(line string) error {
 
 // executeRawCDP executes a raw CDP command
 func (im *InteractiveMode) executeRawCDP(command string) error {
-	// Parse Domain.method {params}
-	parts := strings.SplitN(command, " ", 2)
-	if len(parts) == 0 {
-		return fmt.Errorf("empty command")
+	method, params, err := parseRawCDPCommand(command)
+	if err != nil {
+		return err
 	}
-
-	method := parts[0]
-	if !strings.Contains(method, ".") {
-		return fmt.Errorf("invalid CDP format: expected 'Domain.method'")
-	}
-
-	// Parse parameters
-	params := "{}"
-	if len(parts) > 1 {
-		params = strings.TrimSpace(parts[1])
-	}
-
 	if im.verbose {
-		fmt.Printf("Raw CDP: %s %s\n", method, params)
+		data, _ := json.Marshal(params)
+		fmt.Printf("Raw CDP: %s %s\n", method, data)
 	}
 
-	// Execute using chromedp (simplified - would need full CDP implementation)
-	fmt.Printf("Executing CDP: %s with params: %s\n", method, params)
-	fmt.Println("(Note: Raw CDP execution requires full implementation)")
-
+	result, err := runRawCDP(im.ctx, method, params, "target")
+	if err != nil {
+		return err
+	}
+	data, err := json.MarshalIndent(result, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal CDP result: %w", err)
+	}
+	fmt.Println(string(data))
 	return nil
 }
 

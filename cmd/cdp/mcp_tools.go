@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	cdproto "github.com/chromedp/cdproto/cdp"
 	"github.com/chromedp/cdproto/dom"
 	"github.com/chromedp/cdproto/har"
 	"github.com/chromedp/cdproto/network"
@@ -505,22 +504,9 @@ func registerJavaScriptTools(server *mcp.Server, s *mcpSession) {
 		}
 		actx, cancel := requestToolCtx(ctx, s.activeCtx(), timeout)
 		defer cancel()
-		var result map[string]any
-		if err := chromedp.Run(actx, chromedp.ActionFunc(func(ctx context.Context) error {
-			execCtx := ctx
-			if target == "browser" {
-				c := chromedp.FromContext(ctx)
-				if c == nil || c.Browser == nil {
-					return fmt.Errorf("browser executor unavailable")
-				}
-				execCtx = cdproto.WithExecutor(ctx, c.Browser)
-			}
-			return cdproto.Execute(execCtx, method, input.Params, &result)
-		})); err != nil {
+		result, err := runRawCDP(actx, method, input.Params, target)
+		if err != nil {
 			return nil, nil, fmt.Errorf("raw_cdp: %w", err)
-		}
-		if result == nil {
-			result = map[string]any{}
 		}
 		data, err := json.Marshal(result)
 		if err != nil {
@@ -535,27 +521,12 @@ func registerJavaScriptTools(server *mcp.Server, s *mcpSession) {
 }
 
 func validateRawCDPInput(input RawCDPInput) (method, target string, err error) {
-	method = strings.TrimSpace(input.Method)
-	if method == "" {
-		return "", "", fmt.Errorf("method is required")
+	method, err = validateRawCDPMethod(input.Method)
+	if err != nil {
+		return "", "", err
 	}
-	if strings.ContainsAny(method, " \t\r\n") || strings.Count(method, ".") != 1 {
-		return "", "", fmt.Errorf("invalid method %q", input.Method)
-	}
-	switch method {
-	case "Browser.close", "Target.closeTarget":
-		return "", "", fmt.Errorf("%s is not allowed", method)
-	}
-	target = strings.TrimSpace(input.Target)
-	if target == "" {
-		target = "target"
-	}
-	switch target {
-	case "target", "browser":
-		return method, target, nil
-	default:
-		return "", "", fmt.Errorf("invalid target %q", input.Target)
-	}
+	target, err = validateRawCDPTarget(input.Target)
+	return method, target, err
 }
 
 // --- Tab management tools ---

@@ -1,6 +1,9 @@
 package main
 
-import "testing"
+import (
+	"reflect"
+	"testing"
+)
 
 func TestParseCoordSelector(t *testing.T) {
 	tests := []struct {
@@ -71,6 +74,59 @@ func TestValidateRawCDPInput(t *testing.T) {
 			}
 			if method != tt.wantMethod || target != tt.wantTarget {
 				t.Fatalf("method,target = %q,%q; want %q,%q", method, target, tt.wantMethod, tt.wantTarget)
+			}
+		})
+	}
+}
+
+func TestParseRawCDPCommand(t *testing.T) {
+	tests := []struct {
+		name       string
+		command    string
+		wantMethod string
+		wantParams map[string]any
+		wantErr    bool
+	}{
+		{
+			name:       "empty params",
+			command:    "Page.reload",
+			wantMethod: "Page.reload",
+			wantParams: map[string]any{},
+		},
+		{
+			name:       "json params",
+			command:    `Runtime.evaluate {"expression":"document.title","returnByValue":true}`,
+			wantMethod: "Runtime.evaluate",
+			wantParams: map[string]any{"expression": "document.title", "returnByValue": true},
+		},
+		{
+			name:    "invalid method",
+			command: "Runtime.evaluate.now {}",
+			wantErr: true,
+		},
+		{
+			name:    "invalid json",
+			command: `Runtime.evaluate {"expression":}`,
+			wantErr: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			method, params, err := parseRawCDPCommand(tt.command)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatalf("parseRawCDPCommand(%q) succeeded, want error", tt.command)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("parseRawCDPCommand(%q): %v", tt.command, err)
+			}
+			if method != tt.wantMethod {
+				t.Fatalf("method = %q, want %q", method, tt.wantMethod)
+			}
+			if !reflect.DeepEqual(params, tt.wantParams) {
+				t.Fatalf("params = %#v, want %#v", params, tt.wantParams)
 			}
 		})
 	}

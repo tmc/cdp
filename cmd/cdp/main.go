@@ -3568,158 +3568,20 @@ func main() {
 }
 
 func executeCommand(ctx context.Context, command string) error {
-	// Parse Domain.method {params}
-	parts := strings.SplitN(command, " ", 2)
-	if len(parts) == 0 {
-		return errors.New("empty command")
+	method, params, err := parseRawCDPCommand(command)
+	if err != nil {
+		return err
 	}
-
-	method := parts[0]
-	if !strings.Contains(method, ".") {
-		return errors.New("invalid command format: expected 'Domain.method'")
+	result, err := runRawCDP(ctx, method, params, "target")
+	if err != nil {
+		return err
 	}
-
-	// Parse parameters
-	var params json.RawMessage
-	if len(parts) > 1 {
-		paramStr := strings.TrimSpace(parts[1])
-		if paramStr == "" || paramStr == "{}" {
-			params = json.RawMessage("{}")
-		} else {
-			// Validate JSON
-			var temp map[string]interface{}
-			if err := json.Unmarshal([]byte(paramStr), &temp); err != nil {
-				return fmt.Errorf("invalid JSON parameters: %w", err)
-			}
-			params = json.RawMessage(paramStr)
-		}
-	} else {
-		params = json.RawMessage("{}")
+	data, err := json.MarshalIndent(result, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal CDP result: %w", err)
 	}
-
-	// Special case for Runtime.evaluate since it's very common
-	if method == "Runtime.evaluate" {
-		var evalParams runtime.EvaluateParams
-		if err := json.Unmarshal(params, &evalParams); err != nil {
-			return fmt.Errorf("parsing Runtime.evaluate parameters: %w", err)
-		}
-
-		var result interface{}
-		if err := chromedp.Run(ctx, chromedp.Evaluate(evalParams.Expression, &result)); err != nil {
-			return err
-		}
-
-		fmt.Println("Result:", result)
-		return nil
-	}
-
-	// Special case for navigation which is very common
-	if method == "Page.navigate" {
-		var navParams struct {
-			URL string `json:"url"`
-		}
-		if err := json.Unmarshal(params, &navParams); err != nil {
-			return fmt.Errorf("parsing Page.navigate parameters: %w", err)
-		}
-
-		if err := chromedp.Run(ctx, chromedp.Navigate(navParams.URL)); err != nil {
-			return err
-		}
-
-		fmt.Println("Navigated to:", navParams.URL)
-		return nil
-	}
-
-	// Special case for screenshots which are very common
-	if method == "Page.captureScreenshot" {
-		return handleScreenshotCommand(ctx, "", "text")
-	}
-
-	// For other commands, we provide a simplified implementation
-	// which doesn't support all CDP methods but covers the basics
-	fmt.Printf("Executing: %s with params %s\n", method, string(params))
-	fmt.Println("(This is a simplified implementation that doesn't support all CDP methods)")
-
-	// Execute appropriate CDP action if we know how to handle it
-	if strings.HasPrefix(method, "Runtime.") {
-		return executeCDPRuntime(ctx, method, params)
-	} else if strings.HasPrefix(method, "Page.") {
-		return executeCDPPage(ctx, method, params)
-	} else if strings.HasPrefix(method, "Network.") {
-		return executeCDPNetwork(ctx, method, params)
-	} else if strings.HasPrefix(method, "DOM.") {
-		return executeCDPDOM(ctx, method, params)
-	}
-
-	return fmt.Errorf("unsupported CDP method: %s", method)
-}
-
-func executeCDPRuntime(ctx context.Context, method string, params json.RawMessage) error {
-	// Only handle a few common Runtime methods as examples
-	switch method {
-	case "Runtime.evaluate":
-		// Handled specially above
-		return nil
-
-	default:
-		return fmt.Errorf("unsupported Runtime method: %s", method)
-	}
-}
-
-func executeCDPPage(ctx context.Context, method string, params json.RawMessage) error {
-	// Only handle a few common Page methods as examples
-	switch method {
-	case "Page.navigate":
-		// Handled specially above
-		return nil
-
-	case "Page.reload":
-		return chromedp.Run(ctx, chromedp.Reload())
-
-	case "Page.captureScreenshot":
-		// Handled specially above
-		return nil
-
-	default:
-		return fmt.Errorf("unsupported Page method: %s", method)
-	}
-}
-
-func executeCDPNetwork(ctx context.Context, method string, params json.RawMessage) error {
-	// Only handle a few common Network methods as examples
-	switch method {
-	case "Network.getAllCookies":
-		// Simple implementation that just gets cookies via JavaScript
-		var cookies interface{}
-		if err := chromedp.Run(ctx, chromedp.Evaluate("document.cookie", &cookies)); err != nil {
-			return err
-		}
-
-		fmt.Println("Cookies:", cookies)
-		return nil
-
-	default:
-		return fmt.Errorf("unsupported Network method: %s", method)
-	}
-}
-
-func executeCDPDOM(ctx context.Context, method string, params json.RawMessage) error {
-	// Only handle a few common DOM methods as examples
-	switch method {
-	case "DOM.getDocument":
-		// Simplified implementation
-		var html string
-		if err := chromedp.Run(ctx, chromedp.OuterHTML("html", &html)); err != nil {
-			return err
-		}
-
-		fmt.Printf("HTML length: %d bytes\n", len(html))
-		fmt.Println("(HTML content not shown - too large)")
-		return nil
-
-	default:
-		return fmt.Errorf("unsupported DOM method: %s", method)
-	}
+	fmt.Println(string(data))
+	return nil
 }
 
 func handleSourcesCommand(ctx context.Context, parts []string) error {
