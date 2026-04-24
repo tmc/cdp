@@ -11,6 +11,8 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/tmc/cdp/internal/discovery"
 )
 
 func TestDiscoverAttachReportTargets(t *testing.T) {
@@ -107,6 +109,81 @@ func TestPrintAttachReportDiagnostics(t *testing.T) {
 		if !strings.Contains(text, want) {
 			t.Fatalf("output missing %q:\n%s", want, text)
 		}
+	}
+}
+
+func TestLaunchInstructionsFor(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		goos       string
+		candidates []discovery.BrowserCandidate
+		want       []string
+	}{
+		{
+			name: "darwin discovered browser",
+			goos: "darwin",
+			candidates: []discovery.BrowserCandidate{
+				{Name: "Brave Browser", Path: "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser"},
+			},
+			want: []string{
+				`'/Applications/Brave Browser.app/Contents/MacOS/Brave Browser' --remote-debugging-port=9333 --user-data-dir="$(mktemp -d)"`,
+				"cdp attach --port 9333",
+			},
+		},
+		{
+			name: "windows discovered browser",
+			goos: "windows",
+			candidates: []discovery.BrowserCandidate{
+				{Name: "Google Chrome", Path: `C:\Program Files\Google\Chrome\Application\chrome.exe`},
+			},
+			want: []string{
+				`"C:\Program Files\Google\Chrome\Application\chrome.exe" --remote-debugging-port=9333 --user-data-dir="%TEMP%\cdp-debug-profile-%RANDOM%"`,
+				"cdp attach --port 9333",
+			},
+		},
+		{
+			name:       "linux fallback",
+			goos:       "linux",
+			candidates: nil,
+			want: []string{
+				`brave-browser --remote-debugging-port=9333 --user-data-dir="$(mktemp -d)"`,
+				`google-chrome --remote-debugging-port=9333 --user-data-dir="$(mktemp -d)"`,
+				"cdp attach --port 9333",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := launchInstructionsFor(tt.goos, tt.candidates, 9333)
+			if len(got) != len(tt.want) {
+				t.Fatalf("len(instructions) = %d, want %d: %#v", len(got), len(tt.want), got)
+			}
+			for i := range tt.want {
+				if got[i] != tt.want[i] {
+					t.Fatalf("instruction[%d] = %q, want %q", i, got[i], tt.want[i])
+				}
+			}
+		})
+	}
+}
+
+func TestAttachFailureErrorIncludesInstructions(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.NotFoundHandler())
+	defer srv.Close()
+
+	host, port := attachServerHostPort(t, srv.URL)
+	err := attachFailureError(host, port, fmt.Errorf("dial failed"))
+	text := err.Error()
+	if !strings.Contains(text, `"instructions"`) {
+		t.Fatalf("error missing instructions: %s", text)
+	}
+	if !strings.Contains(text, fmt.Sprintf(`"port":%d`, port)) {
+		t.Fatalf("error missing port: %s", text)
 	}
 }
 

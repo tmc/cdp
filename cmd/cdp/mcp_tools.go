@@ -738,7 +738,7 @@ func registerConnectTool(server *mcp.Server, s *mcpSession) {
 		if err := runWithTimeout(browserCtx, 10*time.Second, chromedp.Evaluate("1", &result)); err != nil {
 			browserCancel()
 			allocCancel()
-			return nil, ConnectOutput{}, fmt.Errorf("connect: failed to reach %s:%d: %w", host, input.Port, err)
+			return nil, ConnectOutput{}, attachFailureError(host, input.Port, err)
 		}
 
 		// Get target info.

@@ -70,6 +70,8 @@ Common flags:
 - `-headless`: run Chrome headless
 - `-use-profile`: use an existing Chrome profile
 - `-remote-host` and `-remote-port`: connect to a remote Chrome instance
+- `attach`: list attachable page targets, or print launch instructions when no
+  debug browser is listening
 
 Examples:
 
@@ -86,7 +88,10 @@ cdp -url https://example.com \
 cdp -url https://example.com -render body
 
 # Connect to an existing Chrome debug port
-cdp -debug-port 9222 -list-tabs
+cdp attach --port 9222
+
+# Attach to a listed target
+cdp --remote-host localhost --remote-port 9222 --tab <target-id> --shell
 ```
 
 ## Streaming and Filtering

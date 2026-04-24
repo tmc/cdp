@@ -209,12 +209,16 @@ func attachDefaultPort(port int) int {
 }
 
 func launchInstructions(port int) []string {
+	return launchInstructionsFor(runtime.GOOS, discovery.DiscoverBrowsers(), port)
+}
+
+func launchInstructionsFor(goos string, candidates []discovery.BrowserCandidate, port int) []string {
 	var out []string
-	for _, candidate := range discovery.DiscoverBrowsers() {
+	for _, candidate := range candidates {
 		if !isChromiumBrowser(candidate.Name) {
 			continue
 		}
-		out = append(out, fmt.Sprintf("%s --remote-debugging-port=%d --user-data-dir=\"$(mktemp -d)\"", shellQuote(candidate.Path), port))
+		out = append(out, fmt.Sprintf("%s --remote-debugging-port=%d %s", quoteCommandArg(goos, candidate.Path), port, userDataDirFlag(goos)))
 		if len(out) == 3 {
 			break
 		}
@@ -223,22 +227,22 @@ func launchInstructions(port int) []string {
 		out = append(out, fmt.Sprintf("cdp attach --port %d", port))
 		return out
 	}
-	switch runtime.GOOS {
+	switch goos {
 	case "darwin":
 		return []string{
-			fmt.Sprintf(`open -na "Brave Browser" --args --remote-debugging-port=%d --user-data-dir="$(mktemp -d)"`, port),
-			fmt.Sprintf(`open -na "Google Chrome" --args --remote-debugging-port=%d --user-data-dir="$(mktemp -d)"`, port),
+			fmt.Sprintf(`open -na "Brave Browser" --args --remote-debugging-port=%d %s`, port, userDataDirFlag(goos)),
+			fmt.Sprintf(`open -na "Google Chrome" --args --remote-debugging-port=%d %s`, port, userDataDirFlag(goos)),
 			fmt.Sprintf("cdp attach --port %d", port),
 		}
 	case "windows":
 		return []string{
-			fmt.Sprintf(`start chrome --remote-debugging-port=%d`, port),
+			fmt.Sprintf(`start chrome --remote-debugging-port=%d %s`, port, userDataDirFlag(goos)),
 			fmt.Sprintf("cdp attach --port %d", port),
 		}
 	default:
 		return []string{
-			fmt.Sprintf("brave-browser --remote-debugging-port=%d --user-data-dir=\"$(mktemp -d)\"", port),
-			fmt.Sprintf("google-chrome --remote-debugging-port=%d --user-data-dir=\"$(mktemp -d)\"", port),
+			fmt.Sprintf("brave-browser --remote-debugging-port=%d %s", port, userDataDirFlag(goos)),
+			fmt.Sprintf("google-chrome --remote-debugging-port=%d %s", port, userDataDirFlag(goos)),
 			fmt.Sprintf("cdp attach --port %d", port),
 		}
 	}
@@ -260,6 +264,50 @@ func shellQuote(s string) string {
 		return s
 	}
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
+}
+
+func quoteCommandArg(goos, s string) string {
+	if goos == "windows" {
+		if s == "" {
+			return `""`
+		}
+		if !strings.ContainsAny(s, " \t\n\"") {
+			return s
+		}
+		return `"` + strings.ReplaceAll(s, `"`, `\"`) + `"`
+	}
+	return shellQuote(s)
+}
+
+func userDataDirFlag(goos string) string {
+	if goos == "windows" {
+		return `--user-data-dir="%TEMP%\cdp-debug-profile-%RANDOM%"`
+	}
+	return `--user-data-dir="$(mktemp -d)"`
+}
+
+type attachFailure struct {
+	Error        string   `json:"error"`
+	Host         string   `json:"host"`
+	Port         int      `json:"port"`
+	Instructions []string `json:"instructions,omitempty"`
+	Diagnostics  []string `json:"diagnostics,omitempty"`
+}
+
+func attachFailureError(host string, port int, err error) error {
+	report := discoverAttachReport(host, port)
+	failure := attachFailure{
+		Error:        fmt.Sprintf("failed to reach %s:%d: %v", host, port, err),
+		Host:         host,
+		Port:         port,
+		Instructions: report.Instructions,
+		Diagnostics:  report.Errors,
+	}
+	data, marshalErr := json.Marshal(failure)
+	if marshalErr != nil {
+		return fmt.Errorf("connect: failed to reach %s:%d: %w", host, port, err)
+	}
+	return errors.New("connect: " + string(data))
 }
 
 func printAttachReport(w io.Writer, report attachReport) {
