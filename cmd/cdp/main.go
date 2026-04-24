@@ -54,6 +54,66 @@ func (s *stringSlice) Set(value string) error {
 	return nil
 }
 
+type cliRunMode struct {
+	jsCount             int
+	command             string
+	urlExplicit         bool
+	tabID               string
+	remoteTab           string
+	remoteHost          string
+	connectExisting     bool
+	listTabs            bool
+	listBrowsers        bool
+	listProfiles        bool
+	shell               bool
+	interactive         bool
+	harFile             string
+	harlStream          bool
+	monitorAllTabs      bool
+	extractSelector     string
+	screenshotRequested bool
+	renderRequested     bool
+	waitForURLChange    bool
+	monitorURLPattern   string
+}
+
+func (m cliRunMode) implicitShell() bool {
+	if m.harlStream && m.jsCount == 0 && m.command == "" {
+		return true
+	}
+	return m.jsCount == 0 &&
+		m.command == "" &&
+		!m.listTabs &&
+		!m.listBrowsers &&
+		!m.listProfiles &&
+		m.harFile == "" &&
+		m.extractSelector == "" &&
+		!m.screenshotRequested &&
+		!m.renderRequested &&
+		!m.waitForURLChange &&
+		m.monitorURLPattern == ""
+}
+
+func (m cliRunMode) harCaptureNeedsTarget() bool {
+	return m.harFile != "" &&
+		!m.urlExplicit &&
+		m.tabID == "" &&
+		m.remoteTab == "" &&
+		m.remoteHost == "" &&
+		!m.connectExisting &&
+		!m.shell &&
+		!m.interactive &&
+		!m.harlStream &&
+		!m.monitorAllTabs &&
+		m.jsCount == 0 &&
+		m.command == "" &&
+		m.extractSelector == "" &&
+		!m.screenshotRequested &&
+		!m.renderRequested &&
+		!m.waitForURLChange &&
+		m.monitorURLPattern == ""
+}
+
 // Exit codes following Unix conventions
 const (
 	ExitSuccess         = 0 // Success
@@ -1294,6 +1354,7 @@ func main() {
 	screenshotRequested := false
 	renderRequested := false
 	waitReadyExplicit := false
+	urlExplicit := false
 	flag.Visit(func(f *flag.Flag) {
 		switch f.Name {
 		case "screenshot":
@@ -1302,6 +1363,8 @@ func main() {
 			renderRequested = true
 		case "wait-ready":
 			waitReadyExplicit = true
+		case "url":
+			urlExplicit = true
 		}
 	})
 	if screenshotRequested && screenshotSelector == "" {
@@ -1334,6 +1397,31 @@ func main() {
 	// Validate har-mode flag
 	if harMode != "simple" && harMode != "enhanced" {
 		exitWithError(ExitUsageError, ErrorTypeUsage, "Invalid --har-mode value: %s (must be 'simple' or 'enhanced')", harMode)
+	}
+	runMode := cliRunMode{
+		jsCount:             len(jsScripts),
+		command:             command,
+		urlExplicit:         urlExplicit,
+		tabID:               tabID,
+		remoteTab:           remoteTab,
+		remoteHost:          remoteHost,
+		connectExisting:     connectExisting,
+		listTabs:            listTabs,
+		listBrowsers:        listBrowsers,
+		listProfiles:        listProfiles,
+		shell:               shell,
+		interactive:         interactive,
+		harFile:             harFile,
+		harlStream:          harlStream,
+		monitorAllTabs:      monitorAllTabs,
+		extractSelector:     extractSelector,
+		screenshotRequested: screenshotRequested,
+		renderRequested:     renderRequested,
+		waitForURLChange:    waitForURLChange,
+		monitorURLPattern:   monitorURLPattern,
+	}
+	if runMode.harCaptureNeedsTarget() {
+		exitWithError(ExitUsageError, ErrorTypeUsage, "--har requires --url for bounded capture; use --shell or --harl for interactive capture")
 	}
 
 	// Parse custom headers from flag values
@@ -1647,10 +1735,8 @@ func main() {
 	var ctx context.Context
 	var cancel context.CancelFunc
 
-	// Determine if we are in a mode that requires long-running session
-	// Determine if we are in a mode that requires long-running session
-	// Treat HAR logging without specific commands as implicit shell (user browsing)
-	isImplicitShell := len(jsScripts) == 0 && command == "" && !listTabs && !listBrowsers && !listProfiles
+	// Determine if we are in a mode that requires long-running session.
+	isImplicitShell := runMode.implicitShell()
 
 	if shell || isImplicitShell || timeout == 0 {
 		// Shell mode, or explicit no timeout - no global timeout

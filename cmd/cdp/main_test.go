@@ -101,8 +101,8 @@ func TestCDP_ShowHelp(t *testing.T) {
 			},
 		},
 		{
-			name: "no_args_launches_chrome",
-			args: []string{},
+			name:     "no_args_launches_chrome",
+			args:     []string{},
 			contains: []string{
 				// Either connects to existing Chrome or shows error
 				// This handles both cases
@@ -126,8 +126,8 @@ func TestCDP_ShowHelp(t *testing.T) {
 			if tt.name == "no_args_launches_chrome" {
 				// Check if it either connected to Chrome or showed an error
 				if !strings.Contains(outputStr, "Connected to") &&
-				   !strings.Contains(outputStr, "Error launching Chrome") &&
-				   !strings.Contains(outputStr, "Failed to launch browser") {
+					!strings.Contains(outputStr, "Error launching Chrome") &&
+					!strings.Contains(outputStr, "Failed to launch browser") {
 					t.Errorf("Expected either connection or error message.\nFull output:\n%s", outputStr)
 				}
 			} else {
@@ -137,6 +137,59 @@ func TestCDP_ShowHelp(t *testing.T) {
 							expected, outputStr)
 					}
 				}
+			}
+		})
+	}
+}
+
+func TestCLIRunModeImplicitShell(t *testing.T) {
+	tests := []struct {
+		name string
+		mode cliRunMode
+		want bool
+	}{
+		{name: "bare command", want: true},
+		{name: "javascript", mode: cliRunMode{jsCount: 1}, want: false},
+		{name: "har file", mode: cliRunMode{harFile: "out.har"}, want: false},
+		{name: "harl stream", mode: cliRunMode{harlStream: true}, want: true},
+		{name: "har with harl stream", mode: cliRunMode{harFile: "out.har", harlStream: true}, want: true},
+		{name: "extract", mode: cliRunMode{extractSelector: "h1"}, want: false},
+		{name: "screenshot", mode: cliRunMode{screenshotRequested: true}, want: false},
+		{name: "render", mode: cliRunMode{renderRequested: true}, want: false},
+		{name: "url monitor", mode: cliRunMode{monitorURLPattern: "/login"}, want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := tt.mode.implicitShell()
+			if got != tt.want {
+				t.Fatalf("implicitShell() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestCLIRunModeHARCaptureNeedsTarget(t *testing.T) {
+	tests := []struct {
+		name string
+		mode cliRunMode
+		want bool
+	}{
+		{name: "bare har", mode: cliRunMode{harFile: "out.har"}, want: true},
+		{name: "explicit url", mode: cliRunMode{harFile: "out.har", urlExplicit: true}, want: false},
+		{name: "shell", mode: cliRunMode{harFile: "out.har", shell: true}, want: false},
+		{name: "harl", mode: cliRunMode{harFile: "out.har", harlStream: true}, want: false},
+		{name: "selected tab", mode: cliRunMode{harFile: "out.har", tabID: "tab-1"}, want: false},
+		{name: "remote host", mode: cliRunMode{harFile: "out.har", remoteHost: "localhost"}, want: false},
+		{name: "connect existing", mode: cliRunMode{harFile: "out.har", connectExisting: true}, want: false},
+		{name: "monitor all tabs", mode: cliRunMode{harFile: "out.har", monitorAllTabs: true}, want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := tt.mode.harCaptureNeedsTarget()
+			if got != tt.want {
+				t.Fatalf("harCaptureNeedsTarget() = %v, want %v", got, tt.want)
 			}
 		})
 	}
@@ -634,7 +687,7 @@ func TestCDP_CommandParsing(t *testing.T) {
 				// Note: actual execution may fail in test context, but parsing should succeed
 				// Only check for parsing-related errors
 				if strings.Contains(err.Error(), "invalid command format") ||
-				   strings.Contains(err.Error(), "invalid JSON") {
+					strings.Contains(err.Error(), "invalid JSON") {
 					t.Errorf("Unexpected parsing error for command %q: %v", tt.command, err)
 				}
 			}

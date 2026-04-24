@@ -48,7 +48,13 @@ chrome-to-har -url https://example.com -output out.har
 Capture network activity with `cdp`:
 
 ```bash
-cdp --url https://example.com --har out.har
+cdp --url https://example.com --har out.har --timeout 10
+```
+
+Use `--shell` when you want to browse interactively while recording:
+
+```bash
+cdp --url https://example.com --har out.har --shell
 ```
 
 Evaluate JavaScript in a page:
@@ -72,7 +78,7 @@ ndp node attach 9229
 Run a CDP script:
 
 ```bash
-cdpscript run script.cdp
+cdpscript script.txtar
 ```
 
 ## Common Tasks
@@ -124,8 +130,8 @@ ndp node attach 9229
 Run and test CDP scripts:
 
 ```bash
-cdpscript run login.txtar
-cdpscripttest run testdata/login.txtar
+cdpscript login.txtar
+cdpscripttest --url http://localhost:8090 testdata/login.txt
 ```
 
 ## Command Summary
