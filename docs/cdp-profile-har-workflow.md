@@ -380,7 +380,9 @@ cdp --use-profile "Default" --har /tmp/session.har --url https://example.com --i
 
 ### Issue: Response body not captured in HAR
 
-**Note**: CDP HAR captures metadata but the response body capture is being tracked in a separate feature (see `bd show chrome-to-har-61` for details).
+**Note**: CDP HAR capture focuses on metadata. If response bodies matter, use
+the enhanced capture tools or extract the needed page/API state with JavaScript
+while recording.
 
 **Workaround**: Extract what you need using JavaScript while recording:
 
@@ -439,6 +441,7 @@ cdp --use-profile "Default" \
 
 ## See Also
 
-- Bead chrome-to-har-61: CDP Response Body Capture
-- Bead chrome-to-har-60: CDP Script Format Implementation
-- Bead chrome-to-har-73: Brave Profile + Debug Port Workaround
+- `skills/writing-cdp-scripts/references/script-format.md`: canonical
+  `cdpscript` format reference
+- `docs/usage.md`: current command usage examples
+- `docs/cdp.md`: broader `cdp` command documentation
