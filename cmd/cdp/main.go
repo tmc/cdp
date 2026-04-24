@@ -1126,6 +1126,15 @@ func main() {
 	// Handle subcommands before flag parsing
 	if len(os.Args) > 1 {
 		switch os.Args[1] {
+		case "attach":
+			cmd := newAttachCmd()
+			if err := cmd.run(os.Args[2:]); err != nil {
+				if errors.Is(err, flag.ErrHelp) {
+					return
+				}
+				exitWithError(ExitUsageError, ErrorTypeUsage, "%v", err)
+			}
+			return
 		case "run":
 			cmd := newScriptCmd()
 			if err := cmd.run(os.Args[2:]); err != nil {

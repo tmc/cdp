@@ -8,6 +8,8 @@ capturing network traffic as HAR/HARL, and managing browser sessions.
 Usage:
 
 	cdp [flags]
+	cdp attach [--host host] [--port port] [--format text|json]
+	cdp run [flags] script.txtar
 
 Connection Flags:
 
@@ -25,6 +27,13 @@ Connection Flags:
 	    List all discovered browsers (running or installed) and exit.
 	-connect-existing
 	    Prefer connecting to existing Chrome sessions.
+
+Attach Command:
+
+	cdp attach
+	    Probe common local DevTools ports and print attachable page targets.
+	cdp attach -port 9222 -format json
+	    Print an agent-readable JSON target report.
 
 Launch Flags:
 

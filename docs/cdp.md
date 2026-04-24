@@ -30,6 +30,9 @@ cdp -headless
 # Connect to an existing Chrome instance
 cdp -debug-port 9222
 
+# Show attachable targets or launch instructions
+cdp attach
+
 # Run a script file
 cdp -script commands.txt
 
@@ -150,14 +153,30 @@ cdp -output results.txt
 
 ### Connection to Existing Chrome Instance
 
-1. Launch Chrome with remote debugging enabled:
+Use `cdp attach` first. It probes live DevTools endpoints, prints attachable
+page targets, and emits exact launch commands when no browser is listening:
+
+```bash
+cdp attach
+cdp attach --port 9222 --format json
+```
+
+The text output includes commands such as:
+
+```bash
+cdp --remote-host localhost --remote-port 9222 --tab <target-id> --shell
+```
+
+If no target is found, launch Chrome or Brave with remote debugging enabled:
+
+1. Launch Chrome or Brave with remote debugging enabled:
    ```
-   chrome --remote-debugging-port=9222
+   chrome --remote-debugging-port=9222 --user-data-dir="$(mktemp -d)"
    ```
 
 2. Connect CDP to this instance:
    ```
-   cdp -debug-port 9222
+   cdp attach --port 9222
    ```
 
 ### Using Chrome Profiles
