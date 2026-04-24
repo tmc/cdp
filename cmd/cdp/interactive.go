@@ -4,7 +4,9 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"path/filepath"
@@ -19,23 +21,28 @@ import (
 	"github.com/tmc/cdp/internal/sourcemap"
 	"github.com/tmc/cdp/internal/sources"
 	"github.com/tmc/cdp/internal/tooldef"
+	"golang.org/x/term"
 )
+
+const interactiveHistoryLimit = 1000
+
+var errLineInterrupted = errors.New("line interrupted")
 
 // InteractiveMode represents an interactive CDP session
 type InteractiveMode struct {
-	browserCtx   context.Context // browser-level context for creating/listing tabs
-	ctx          context.Context // active tab context for executing commands
-	cancel       context.CancelFunc
-	launched     bool // true if we launched the browser (should close on exit)
-	cfg          fullCaptureConfig
-	registry     *CommandRegistry
-	help         *HelpSystem
-	history      []string
-	verbose      bool
-	baseOutputDir     string                    // root output dir from --output-dir
-	contextStack      []string                  // stack of context names for push/pop
-	recorder          recorderWithOutputDir     // optional recorder for output dir switching
-	toolsDir          string                    // directory for .cdp tool definitions
+	browserCtx        context.Context // browser-level context for creating/listing tabs
+	ctx               context.Context // active tab context for executing commands
+	cancel            context.CancelFunc
+	launched          bool // true if we launched the browser (should close on exit)
+	cfg               fullCaptureConfig
+	registry          *CommandRegistry
+	help              *HelpSystem
+	history           []string
+	verbose           bool
+	baseOutputDir     string                // root output dir from --output-dir
+	contextStack      []string              // stack of context names for push/pop
+	recorder          recorderWithOutputDir // optional recorder for output dir switching
+	toolsDir          string                // directory for .cdp tool definitions
 	sourceCollector   *sources.Collector
 	coverageCollector *coverage.Collector
 	syntheticMaps     *syntheticMapStore
@@ -100,6 +107,67 @@ func (im *InteractiveMode) SetSourceCollector(sc *sources.Collector) {
 		}
 	}
 	im.registerSourceCommands()
+}
+
+func interactiveHistoryPath() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(home, ".cdp", "history"), nil
+}
+
+func (im *InteractiveMode) loadHistory() {
+	path, err := interactiveHistoryPath()
+	if err != nil {
+		if im.verbose {
+			log.Printf("Warning: history path unavailable: %v", err)
+		}
+		return
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if !os.IsNotExist(err) && im.verbose {
+			log.Printf("Warning: failed to read history: %v", err)
+		}
+		return
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if line != "" {
+			im.history = append(im.history, line)
+		}
+	}
+	if len(im.history) > interactiveHistoryLimit {
+		im.history = append([]string(nil), im.history[len(im.history)-interactiveHistoryLimit:]...)
+	}
+}
+
+func (im *InteractiveMode) saveHistory() {
+	path, err := interactiveHistoryPath()
+	if err != nil {
+		if im.verbose {
+			log.Printf("Warning: history path unavailable: %v", err)
+		}
+		return
+	}
+	history := im.history
+	if len(history) > interactiveHistoryLimit {
+		history = history[len(history)-interactiveHistoryLimit:]
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+		if im.verbose {
+			log.Printf("Warning: failed to create history dir: %v", err)
+		}
+		return
+	}
+	data := strings.Join(history, "\n")
+	if data != "" {
+		data += "\n"
+	}
+	if err := os.WriteFile(path, []byte(data), 0600); err != nil && im.verbose {
+		log.Printf("Warning: failed to write history: %v", err)
+	}
 }
 
 // registerSourceCommands adds source browsing commands to the registry.
@@ -448,6 +516,341 @@ func findSourceInCollector(sc *sources.Collector, u string) (string, error) {
 	return "", fmt.Errorf("no source found for URL %s", u)
 }
 
+type shellReader interface {
+	ReadCommand(prompt string, cont func(string) bool) (string, error)
+	Close() error
+}
+
+type scannerShellReader struct {
+	scanner *bufio.Scanner
+	out     io.Writer
+	prompt  bool
+}
+
+func newScannerShellReader(in io.Reader, out io.Writer, prompt bool) *scannerShellReader {
+	return &scannerShellReader{
+		scanner: bufio.NewScanner(in),
+		out:     out,
+		prompt:  prompt,
+	}
+}
+
+func (r *scannerShellReader) ReadCommand(prompt string, cont func(string) bool) (string, error) {
+	var lines []string
+	for {
+		if r.prompt {
+			if len(lines) == 0 {
+				fmt.Fprint(r.out, prompt)
+			} else {
+				fmt.Fprint(r.out, ".... ")
+			}
+		}
+		if !r.scanner.Scan() {
+			if err := r.scanner.Err(); err != nil {
+				return "", err
+			}
+			if len(lines) > 0 {
+				return strings.Join(lines, "\n"), nil
+			}
+			return "", io.EOF
+		}
+		lines = append(lines, r.scanner.Text())
+		cmd := strings.Join(lines, "\n")
+		if cont == nil || !cont(cmd) {
+			return cmd, nil
+		}
+	}
+}
+
+func (r *scannerShellReader) Close() error { return nil }
+
+type terminalShellReader struct {
+	in       *os.File
+	out      io.Writer
+	oldState *term.State
+	history  *[]string
+	complete func(string) []string
+}
+
+func newShellReader(in *os.File, out io.Writer, history *[]string, complete func(string) []string) (shellReader, error) {
+	if !term.IsTerminal(int(in.Fd())) {
+		return newScannerShellReader(in, out, false), nil
+	}
+	return &terminalShellReader{
+		in:       in,
+		out:      out,
+		history:  history,
+		complete: complete,
+	}, nil
+}
+
+func (r *terminalShellReader) Close() error {
+	return r.restoreTerminal()
+}
+
+func (r *terminalShellReader) makeRaw() error {
+	if r.oldState != nil {
+		return nil
+	}
+	oldState, err := term.MakeRaw(int(r.in.Fd()))
+	if err != nil {
+		return err
+	}
+	r.oldState = oldState
+	return nil
+}
+
+func (r *terminalShellReader) restoreTerminal() error {
+	if r.oldState == nil {
+		return nil
+	}
+	err := term.Restore(int(r.in.Fd()), r.oldState)
+	r.oldState = nil
+	return err
+}
+
+func (r *terminalShellReader) ReadCommand(prompt string, cont func(string) bool) (string, error) {
+	var lines []string
+	for {
+		p := prompt
+		if len(lines) > 0 {
+			p = ".... "
+		}
+		line, err := r.readPhysicalLine(p)
+		if err != nil {
+			return "", err
+		}
+		lines = append(lines, line)
+		cmd := strings.Join(lines, "\n")
+		if cont == nil || !cont(cmd) {
+			return cmd, nil
+		}
+	}
+}
+
+func (r *terminalShellReader) readPhysicalLine(prompt string) (string, error) {
+	fmt.Fprint(r.out, prompt)
+	if err := r.makeRaw(); err != nil {
+		return "", err
+	}
+	defer r.restoreTerminal()
+	var buf []rune
+	pos := 0
+	histIndex := len(*r.history)
+	var saved []rune
+
+	for {
+		b, err := r.readByte()
+		if err != nil {
+			return "", err
+		}
+
+		switch b {
+		case '\r', '\n':
+			fmt.Fprint(r.out, "\r\n")
+			return string(buf), nil
+		case 0x03: // Ctrl-C
+			fmt.Fprint(r.out, "^C\r\n")
+			return "", errLineInterrupted
+		case 0x04: // Ctrl-D
+			if len(buf) == 0 {
+				fmt.Fprint(r.out, "\r\n")
+				return "", io.EOF
+			}
+		case 0x01: // Ctrl-A
+			pos = 0
+			r.redrawLine(prompt, buf, pos)
+		case 0x05: // Ctrl-E
+			pos = len(buf)
+			r.redrawLine(prompt, buf, pos)
+		case 0x09: // Tab
+			buf, pos = r.completeLine(prompt, buf, pos)
+		case 0x7f, 0x08: // Backspace
+			if pos > 0 {
+				buf = append(buf[:pos-1], buf[pos:]...)
+				pos--
+				r.redrawLine(prompt, buf, pos)
+			}
+		case 0x1b: // Escape sequence
+			next, err := r.readByte()
+			if err != nil {
+				return "", err
+			}
+			if next != '[' {
+				continue
+			}
+			key, err := r.readByte()
+			if err != nil {
+				return "", err
+			}
+			switch key {
+			case 'A': // Up
+				if histIndex > 0 {
+					if histIndex == len(*r.history) {
+						saved = append([]rune(nil), buf...)
+					}
+					histIndex--
+					buf = []rune((*r.history)[histIndex])
+					pos = len(buf)
+					r.redrawLine(prompt, buf, pos)
+				}
+			case 'B': // Down
+				if histIndex < len(*r.history) {
+					histIndex++
+					if histIndex == len(*r.history) {
+						buf = append([]rune(nil), saved...)
+					} else {
+						buf = []rune((*r.history)[histIndex])
+					}
+					pos = len(buf)
+					r.redrawLine(prompt, buf, pos)
+				}
+			case 'C': // Right
+				if pos < len(buf) {
+					pos++
+					r.redrawLine(prompt, buf, pos)
+				}
+			case 'D': // Left
+				if pos > 0 {
+					pos--
+					r.redrawLine(prompt, buf, pos)
+				}
+			case '3': // Delete: ESC [ 3 ~
+				if tilde, err := r.readByte(); err == nil && tilde == '~' && pos < len(buf) {
+					buf = append(buf[:pos], buf[pos+1:]...)
+					r.redrawLine(prompt, buf, pos)
+				}
+			}
+		default:
+			if b >= 0x20 {
+				buf = append(buf, 0)
+				copy(buf[pos+1:], buf[pos:])
+				buf[pos] = rune(b)
+				pos++
+				r.redrawLine(prompt, buf, pos)
+			}
+		}
+	}
+}
+
+func (r *terminalShellReader) readByte() (byte, error) {
+	var buf [1]byte
+	n, err := r.in.Read(buf[:])
+	if err != nil {
+		return 0, err
+	}
+	if n == 0 {
+		return 0, io.EOF
+	}
+	return buf[0], nil
+}
+
+func (r *terminalShellReader) redrawLine(prompt string, buf []rune, pos int) {
+	line := string(buf)
+	fmt.Fprintf(r.out, "\r\033[2K%s%s", prompt, line)
+	if back := len(buf) - pos; back > 0 {
+		fmt.Fprintf(r.out, "\033[%dD", back)
+	}
+}
+
+func (r *terminalShellReader) completeLine(prompt string, buf []rune, pos int) ([]rune, int) {
+	if r.complete == nil {
+		return buf, pos
+	}
+	prefix := currentWord(buf, pos)
+	if prefix == "" {
+		return buf, pos
+	}
+	matches := r.complete(prefix)
+	if len(matches) == 0 {
+		return buf, pos
+	}
+	common := longestCommonPrefix(matches)
+	if len(common) > len(prefix) {
+		insert := []rune(common[len(prefix):])
+		buf = append(buf, make([]rune, len(insert))...)
+		copy(buf[pos+len(insert):], buf[pos:])
+		copy(buf[pos:], insert)
+		pos += len(insert)
+		r.redrawLine(prompt, buf, pos)
+		return buf, pos
+	}
+	fmt.Fprint(r.out, "\r\n")
+	for _, match := range matches {
+		fmt.Fprintf(r.out, "  %s\r\n", match)
+	}
+	r.redrawLine(prompt, buf, pos)
+	return buf, pos
+}
+
+func currentWord(buf []rune, pos int) string {
+	start := pos
+	for start > 0 && !isShellSpace(buf[start-1]) {
+		start--
+	}
+	return string(buf[start:pos])
+}
+
+func isShellSpace(r rune) bool {
+	return r == ' ' || r == '\t' || r == '\n' || r == '\r'
+}
+
+func longestCommonPrefix(values []string) string {
+	if len(values) == 0 {
+		return ""
+	}
+	prefix := values[0]
+	for _, v := range values[1:] {
+		for !strings.HasPrefix(v, prefix) {
+			if prefix == "" {
+				return ""
+			}
+			prefix = prefix[:len(prefix)-1]
+		}
+	}
+	return prefix
+}
+
+func rawCDPNeedsContinuation(line string) bool {
+	line = strings.TrimSpace(line)
+	if line == "" {
+		return false
+	}
+	fields := strings.Fields(line)
+	if len(fields) == 0 || !strings.Contains(fields[0], ".") || !strings.Contains(line, "{") {
+		return false
+	}
+	depth := 0
+	inString := false
+	escape := false
+	for _, r := range line {
+		if inString {
+			if escape {
+				escape = false
+				continue
+			}
+			switch r {
+			case '\\':
+				escape = true
+			case '"':
+				inString = false
+			}
+			continue
+		}
+		switch r {
+		case '"':
+			inString = true
+		case '{':
+			depth++
+		case '}':
+			if depth > 0 {
+				depth--
+			}
+		}
+	}
+	return depth > 0 || inString
+}
+
 // Run starts the interactive session
 func (im *InteractiveMode) Run() error {
 	if im.cfg.APIPort > 0 {
@@ -455,11 +858,29 @@ func (im *InteractiveMode) Run() error {
 	}
 	im.showWelcome()
 
-	scanner := bufio.NewScanner(os.Stdin)
+	im.loadHistory()
+	input, err := newShellReader(os.Stdin, os.Stdout, &im.history, im.TabComplete)
+	if err != nil {
+		return fmt.Errorf("initializing terminal input: %w", err)
+	}
+	inputClosed := false
+	closeInput := func() {
+		if !inputClosed {
+			_ = input.Close()
+			inputClosed = true
+		}
+	}
+	defer closeInput()
+	defer im.saveHistory()
 
 	// captureSourcesOnExit stops the background fetcher, does a final sweep,
 	// and writes any remaining sources to disk.
+	capturedSources := false
 	captureSourcesOnExit := func() {
+		if capturedSources {
+			return
+		}
+		capturedSources = true
 		if im.sourceCollector == nil {
 			return
 		}
@@ -475,13 +896,18 @@ func (im *InteractiveMode) Run() error {
 	}
 
 	for {
-		fmt.Print("cdp> ")
-
-		if !scanner.Scan() {
+		line, err := input.ReadCommand("cdp> ", rawCDPNeedsContinuation)
+		if errors.Is(err, io.EOF) {
 			break
 		}
+		if errors.Is(err, errLineInterrupted) {
+			continue
+		}
+		if err != nil {
+			return fmt.Errorf("error reading input: %w", err)
+		}
 
-		line := strings.TrimSpace(scanner.Text())
+		line = strings.TrimSpace(line)
 		if line == "" {
 			continue
 		}
@@ -496,6 +922,7 @@ func (im *InteractiveMode) Run() error {
 
 		// Check for exit
 		if line == "exit" || line == "quit" || line == "q" {
+			closeInput()
 			captureSourcesOnExit()
 			if im.launched && im.cancel != nil {
 				im.cancel()
@@ -517,10 +944,6 @@ func (im *InteractiveMode) Run() error {
 	// Close the browser on exit (EOF, Ctrl-D) if we launched it.
 	if im.launched && im.cancel != nil {
 		im.cancel()
-	}
-
-	if err := scanner.Err(); err != nil {
-		return fmt.Errorf("error reading input: %w", err)
 	}
 
 	return nil

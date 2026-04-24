@@ -1,0 +1,124 @@
+package main
+
+import (
+	"strings"
+	"testing"
+)
+
+func TestRawCDPNeedsContinuation(t *testing.T) {
+	tests := []struct {
+		name string
+		line string
+		want bool
+	}{
+		{
+			name: "complete raw cdp",
+			line: `Runtime.evaluate {"expression":"document.title"}`,
+			want: false,
+		},
+		{
+			name: "incomplete raw cdp",
+			line: `Runtime.evaluate {"expression":`,
+			want: true,
+		},
+		{
+			name: "nested object",
+			line: `Page.printToPDF {"marginTop": 1, "transferMode": {"mode":`,
+			want: true,
+		},
+		{
+			name: "brace in string",
+			line: `Runtime.evaluate {"expression":"JSON.stringify({ok: true})"}`,
+			want: false,
+		},
+		{
+			name: "ordinary command",
+			line: `click #submit {ignored`,
+			want: false,
+		},
+		{
+			name: "unterminated string",
+			line: `Runtime.evaluate {"expression":"document.title}`,
+			want: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := rawCDPNeedsContinuation(tt.line); got != tt.want {
+				t.Fatalf("rawCDPNeedsContinuation(%q) = %v, want %v", tt.line, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestLongestCommonPrefix(t *testing.T) {
+	tests := []struct {
+		name   string
+		values []string
+		want   string
+	}{
+		{
+			name:   "empty",
+			values: nil,
+			want:   "",
+		},
+		{
+			name:   "single",
+			values: []string{"screenshot"},
+			want:   "screenshot",
+		},
+		{
+			name:   "shared prefix",
+			values: []string{"screenshot", "sourcemap", "sources"},
+			want:   "s",
+		},
+		{
+			name:   "none",
+			values: []string{"click", "navigate"},
+			want:   "",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := longestCommonPrefix(tt.values); got != tt.want {
+				t.Fatalf("longestCommonPrefix(%v) = %q, want %q", tt.values, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestCurrentWord(t *testing.T) {
+	line := []rune("click but")
+	if got := currentWord(line, len(line)); got != "but" {
+		t.Fatalf("currentWord at end = %q, want %q", got, "but")
+	}
+	if got := currentWord(line, 2); got != "cl" {
+		t.Fatalf("currentWord in command = %q, want %q", got, "cl")
+	}
+}
+
+func TestScannerShellReaderContinuation(t *testing.T) {
+	input := strings.NewReader("Runtime.evaluate {\n\"expression\":\"document.title\"\n}\nnext\n")
+	var output strings.Builder
+	reader := newScannerShellReader(input, &output, true)
+
+	got, err := reader.ReadCommand("cdp> ", rawCDPNeedsContinuation)
+	if err != nil {
+		t.Fatalf("ReadCommand returned error: %v", err)
+	}
+	want := "Runtime.evaluate {\n\"expression\":\"document.title\"\n}"
+	if got != want {
+		t.Fatalf("ReadCommand = %q, want %q", got, want)
+	}
+	if out := output.String(); out != "cdp> .... .... " {
+		t.Fatalf("prompt output = %q, want %q", out, "cdp> .... .... ")
+	}
+
+	got, err = reader.ReadCommand("cdp> ", rawCDPNeedsContinuation)
+	if err != nil {
+		t.Fatalf("second ReadCommand returned error: %v", err)
+	}
+	if got != "next" {
+		t.Fatalf("second ReadCommand = %q, want next", got)
+	}
+}
