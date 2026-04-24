@@ -1,8 +1,10 @@
 package main
 
 import (
+	"context"
 	"reflect"
 	"testing"
+	"time"
 )
 
 func TestParseCoordSelector(t *testing.T) {
@@ -38,6 +40,32 @@ func TestParseCoordSelector(t *testing.T) {
 			}
 			if err == nil && got != tt.want {
 				t.Fatalf("point = %+v, want %+v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestInteractionCtxTimeoutUnits(t *testing.T) {
+	tests := []struct {
+		name string
+		in   int
+		want time.Duration
+	}{
+		{name: "default", in: 0, want: 30 * time.Second},
+		{name: "seconds", in: 5, want: 5 * time.Second},
+		{name: "milliseconds heuristic", in: 5000, want: 5 * time.Second},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx, cancel := interactionCtx(context.Background(), context.Background(), tt.in)
+			defer cancel()
+			deadline, ok := ctx.Deadline()
+			if !ok {
+				t.Fatal("deadline not set")
+			}
+			got := time.Until(deadline)
+			if got < tt.want-500*time.Millisecond || got > tt.want+500*time.Millisecond {
+				t.Fatalf("timeout = %s, want about %s", got, tt.want)
 			}
 		})
 	}
