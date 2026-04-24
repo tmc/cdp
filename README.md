@@ -42,7 +42,7 @@ Capture network activity with `chrome-to-har`:
 
 ```bash
 go install github.com/tmc/cdp/cmd/chrome-to-har@latest
-chrome-to-har -url https://example.com -output out.har
+chrome-to-har --url https://example.com --output out.har
 ```
 
 Capture network activity with `cdp`:
@@ -86,10 +86,10 @@ cdpscript script.txtar
 Capture authenticated browser traffic with an existing profile:
 
 ```bash
-chrome-to-har -profile "Default" \
-  -url https://app.example.com \
-  -wait-for '#app-root' \
-  -output app.har
+chrome-to-har --profile "Default" \
+  --url https://app.example.com \
+  --wait-for '#app-root' \
+  --output app.har
 ```
 
 Render a JavaScript-heavy page to text:
@@ -101,22 +101,22 @@ churl --output-format=text --wait-for ".loaded" https://example.com
 Take a screenshot or extract content from a page:
 
 ```bash
-cdp -url https://example.com -screenshot full
-cdp -url https://example.com -extract 'h1'
-cdp -url https://example.com -render body
+cdp --url https://example.com --screenshot full
+cdp --url https://example.com --extract 'h1'
+cdp --url https://example.com --render body
 ```
 
 Connect to an existing Chrome instance:
 
 ```bash
-cdp -debug-port 9222 -list-tabs
-cdp -debug-port 9222 -tab <tab-id> -js 'document.title'
+cdp attach --port 9222
+cdp --remote-port 9222 --tab <tab-id> --js 'document.title'
 ```
 
 Connect to a remote browser:
 
 ```bash
-cdp -remote-host 10.0.0.5 -remote-port 9222 -list-tabs
+cdp --remote-host 10.0.0.5 --remote-port 9222 --list-tabs
 churl --remote-host 10.0.0.5 --remote-port 9222 https://example.com
 ```
 

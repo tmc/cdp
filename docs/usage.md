@@ -12,7 +12,7 @@ Use `chrome-to-har` when you want a capture-oriented workflow. Use `cdp` when yo
 The `chrome-to-har` command launches Chrome, navigates to a page, and writes HAR or differential capture output.
 
 ```bash
-chrome-to-har -url https://example.com -output output.har
+chrome-to-har --url https://example.com --output output.har
 ```
 
 Common flags:
@@ -32,23 +32,23 @@ Examples:
 
 ```bash
 # Basic capture
-chrome-to-har -url https://example.com -output example.har
+chrome-to-har --url https://example.com --output example.har
 
 # Stream only API traffic
-chrome-to-har -url https://example.com \
-  -stream \
-  -urls='api\.example\.com'
+chrome-to-har --url https://example.com \
+  --stream \
+  --urls='api\.example\.com'
 
 # Capture with a profile
-chrome-to-har -profile "Default" \
-  -url https://example.com \
-  -output session.har
+chrome-to-har --profile "Default" \
+  --url https://example.com \
+  --output session.har
 
 # Wait for an application shell before finishing
-chrome-to-har -url https://app.example.com \
-  -wait-for '#app-root' \
-  -wait-stable \
-  -output app.har
+chrome-to-har --url https://app.example.com \
+  --wait-for '#app-root' \
+  --wait-stable \
+  --output app.har
 ```
 
 ## `cdp`
@@ -56,7 +56,7 @@ chrome-to-har -url https://app.example.com \
 The `cdp` command is the general Chrome/CDP tool in this repository.
 
 ```bash
-cdp -url https://example.com -js 'document.title'
+cdp --url https://example.com --js 'document.title'
 ```
 
 Common flags:
@@ -77,15 +77,15 @@ Examples:
 
 ```bash
 # Evaluate JavaScript
-cdp -headless -url https://example.com -js 'document.title'
+cdp --headless --url https://example.com --js 'document.title'
 
 # Capture HAR and screenshot in one run
-cdp -url https://example.com \
-  -har capture.har \
-  -screenshot full
+cdp --url https://example.com \
+  --har capture.har \
+  --screenshot full
 
 # Render page content
-cdp -url https://example.com -render body
+cdp --url https://example.com --render body
 
 # Connect to an existing Chrome debug port
 cdp attach --port 9222
@@ -107,15 +107,15 @@ Examples:
 
 ```bash
 # Only errors
-chrome-to-har -stream -filter='select(.response.status >= 400)'
+chrome-to-har --stream --filter='select(.response.status >= 400)'
 
 # Format a CSV-like summary
-chrome-to-har -stream \
-  -template='{{.request.method}},{{.request.url}},{{.response.status}},{{.time}}'
+chrome-to-har --stream \
+  --template='{{.request.method}},{{.request.url}},{{.response.status}},{{.time}}'
 
 # Focus on authentication traffic
-chrome-to-har -stream \
-  -urls='auth|login|token'
+chrome-to-har --stream \
+  --urls='auth|login|token'
 ```
 
 ## Differential Capture
@@ -124,10 +124,10 @@ The `chrome-to-har` command also exposes differential capture mode:
 
 ```bash
 # Create a baseline capture
-chrome-to-har -diff-mode -url https://example.com -capture-name baseline
+chrome-to-har --diff-mode --url https://example.com --capture-name baseline
 
 # Compare two captures
-chrome-to-har -baseline baseline -compare-with candidate -diff-output report.html
+chrome-to-har --baseline baseline --compare-with candidate --diff-output report.html
 ```
 
 See [differential-capture.md](differential-capture.md) for more detail.

@@ -22,22 +22,22 @@ go build -o cdp ./cmd/cdp
 cdp
 
 # Start with a specific URL
-cdp -url https://example.com
+cdp --url https://example.com
 
 # Use in headless mode
-cdp -headless
+cdp --headless
 
 # Connect to an existing Chrome instance
-cdp -debug-port 9222
+cdp --debug-port 9222
 
 # Show attachable targets or launch instructions
 cdp attach
 
 # Run a script file
-cdp -script commands.txt
+cdp run script.txtar
 
-# Save output to a file
-cdp -output results.txt
+# Save command output with shell redirection
+cdp --headless --url https://example.com --js 'document.title' > results.txt
 ```
 
 ## Interactive Mode Commands
@@ -116,37 +116,38 @@ CDP provides numerous aliases for common operations:
 
 ## Script Mode
 
-CDP can execute commands from a script file. Each line in the script is treated as a separate command. Use `#` or `//` for comments:
+Repeatable CDP scripts use Go txtar archives. The archive must contain
+`main.cdp`; the txtar comment header is for human-facing usage notes.
 
-```
-# Example CDP script
-# Navigate to a page
+```text
+# script.txtar
+#
+# Usage:
+#   cdp run script.txtar
+
+-- main.cdp --
 goto https://example.com
-
-# Wait a bit and take a screenshot
-Page.captureScreenshot {}
-
-# Click a button
 click '#submit-button'
-
-# Get the resulting HTML
 html
 ```
 
 Run with:
 
 ```bash
-cdp -script my_script.txt
+cdp run script.txtar
+cdpscript script.txtar
 ```
+
+See `cmd/cdp/CDP_SCRIPT_FORMAT.md` for the canonical script-format reference.
 
 ## Output Format
 
 CDP prints responses in pretty-formatted JSON. Event messages are prefixed with `<-- Event:` and special events like Debugger paused/resumed are highlighted.
 
-To save output to a file:
+To save command output to a file, use shell redirection:
 
 ```bash
-cdp -output results.txt
+cdp --headless --url https://example.com --js 'document.title' > results.txt
 ```
 
 ## Advanced Features
@@ -184,7 +185,7 @@ If no target is found, launch Chrome or Brave with remote debugging enabled:
 To use an existing Chrome profile, which includes cookies, extensions, and settings:
 
 ```
-cdp -profile Default
+cdp --use-profile Default
 ```
 
 ### Custom Chrome Path
@@ -192,7 +193,7 @@ cdp -profile Default
 If Chrome is installed in a non-standard location:
 
 ```
-cdp -chrome-path /path/to/chrome
+cdp --chrome-path /path/to/chrome
 ```
 
 ## Common Use Cases
@@ -200,7 +201,7 @@ cdp -chrome-path /path/to/chrome
 ### Web Page Analysis
 
 ```
-cdp -url https://example.com
+cdp --url https://example.com
 cdp> html
 cdp> cookies
 ```
@@ -208,7 +209,7 @@ cdp> cookies
 ### JavaScript Debugging
 
 ```
-cdp -url https://example.com
+cdp --url https://example.com
 cdp> Debugger.setBreakpointByUrl {"url": "https://example.com/script.js", "lineNumber": 123}
 cdp> step
 cdp> Runtime.evaluate {"expression": "someVariable"}
@@ -217,7 +218,7 @@ cdp> Runtime.evaluate {"expression": "someVariable"}
 ### Performance Testing
 
 ```
-cdp -headless
+cdp --headless
 cdp> goto https://example.com
 cdp> Performance.enable {}
 cdp> Performance.getMetrics {}
@@ -234,27 +235,27 @@ cdp> covjs_take
 ### Web Scraping
 
 ```
-cdp -headless
+cdp --headless
 cdp> goto https://example.com
 cdp> Runtime.evaluate {"expression": "Array.from(document.querySelectorAll('h1')).map(h => h.textContent)"}
 ```
 
 ## Example Script for Automated Screenshot
 
-```
-# screenshot.txt
+```text
+# screenshot.txtar
+# Usage:
+#   cdp run --headless --output screenshots screenshot.txtar
+
+-- main.cdp --
 goto https://example.com
-# Wait for page to fully load
-Runtime.evaluate {"expression": "new Promise(resolve => setTimeout(resolve, 1000))"}
-# Take a screenshot
-screenshot
-# Switch to mobile mode
-mobile
-# Take another screenshot
-screenshot-full
+wait 1s
+screenshot desktop.png
+js window.scrollTo(0, document.body.scrollHeight)
+screenshot scrolled.png
 ```
 
 Run with:
-```
-cdp -headless -script screenshot.txt -output screenshots.log
+```bash
+cdp run --headless --output screenshots screenshot.txtar
 ```

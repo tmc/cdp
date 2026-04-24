@@ -29,7 +29,7 @@ Available Chrome profiles:
 [2] Profile 1
 [3] Work Profile
 
-Use with: cdp -use-profile "Default" -js "document.title"
+Use with: cdp --use-profile "Default" --js "document.title"
 ```
 
 ### 2. Launch CDP with a Profile and HAR Recording
