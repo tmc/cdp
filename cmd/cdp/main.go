@@ -2422,6 +2422,41 @@ func main() {
 					fmt.Println("Using enhanced browser API for remote Chrome connection")
 				}
 			}
+		} else if remoteHost != "" {
+			// Remote attach for plain shell mode (no operation flags). The
+			// inner-if at the top of this block only fires when an operation
+			// flag is set; without one, control would otherwise fall through
+			// to the local-launch branch below and try to spawn Chrome,
+			// ignoring --remote-host entirely.
+			//
+			// Always attach to the first existing page target instead of
+			// issuing Target.createTarget, which Electron apps do not
+			// support.
+			tabs, err := browser.ListTabs(remoteHost, remotePort)
+			if err != nil || len(tabs) == 0 {
+				exitWithError(ExitBrowserError, ErrorTypeBrowser, "Failed to list remote targets at %s:%d: %v", remoteHost, remotePort, err)
+			}
+			var targetTab *browser.ChromeTab
+			for i := range tabs {
+				if tabs[i].Type == "page" {
+					targetTab = &tabs[i]
+					break
+				}
+			}
+			if targetTab == nil {
+				targetTab = &tabs[0]
+			}
+			allocCtx, allocCancel := chromedp.NewRemoteAllocator(ctx, fmt.Sprintf("ws://%s:%d", remoteHost, remotePort))
+			defer allocCancel()
+			ctxOpts := []chromedp.ContextOption{
+				chromedp.WithErrorf(filteredErrorf),
+				chromedp.WithTargetID(target.ID(targetTab.ID)),
+			}
+			if verbose {
+				ctxOpts = append(ctxOpts, chromedp.WithLogf(filteredLogf))
+				log.Printf("Attached to remote target: %s (%s)", targetTab.Title, targetTab.ID)
+			}
+			browserCtx, browserCancel = chromedp.NewContext(allocCtx, ctxOpts...)
 		} else {
 			// Local Chrome instance with optional profile support
 			var profileManager chromeprofiles.ProfileManager
@@ -3093,9 +3128,13 @@ func main() {
 				return
 			}
 
-			// Start and connect to browser
-			if err := chromedp.Run(browserCtx, chromedp.Navigate(url)); err != nil {
-				exitWithError(ExitBrowserError, ErrorTypeBrowser, "Error launching Chrome: %v", err)
+			// Navigate to the requested URL. For attach-mode (--remote-host),
+			// skip navigation when --url was not given so we don't clobber
+			// the existing target.
+			if url != "about:blank" {
+				if err := chromedp.Run(browserCtx, chromedp.Navigate(url)); err != nil {
+					exitWithError(ExitBrowserError, ErrorTypeBrowser, "Error launching Chrome: %v", err)
+				}
 			}
 		}
 		defer browserCancel()
