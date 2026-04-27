@@ -3139,7 +3139,12 @@ func main() {
 		}
 		defer browserCancel()
 
-		// Set up source capture if requested.
+		// Set up source capture if requested. sourceCollector is hoisted to
+		// the enclosing scope so the `tab` shell command can re-attach the
+		// listener to the new target's session (chromedp listeners are bound
+		// to a specific target session, so a tab switch leaves the original
+		// listener stranded).
+		var sourceCollector *sources.Collector
 		if saveSources {
 			sourcesDir := filepath.Join(outputDir, "sources")
 			if outputDir == "" {
@@ -3157,6 +3162,7 @@ func main() {
 			})); err != nil {
 				log.Printf("Warning: failed to enable source capture: %v", err)
 			} else {
+				sourceCollector = sc
 				defer func() {
 					sc.Close() // drain background goroutine
 					if err := chromedp.Run(browserCtx, chromedp.ActionFunc(func(ctx context.Context) error {
@@ -3549,6 +3555,18 @@ func main() {
 						} else {
 							browserCtx = newCtx
 							fmt.Printf("Switched to: %s - %s\n", found.Title, found.URL)
+							// Rebind source-capture listener to the new
+							// target session and re-enable Debugger/CSS so
+							// the new target's already-parsed scripts
+							// replay onto our handler. Without this the
+							// listener is stranded on the previous
+							// target's session and tab N capture is silent.
+							if sourceCollector != nil {
+								chromedp.ListenTarget(newCtx, sourceCollector.HandleEvent)
+								if err := sourceCollector.AttachToTarget(newCtx); err != nil && verbose {
+									log.Printf("Warning: source capture re-attach: %v", err)
+								}
+							}
 						}
 					}
 					continue

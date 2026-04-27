@@ -115,6 +115,40 @@ func (c *Collector) Enable(ctx context.Context) error {
 	return nil
 }
 
+// AttachToTarget enables Debugger and CSS on a new target context, so the
+// scriptParsed and styleSheetAdded events for that target's already-parsed
+// scripts are replayed. Use this after switching to a new target via
+// chromedp.NewContext(parent, chromedp.WithTargetID(...)) to receive events
+// from the new target's session.
+//
+// Callers must register HandleEvent via chromedp.ListenTarget on the new
+// target ctx BEFORE calling AttachToTarget, for the same reason Enable
+// requires it: chromedp listeners are bound to a specific target's session,
+// and the replay burst from Debugger.enable is single-shot.
+//
+// AttachToTarget also rebinds the collector's internal ctx so subsequent
+// incremental fetches use the new target's session (Debugger.GetScriptSource
+// is target-scoped).
+func (c *Collector) AttachToTarget(ctx context.Context) error {
+	var innerCtx context.Context
+	if err := chromedp.Run(ctx, chromedp.ActionFunc(func(ctx context.Context) error {
+		innerCtx = ctx
+		if _, err := debugger.Enable().Do(ctx); err != nil {
+			return fmt.Errorf("enable debugger: %w", err)
+		}
+		if err := css.Enable().Do(ctx); err != nil {
+			return fmt.Errorf("enable css: %w", err)
+		}
+		return nil
+	})); err != nil {
+		return err
+	}
+	c.mu.Lock()
+	c.ctx = innerCtx
+	c.mu.Unlock()
+	return nil
+}
+
 // Close stops the background fetcher goroutine. Safe to call multiple times.
 func (c *Collector) Close() {
 	c.mu.Lock()
