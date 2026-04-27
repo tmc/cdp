@@ -531,10 +531,20 @@ func skipURL(u string) bool {
 
 func splitURL(raw string) (origin, relPath string) {
 	u, err := url.Parse(raw)
-	if err != nil || u.Host == "" {
+	if err != nil {
 		return "", ""
 	}
 	origin = u.Host
+	if origin == "" {
+		// Hostless URLs like file:///... still need an output bucket.
+		// Fall back to the scheme so all file:// sources group under
+		// outputDir/file/_compiled/... and follow the same layout as
+		// http(s) origins.
+		origin = u.Scheme
+	}
+	if origin == "" {
+		return "", ""
+	}
 	relPath = strings.TrimPrefix(u.Path, "/")
 	if relPath == "" {
 		relPath = "index"
