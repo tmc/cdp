@@ -3146,13 +3146,17 @@ func main() {
 				sourcesDir = "sources"
 			}
 			sc := sources.New(sourcesDir, verbose)
-			// Use ActionFunc to get a page-level context for debugger.Enable.
+			// Register the listener on browserCtx (long-lived) BEFORE
+			// calling sc.Enable, so the initial scriptParsed burst that
+			// Debugger.enable triggers is delivered. Registering it on
+			// the ActionFunc's ctx (which is canceled when the action
+			// returns) would leave the listener immediately stale.
+			chromedp.ListenTarget(browserCtx, sc.HandleEvent)
 			if err := chromedp.Run(browserCtx, chromedp.ActionFunc(func(ctx context.Context) error {
 				return sc.Enable(ctx)
 			})); err != nil {
 				log.Printf("Warning: failed to enable source capture: %v", err)
 			} else {
-				chromedp.ListenTarget(browserCtx, sc.HandleEvent)
 				defer func() {
 					sc.Close() // drain background goroutine
 					if err := chromedp.Run(browserCtx, chromedp.ActionFunc(func(ctx context.Context) error {
@@ -4180,13 +4184,15 @@ func handleEnhancedMode(command string, interactive bool, cfg fullCaptureConfig)
 				if !cfg.NoScrub {
 					sc.SetScrubber(scrub.New())
 				}
+				// Register the listener on chromeCtx (long-lived) BEFORE
+				// calling sc.Enable, so the initial scriptParsed burst
+				// that Debugger.enable triggers is delivered.
+				chromedp.ListenTarget(chromeCtx, sc.HandleEvent)
 				if err := chromedp.Run(chromeCtx, chromedp.ActionFunc(func(ctx context.Context) error {
 					return sc.Enable(ctx)
 				})); err != nil {
 					log.Printf("Warning: failed to enable source capture: %v", err)
 					sc = nil
-				} else {
-					chromedp.ListenTarget(chromeCtx, sc.HandleEvent)
 				}
 			}
 

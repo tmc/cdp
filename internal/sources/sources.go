@@ -87,6 +87,12 @@ func New(outputDir string, verbose bool) *Collector {
 // Enable activates the Debugger and CSS domains so the browser emits
 // scriptParsed and styleSheetAdded events. It also starts a background
 // goroutine for incremental source capture (fetch + write as events arrive).
+//
+// Callers must register HandleEvent via chromedp.ListenTarget on the
+// long-lived browser context BEFORE calling Enable; otherwise the burst
+// of scriptParsed events that fires for already-parsed scripts (the
+// only signal an attach-mode session ever sees for an idle, fully-loaded
+// page) will be missed.
 func (c *Collector) Enable(ctx context.Context) error {
 	var innerCtx context.Context
 	if err := chromedp.Run(ctx, chromedp.ActionFunc(func(ctx context.Context) error {
