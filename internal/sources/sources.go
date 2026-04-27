@@ -217,10 +217,18 @@ func (c *Collector) writeSourceEntry(sourceURL, source, sourceMapURL string) {
 	}
 }
 
+// debugEvents is set from CDP_SOURCES_DEBUG=1 at process start. When true,
+// HandleEvent logs every relevant CDP event it receives. Useful for
+// diagnosing whether a listener is wired to the right target session.
+var debugEvents = os.Getenv("CDP_SOURCES_DEBUG") == "1"
+
 // HandleEvent should be registered via chromedp.ListenTarget to receive CDP events.
 func (c *Collector) HandleEvent(ev interface{}) {
 	switch ev := ev.(type) {
 	case *debugger.EventScriptParsed:
+		if debugEvents {
+			log.Printf("sources: scriptParsed id=%s url=%s len=%d", ev.ScriptID, ev.URL, ev.Length)
+		}
 		c.mu.Lock()
 		c.scripts[ev.ScriptID] = &ScriptInfo{
 			ScriptID:     ev.ScriptID,
@@ -245,6 +253,9 @@ func (c *Collector) HandleEvent(ev interface{}) {
 		}
 	case *css.EventStyleSheetAdded:
 		h := ev.Header
+		if debugEvents {
+			log.Printf("sources: styleSheetAdded id=%s url=%s", h.StyleSheetID, h.SourceURL)
+		}
 		c.mu.Lock()
 		c.styles[h.StyleSheetID] = &StyleInfo{
 			StyleSheetID: h.StyleSheetID,
