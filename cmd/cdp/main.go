@@ -4405,11 +4405,13 @@ func setupChromeForEnhanced(ctx context.Context, cfg fullCaptureConfig) (context
 		// Auto-discover browser — prefer connecting to a running instance with debug port.
 		// When a running browser is found, its actual debug port overrides debugPort above,
 		// since we're connecting to it rather than launching a new one.
+		// A requested profile always needs its own browser instance, so don't reuse
+		// a running one in that case.
 		candidates, err := discoverBrowsers(verbose)
 		if err == nil && len(candidates) > 0 {
 			best := selectBestBrowser(candidates, verbose)
 			if best != nil {
-				if best.IsRunning && best.DebugPort > 0 {
+				if best.IsRunning && best.DebugPort > 0 && cfg.UseProfile == "" {
 					remoteHost = "localhost"
 					remotePort = best.DebugPort
 				} else if best.Path != "" {
