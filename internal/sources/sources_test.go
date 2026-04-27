@@ -1,6 +1,11 @@
 package sources
 
-import "testing"
+import (
+	"context"
+	"testing"
+
+	"github.com/chromedp/cdproto/debugger"
+)
 
 func TestSplitURL(t *testing.T) {
 	tests := []struct {
@@ -49,5 +54,41 @@ func TestSplitURL(t *testing.T) {
 					tt.raw, gotOrigin, gotRel, tt.wantOrigin, tt.wantRel)
 			}
 		})
+	}
+}
+
+// TestListenerTagsCtx verifies that Listener(ctx) closures stamp each
+// queued fetchItem with the ctx they were created against, so the
+// background fetcher can route GetScriptSource to the correct
+// session-scoped target context. Regression test for cross-session
+// ScriptID aliasing observed when capturing across tab switches.
+func TestListenerTagsCtx(t *testing.T) {
+	c := New(t.TempDir(), false)
+	c.fetchCh = make(chan fetchItem, 4)
+	c.incremental = true
+
+	type ctxKey string
+	ctxA := context.WithValue(context.Background(), ctxKey("tab"), "A")
+	ctxB := context.WithValue(context.Background(), ctxKey("tab"), "B")
+
+	listenerA := c.Listener(ctxA)
+	listenerB := c.Listener(ctxB)
+
+	listenerA(&debugger.EventScriptParsed{ScriptID: "1", URL: "https://a/x.js"})
+	listenerB(&debugger.EventScriptParsed{ScriptID: "1", URL: "https://b/x.js"})
+
+	first := <-c.fetchCh
+	if first.ctx.Value(ctxKey("tab")) != "A" {
+		t.Errorf("first item ctx = %v, want A", first.ctx.Value(ctxKey("tab")))
+	}
+	if first.url != "https://a/x.js" {
+		t.Errorf("first item url = %q, want https://a/x.js", first.url)
+	}
+	second := <-c.fetchCh
+	if second.ctx.Value(ctxKey("tab")) != "B" {
+		t.Errorf("second item ctx = %v, want B", second.ctx.Value(ctxKey("tab")))
+	}
+	if second.url != "https://b/x.js" {
+		t.Errorf("second item url = %q, want https://b/x.js", second.url)
 	}
 }

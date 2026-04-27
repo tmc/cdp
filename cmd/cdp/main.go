@@ -3156,7 +3156,7 @@ func main() {
 			// Debugger.enable triggers is delivered. Registering it on
 			// the ActionFunc's ctx (which is canceled when the action
 			// returns) would leave the listener immediately stale.
-			chromedp.ListenTarget(browserCtx, sc.HandleEvent)
+			chromedp.ListenTarget(browserCtx, sc.Listener(browserCtx))
 			if err := chromedp.Run(browserCtx, chromedp.ActionFunc(func(ctx context.Context) error {
 				return sc.Enable(ctx)
 			})); err != nil {
@@ -3562,7 +3562,7 @@ func main() {
 							// listener is stranded on the previous
 							// target's session and tab N capture is silent.
 							if sourceCollector != nil {
-								chromedp.ListenTarget(newCtx, sourceCollector.HandleEvent)
+								chromedp.ListenTarget(newCtx, sourceCollector.Listener(newCtx))
 								if err := sourceCollector.AttachToTarget(newCtx); err != nil && verbose {
 									log.Printf("Warning: source capture re-attach: %v", err)
 								}
@@ -4205,7 +4205,7 @@ func handleEnhancedMode(command string, interactive bool, cfg fullCaptureConfig)
 				// Register the listener on chromeCtx (long-lived) BEFORE
 				// calling sc.Enable, so the initial scriptParsed burst
 				// that Debugger.enable triggers is delivered.
-				chromedp.ListenTarget(chromeCtx, sc.HandleEvent)
+				chromedp.ListenTarget(chromeCtx, sc.Listener(chromeCtx))
 				if err := chromedp.Run(chromeCtx, chromedp.ActionFunc(func(ctx context.Context) error {
 					return sc.Enable(ctx)
 				})); err != nil {

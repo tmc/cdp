@@ -351,7 +351,7 @@ func runMCP(cfg mcpConfig) error {
 			// Register the listener on browserCtx (long-lived) BEFORE
 			// calling Enable, so the initial scriptParsed burst that
 			// Debugger.enable triggers is delivered.
-			chromedp.ListenTarget(browserCtx, sourceCollector.HandleEvent)
+			chromedp.ListenTarget(browserCtx, sourceCollector.Listener(browserCtx))
 			if err := sourceCollector.Enable(browserCtx); err != nil {
 				log.Printf("warning: failed to enable source capture: %v", err)
 				sourceCollector = nil

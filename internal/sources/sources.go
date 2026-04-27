@@ -44,12 +44,19 @@ type StyleInfo struct {
 }
 
 // fetchItem is sent to the background goroutine for incremental capture.
+//
+// ctx is the target session that emitted the event. ScriptIDs and
+// StyleSheetIDs are session-scoped: id 42 in tab A's session refers to a
+// different script than id 42 in tab B's session. The fetcher must use
+// the same session that observed the event, not whatever session is
+// "currently active" at dequeue time.
 type fetchItem struct {
-	scriptID    cdp.ScriptID
+	ctx          context.Context
+	scriptID     cdp.ScriptID
 	styleSheetID cdp.StyleSheetID
-	url         string
+	url          string
 	sourceMapURL string
-	isStyle     bool
+	isStyle      bool
 }
 
 // Collector captures JavaScript and CSS sources from a browser session.
@@ -121,18 +128,15 @@ func (c *Collector) Enable(ctx context.Context) error {
 // chromedp.NewContext(parent, chromedp.WithTargetID(...)) to receive events
 // from the new target's session.
 //
-// Callers must register HandleEvent via chromedp.ListenTarget on the new
-// target ctx BEFORE calling AttachToTarget, for the same reason Enable
-// requires it: chromedp listeners are bound to a specific target's session,
-// and the replay burst from Debugger.enable is single-shot.
-//
-// AttachToTarget also rebinds the collector's internal ctx so subsequent
-// incremental fetches use the new target's session (Debugger.GetScriptSource
-// is target-scoped).
+// Callers must register a per-target listener via
+// chromedp.ListenTarget(ctx, c.Listener(ctx)) on the new target ctx BEFORE
+// calling AttachToTarget. chromedp listeners are bound to a specific
+// target's session, and the replay burst from Debugger.enable is
+// single-shot. The Listener closure carries the ctx so the background
+// fetcher uses the right session for GetScriptSource (ScriptIDs are
+// per-session, not globally unique).
 func (c *Collector) AttachToTarget(ctx context.Context) error {
-	var innerCtx context.Context
-	if err := chromedp.Run(ctx, chromedp.ActionFunc(func(ctx context.Context) error {
-		innerCtx = ctx
+	return chromedp.Run(ctx, chromedp.ActionFunc(func(ctx context.Context) error {
 		if _, err := debugger.Enable().Do(ctx); err != nil {
 			return fmt.Errorf("enable debugger: %w", err)
 		}
@@ -140,13 +144,7 @@ func (c *Collector) AttachToTarget(ctx context.Context) error {
 			return fmt.Errorf("enable css: %w", err)
 		}
 		return nil
-	})); err != nil {
-		return err
-	}
-	c.mu.Lock()
-	c.ctx = innerCtx
-	c.mu.Unlock()
-	return nil
+	}))
 }
 
 // Close stops the background fetcher goroutine. Safe to call multiple times.
@@ -178,7 +176,11 @@ func (c *Collector) backgroundFetcher() {
 }
 
 func (c *Collector) fetchAndWriteScript(item fetchItem) {
-	src, _, err := debugger.GetScriptSource(item.scriptID).Do(c.ctx)
+	ctx := item.ctx
+	if ctx == nil {
+		ctx = c.ctx
+	}
+	src, _, err := debugger.GetScriptSource(item.scriptID).Do(ctx)
 	if err != nil {
 		if c.verbose {
 			log.Printf("sources: incremental get script %s: %v", item.url, err)
@@ -196,7 +198,11 @@ func (c *Collector) fetchAndWriteScript(item fetchItem) {
 }
 
 func (c *Collector) fetchAndWriteStyle(item fetchItem) {
-	text, err := css.GetStyleSheetText(item.styleSheetID).Do(c.ctx)
+	ctx := item.ctx
+	if ctx == nil {
+		ctx = c.ctx
+	}
+	text, err := css.GetStyleSheetText(item.styleSheetID).Do(ctx)
 	if err != nil {
 		if c.verbose {
 			log.Printf("sources: incremental get stylesheet %s: %v", item.url, err)
@@ -252,16 +258,43 @@ func (c *Collector) writeSourceEntry(sourceURL, source, sourceMapURL string) {
 }
 
 // debugEvents is set from CDP_SOURCES_DEBUG=1 at process start. When true,
-// HandleEvent logs every relevant CDP event it receives. Useful for
-// diagnosing whether a listener is wired to the right target session.
+// the collector logs every relevant CDP event it receives. Writes go
+// directly to os.Stderr (not the log package) so the line can't be
+// silently dropped by a log redirect.
 var debugEvents = os.Getenv("CDP_SOURCES_DEBUG") == "1"
 
-// HandleEvent should be registered via chromedp.ListenTarget to receive CDP events.
-func (c *Collector) HandleEvent(ev interface{}) {
+func debugLogf(format string, args ...any) {
+	fmt.Fprintf(os.Stderr, "sources: "+format+"\n", args...)
+}
+
+// Listener returns an event-handler closure bound to ctx. Pass the result
+// to chromedp.ListenTarget. The closure tags every queued fetchItem with
+// ctx so the background fetcher uses that target's session for
+// Debugger.GetScriptSource and CSS.GetStyleSheetText (both are scoped to
+// the session that emitted the event — ScriptIDs/StyleSheetIDs are not
+// globally unique).
+//
+// Use a separate Listener per target context. After a tab switch, register
+// a fresh Listener on the new ctx; the prior listener stays bound to its
+// original session and continues to handle late events from that target.
+func (c *Collector) Listener(ctx context.Context) func(ev any) {
+	return func(ev any) {
+		c.dispatch(ctx, ev)
+	}
+}
+
+// HandleEvent is a back-compat shim that uses the collector's Enable-time
+// ctx. Prefer Listener(ctx) for new code so per-target session routing is
+// preserved across tab switches.
+func (c *Collector) HandleEvent(ev any) {
+	c.dispatch(c.ctx, ev)
+}
+
+func (c *Collector) dispatch(ctx context.Context, ev any) {
 	switch ev := ev.(type) {
 	case *debugger.EventScriptParsed:
 		if debugEvents {
-			log.Printf("sources: scriptParsed id=%s url=%s len=%d", ev.ScriptID, ev.URL, ev.Length)
+			debugLogf("scriptParsed id=%s url=%s len=%d", ev.ScriptID, ev.URL, ev.Length)
 		}
 		c.mu.Lock()
 		c.scripts[ev.ScriptID] = &ScriptInfo{
@@ -277,6 +310,7 @@ func (c *Collector) HandleEvent(ev interface{}) {
 		if incr {
 			select {
 			case c.fetchCh <- fetchItem{
+				ctx:          ctx,
 				scriptID:     ev.ScriptID,
 				url:          ev.URL,
 				sourceMapURL: ev.SourceMapURL,
@@ -288,7 +322,7 @@ func (c *Collector) HandleEvent(ev interface{}) {
 	case *css.EventStyleSheetAdded:
 		h := ev.Header
 		if debugEvents {
-			log.Printf("sources: styleSheetAdded id=%s url=%s", h.StyleSheetID, h.SourceURL)
+			debugLogf("styleSheetAdded id=%s url=%s", h.StyleSheetID, h.SourceURL)
 		}
 		c.mu.Lock()
 		c.styles[h.StyleSheetID] = &StyleInfo{
@@ -301,6 +335,7 @@ func (c *Collector) HandleEvent(ev interface{}) {
 		if incr {
 			select {
 			case c.fetchCh <- fetchItem{
+				ctx:          ctx,
 				styleSheetID: h.StyleSheetID,
 				url:          h.SourceURL,
 				sourceMapURL: h.SourceMapURL,
