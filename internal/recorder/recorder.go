@@ -65,6 +65,9 @@ type Recorder struct {
 
 	// Secret scrubbing
 	scrubber *scrub.Scrubber
+
+	// WebSocket capture (see websocket_capture.go).
+	ws wsLockedFields
 }
 
 type FilterOption struct {
@@ -172,6 +175,21 @@ func (r *Recorder) HandleNetworkEvent(ctx context.Context) func(interface{}) {
 	return func(ev interface{}) {
 		r.Lock()
 		defer r.Unlock()
+
+		// WebSocket events are dispatched to a dedicated handler. They share
+		// the recorder mutex with the HTTP path so streaming entries to the
+		// same per-host JSONL file is race-free.
+		switch ev.(type) {
+		case *network.EventWebSocketCreated,
+			*network.EventWebSocketWillSendHandshakeRequest,
+			*network.EventWebSocketHandshakeResponseReceived,
+			*network.EventWebSocketFrameSent,
+			*network.EventWebSocketFrameReceived,
+			*network.EventWebSocketFrameError,
+			*network.EventWebSocketClosed:
+			r.handleWebSocketEvent(ev)
+			return
+		}
 
 		switch e := ev.(type) {
 		case *network.EventRequestWillBeSent:
@@ -599,8 +617,17 @@ func (r *Recorder) writeToDomainFile(entry *har.Entry, data []byte) error {
 	if uStr == "" {
 		return fmt.Errorf("no URL in entry")
 	}
+	return r.writeRawToDomainFile(uStr, r.outputDir, data)
+}
 
-	u, err := url.Parse(uStr)
+// writeRawToDomainFile writes a pre-marshaled JSON line to the per-host
+// JSONL file under dir. Used by both HTTP and WebSocket streaming paths.
+// Caller must hold r.Lock().
+func (r *Recorder) writeRawToDomainFile(rawURL, dir string, data []byte) error {
+	if rawURL == "" {
+		return fmt.Errorf("no URL")
+	}
+	u, err := url.Parse(rawURL)
 	if err != nil {
 		return err
 	}
@@ -609,10 +636,8 @@ func (r *Recorder) writeToDomainFile(entry *har.Entry, data []byte) error {
 		hostname = "unknown_domain"
 	}
 
-	// Note: lock is already held by caller (HandleNetworkEvent -> streamEntry)
 	writer, ok := r.domainWriters[hostname]
 	if ok {
-		// Check if the file was removed; if so, reopen it.
 		if _, statErr := writer.Stat(); statErr != nil {
 			writer.Close()
 			delete(r.domainWriters, hostname)
@@ -620,12 +645,10 @@ func (r *Recorder) writeToDomainFile(entry *har.Entry, data []byte) error {
 		}
 	}
 	if !ok {
-		// Ensure output directory exists.
-		if err := os.MkdirAll(r.outputDir, 0755); err != nil {
+		if err := os.MkdirAll(dir, 0755); err != nil {
 			return err
 		}
-
-		filename := filepath.Join(r.outputDir, fmt.Sprintf("%s.jsonl", hostname))
+		filename := filepath.Join(dir, fmt.Sprintf("%s.jsonl", hostname))
 		f, err := os.OpenFile(filename, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 		if err != nil {
 			return err
