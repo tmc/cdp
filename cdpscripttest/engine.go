@@ -173,10 +173,17 @@ func runCapture(t testing.TB, e *Engine, s *State, filename string, r io.Reader,
 		}
 
 		t.Helper()
+		cov, err := startCoverage(s)
+		if err != nil {
+			return err
+		}
 		defer func() {
 			t.Helper()
 			if closeErr := s.CloseAndWait(logBuf); err == nil {
 				err = closeErr
+			}
+			if covErr := finishCoverage(cov, s); err == nil {
+				err = covErr
 			}
 			if streamer != nil {
 				streamer.Flush()

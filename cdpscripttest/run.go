@@ -122,9 +122,16 @@ func runFile(allocCtx context.Context, e *Engine, file string, opts RunOptions) 
 	logBuf.WriteString("\n")
 
 	runErr := func() (err error) {
+		cov, err := startCoverage(s)
+		if err != nil {
+			return err
+		}
 		defer func() {
 			if closeErr := s.CloseAndWait(logBuf); err == nil {
 				err = closeErr
+			}
+			if covErr := finishCoverage(cov, s); err == nil {
+				err = covErr
 			}
 		}()
 		return e.Execute(s.State, file, bufio.NewReader(bytes.NewReader(a.Comment)), logBuf)

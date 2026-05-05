@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Coverage Fixture</title>
+<style>
+#status {
+	display: block;
+}
+</style>
+<script>
+function markCovered() {
+	document.getElementById("status").textContent = "covered";
+}
+
+window.addEventListener("DOMContentLoaded", markCovered);
+</script>
+</head>
+<body>
+<p id="status">pending</p>
+</body>
+</html>

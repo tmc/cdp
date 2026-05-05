@@ -1,0 +1,2 @@
+goto /coverage.html
+wait '#status'
