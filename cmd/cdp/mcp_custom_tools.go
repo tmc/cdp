@@ -36,7 +36,7 @@ var builtinToolNames = map[string]bool{
 	"intercept_request": true, "intercept_response": true,
 	"remove_intercept": true, "list_intercepts": true,
 	"save_pdf":    true,
-	"start_trace": true, "stop_trace": true,
+	"start_trace": true, "stop_trace": true, "analyze_trace": true,
 	"save_state": true, "load_state": true,
 	"snapshot_dom": true, "dom_diff": true, "list_dom_snapshots": true,
 	"analyze_bundle": true, "generate_sourcemap": true, "serve_sourcemap": true,

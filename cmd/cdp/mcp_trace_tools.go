@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 
 	"github.com/chromedp/cdproto/tracing"
@@ -68,6 +70,28 @@ type StartTraceInput struct {
 
 type StopTraceInput struct {
 	Path string `json:"path,omitempty"`
+}
+
+type AnalyzeTraceInput struct {
+	Path string `json:"path,omitempty"`
+}
+
+type coreWebVitals struct {
+	LCPMS float64 `json:"lcp_ms"`
+	INPMS float64 `json:"inp_ms"`
+	CLS   float64 `json:"cls"`
+}
+
+type traceEvent struct {
+	Name string          `json:"name"`
+	TS   float64         `json:"ts"`
+	Dur  float64         `json:"dur"`
+	Args traceEventArgs  `json:"args"`
+	Raw  json.RawMessage `json:"-"`
+}
+
+type traceEventArgs struct {
+	Data map[string]any `json:"data"`
 }
 
 func registerTraceTools(server *mcp.Server, s *mcpSession) {
@@ -158,6 +182,41 @@ func registerTraceTools(server *mcp.Server, s *mcpSession) {
 			Content: []mcp.Content{&mcp.TextContent{Text: fmt.Sprintf("trace saved to %s (%d events, %d bytes)", path, len(events), len(data))}},
 		}, nil, nil
 	})
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "analyze_trace",
+		Description: "Analyze a Chrome trace JSON file and return Core Web Vitals: LCP, INP, and CLS. Use path \"-\" to read from stdin.",
+		Annotations: &mcp.ToolAnnotations{
+			ReadOnlyHint: true,
+		},
+	}, func(ctx context.Context, req *mcp.CallToolRequest, input AnalyzeTraceInput) (*mcp.CallToolResult, any, error) {
+		var r io.Reader
+		switch input.Path {
+		case "":
+			return nil, nil, fmt.Errorf("analyze_trace: path required")
+		case "-":
+			r = os.Stdin
+		default:
+			f, err := os.Open(input.Path)
+			if err != nil {
+				return nil, nil, fmt.Errorf("analyze_trace: open: %w", err)
+			}
+			defer f.Close()
+			r = f
+		}
+
+		vitals, err := analyzeTrace(r)
+		if err != nil {
+			return nil, nil, fmt.Errorf("analyze_trace: %w", err)
+		}
+		data, err := json.Marshal(vitals)
+		if err != nil {
+			return nil, nil, fmt.Errorf("analyze_trace: marshal: %w", err)
+		}
+		return &mcp.CallToolResult{
+			Content: []mcp.Content{&mcp.TextContent{Text: string(data)}},
+		}, nil, nil
+	})
 }
 
 func splitCategories(s string) []string {
@@ -192,4 +251,130 @@ func trimSpace(s string) string {
 		s = s[:len(s)-1]
 	}
 	return s
+}
+
+func analyzeTrace(r io.Reader) (coreWebVitals, error) {
+	dec := json.NewDecoder(r)
+	tok, err := dec.Token()
+	if err != nil {
+		return coreWebVitals{}, err
+	}
+	d, ok := tok.(json.Delim)
+	if !ok {
+		return coreWebVitals{}, fmt.Errorf("trace must be JSON object or array")
+	}
+	switch d {
+	case '{':
+		for dec.More() {
+			tok, err := dec.Token()
+			if err != nil {
+				return coreWebVitals{}, err
+			}
+			key, ok := tok.(string)
+			if !ok {
+				return coreWebVitals{}, fmt.Errorf("object key is not a string")
+			}
+			if key != "traceEvents" {
+				var skip any
+				if err := dec.Decode(&skip); err != nil {
+					return coreWebVitals{}, err
+				}
+				continue
+			}
+			return analyzeTraceEvents(dec)
+		}
+		return coreWebVitals{}, fmt.Errorf("traceEvents not found")
+	case '[':
+		return analyzeTraceEventsOpen(dec)
+	default:
+		return coreWebVitals{}, fmt.Errorf("trace must be JSON object or array")
+	}
+}
+
+func analyzeTraceEvents(dec *json.Decoder) (coreWebVitals, error) {
+	tok, err := dec.Token()
+	if err != nil {
+		return coreWebVitals{}, err
+	}
+	if d, ok := tok.(json.Delim); !ok || d != '[' {
+		return coreWebVitals{}, fmt.Errorf("traceEvents must be an array")
+	}
+	return analyzeTraceEventsOpen(dec)
+}
+
+func analyzeTraceEventsOpen(dec *json.Decoder) (coreWebVitals, error) {
+	var vitals coreWebVitals
+	var navStart float64
+	var lcpTS float64
+
+	for dec.More() {
+		var ev traceEvent
+		if err := dec.Decode(&ev); err != nil {
+			return coreWebVitals{}, err
+		}
+		switch {
+		case isNavigationStart(ev.Name):
+			if navStart == 0 || ev.TS < navStart {
+				navStart = ev.TS
+			}
+		case strings.Contains(ev.Name, "LargestContentfulPaint::Candidate"):
+			if ev.TS >= lcpTS {
+				lcpTS = ev.TS
+			}
+		case ev.Name == "EventTiming":
+			d := eventDurationMS(ev)
+			if d > vitals.INPMS {
+				vitals.INPMS = d
+			}
+		case ev.Name == "LayoutShift":
+			if !boolField(ev.Args.Data, "had_recent_input") {
+				vitals.CLS += numberField(ev.Args.Data, "score")
+			}
+		}
+	}
+	if _, err := dec.Token(); err != nil {
+		return coreWebVitals{}, err
+	}
+	if lcpTS != 0 {
+		if navStart != 0 && lcpTS >= navStart {
+			vitals.LCPMS = (lcpTS - navStart) / 1000
+		} else {
+			vitals.LCPMS = lcpTS / 1000
+		}
+	}
+	return vitals, nil
+}
+
+func isNavigationStart(name string) bool {
+	return name == "navigationStart" || name == "NavigationStart" || strings.HasSuffix(name, "::navigationStart")
+}
+
+func eventDurationMS(ev traceEvent) float64 {
+	if d := numberField(ev.Args.Data, "duration"); d != 0 {
+		return d
+	}
+	return ev.Dur / 1000
+}
+
+func numberField(m map[string]any, key string) float64 {
+	if m == nil {
+		return 0
+	}
+	switch v := m[key].(type) {
+	case float64:
+		return v
+	case json.Number:
+		f, _ := v.Float64()
+		return f
+	default:
+		return 0
+	}
+}
+
+func boolField(m map[string]any, key string) bool {
+	if m == nil {
+		return false
+	}
+	v, _ := m[key].(bool)
+	return v
 }
