@@ -27,6 +27,8 @@ func TestHelpText(t *testing.T) {
 # hello-world
 #
 # Say hello.
+#
+# usage: hello.cdpscript NAME
 
 -- main.cdp --
 log hello
@@ -43,11 +45,33 @@ log hello
 		"hello.cdpscript",
 		"hello-world",
 		"Say hello.",
-		"Usage: hello.cdpscript [args...]",
+		"Usage: hello.cdpscript NAME",
 	} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("help text missing %q:\n%s", want, text)
 		}
+	}
+}
+
+func TestHelpTextDefaultUsage(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "hello.cdpscript")
+	data := `#!/usr/bin/env cdpscript
+# hello-world
+
+-- main.cdp --
+log hello
+`
+	if err := os.WriteFile(path, []byte(data), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	text, err := HelpText(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "Usage: hello.cdpscript [args...]"; !strings.Contains(text, want) {
+		t.Fatalf("help text missing %q:\n%s", want, text)
 	}
 }
 

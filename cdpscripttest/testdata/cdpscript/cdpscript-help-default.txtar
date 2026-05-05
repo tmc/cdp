@@ -1,0 +1,6 @@
+# cdpscript default help fixture
+
+-- main.cdp --
+goto data:text/html,%3Cdiv%20id=status%3Eok%3C/div%3E
+wait '#status'
+assert text '#status' ok

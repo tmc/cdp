@@ -20,6 +20,8 @@ func TestScriptCmdHelpAfterScriptPath(t *testing.T) {
 # demo
 #
 # Demonstrate script help.
+#
+# usage: demo.cdpscript TARGET
 
 -- main.cdp --
 log demo
@@ -45,7 +47,7 @@ log demo
 		"demo.cdpscript",
 		"demo",
 		"Demonstrate script help.",
-		"Usage: demo.cdpscript [args...]",
+		"Usage: demo.cdpscript TARGET",
 	} {
 		if !strings.Contains(stdout.String(), want) {
 			t.Fatalf("stdout missing %q:\n%s", want, stdout.String())

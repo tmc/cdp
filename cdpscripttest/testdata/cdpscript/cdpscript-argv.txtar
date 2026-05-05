@@ -1,0 +1,8 @@
+# cdpscript argv fixture
+#
+# usage: cdpscript-argv.txtar hello world
+
+-- main.cdp --
+goto data:text/html,%3Cdiv%20id=status%3E$ARGC:$ARG1:$ARG2%3C/div%3E
+wait '#status'
+assert text '#status' 2:hello:world

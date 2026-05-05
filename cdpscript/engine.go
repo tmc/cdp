@@ -149,6 +149,7 @@ func HelpText(path string) (string, error) {
 	}
 
 	name := filepath.Base(path)
+	usage := archiveUsage(archive.Comment, name)
 
 	var b strings.Builder
 	b.WriteString(name)
@@ -157,10 +158,31 @@ func HelpText(path string) (string, error) {
 		b.WriteString(archive.Comment)
 		b.WriteString("\n\n")
 	}
-	b.WriteString("Usage: ")
-	b.WriteString(name)
-	b.WriteString(" [args...]\n")
+	b.WriteString(usage)
+	b.WriteString("\n")
 	return b.String(), nil
+}
+
+func archiveUsage(comment, name string) string {
+	lines := strings.Split(comment, "\n")
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if !strings.HasPrefix(strings.ToLower(trimmed), "usage:") {
+			continue
+		}
+		usage := strings.TrimSpace(trimmed[len("usage:"):])
+		if usage != "" {
+			return "Usage: " + usage
+		}
+		for _, next := range lines[i+1:] {
+			next = strings.TrimSpace(next)
+			if next != "" {
+				return "Usage: " + next
+			}
+		}
+		break
+	}
+	return "Usage: " + name + " [args...]"
 }
 
 func cleanArchiveComment(comment string) string {
