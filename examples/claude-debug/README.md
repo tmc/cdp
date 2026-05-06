@@ -6,7 +6,7 @@ This directory contains debugging utilities for diagnosing stuck Claude Code ses
 
 - **`nodejs-claude-debugger.js`** - Comprehensive Node.js debugging tool
 - **`claude-debug-attach.sh`** - Quick debug attachment script
-- **`CLAUDE_DEBUG_GUIDE.md`** - Complete debugging guide
+- **`debugging.md`** - Complete debugging guide
 
 ## Quick Usage
 
@@ -24,7 +24,7 @@ node nodejs-claude-debugger.js report <PID>
 ./claude-debug-attach.sh attach <PID>
 ```
 
-See `CLAUDE_DEBUG_GUIDE.md` for detailed documentation.
+See `debugging.md` for detailed documentation.
 
 ## Note
 
