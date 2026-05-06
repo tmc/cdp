@@ -361,6 +361,9 @@ func (e *Engine) cleanup() {
 	if e.browser != nil {
 		e.browser.Close()
 	}
+	if e.recorder != nil {
+		e.recorder.Close()
+	}
 }
 
 // commands returns the CDP commands for the script engine.

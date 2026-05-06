@@ -394,6 +394,9 @@ func runMCP(cfg mcpConfig) error {
 				log.Printf("warning: failed to write sources: %v", err)
 			}
 		}
+		if rec != nil {
+			rec.Close()
+		}
 		browserCancel()
 	}()
 
