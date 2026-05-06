@@ -10,7 +10,7 @@ Churl is a curl-like tool using Chrome/Chromium for JavaScript-enabled web fetch
 ## Active Development (Tracked in Beads)
 
 ### High Priority - Website Mirroring
-**wget-compatible SPA-aware mirroring** - See `MIRROR_DESIGN.md` for full spec
+**wget-compatible SPA-aware mirroring** - See `churl-mirror-design.md` for full spec
 
 Beads exist for:
 - wget-compatible flags (`-m, -r, -l, -k, -p, -np`)
