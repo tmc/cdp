@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/tmc/cdp/internal/browser"
-	"github.com/tmc/cdp/internal/chromeprofiles"
+	"github.com/tmc/cdp/internal/browserprofile"
 	"github.com/tmc/cdp/internal/testutil"
 )
 
@@ -27,7 +27,7 @@ func TestBrowserFullWorkflow(t *testing.T) {
 	defer cancel()
 
 	// Create real profile manager
-	profileMgr, err := chromeprofiles.NewProfileManager()
+	profileMgr, err := browserprofile.NewProfileManager()
 	if err != nil {
 		t.Fatal(err)
 	}

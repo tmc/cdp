@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/tmc/cdp/internal/browser"
-	"github.com/tmc/cdp/internal/chromeprofiles"
+	"github.com/tmc/cdp/internal/browserprofile"
 )
 
 // startRemoteChrome starts a Chrome instance with remote debugging enabled
@@ -160,7 +160,7 @@ func TestConnectToRunningChrome(t *testing.T) {
 
 	// Create browser that connects to running Chrome
 	ctx := context.Background()
-	profileMgr, _ := chromeprofiles.NewProfileManager()
+	profileMgr, _ := browserprofile.NewProfileManager()
 
 	b, err := browser.New(ctx, profileMgr,
 		browser.WithRemoteChrome("localhost", port),
@@ -218,7 +218,7 @@ func TestConnectToTab(t *testing.T) {
 
 	// Create browser that connects to specific tab
 	ctx := context.Background()
-	profileMgr, _ := chromeprofiles.NewProfileManager()
+	profileMgr, _ := browserprofile.NewProfileManager()
 
 	b, err := browser.New(ctx, profileMgr,
 		browser.WithRemoteTabConnection("localhost", port, tabID),
@@ -274,7 +274,7 @@ func TestRemoteBrowserOperations(t *testing.T) {
 
 	// Connect to remote Chrome
 	ctx := context.Background()
-	profileMgr, _ := chromeprofiles.NewProfileManager()
+	profileMgr, _ := browserprofile.NewProfileManager()
 
 	b, err := browser.New(ctx, profileMgr,
 		browser.WithRemoteChrome("localhost", port),
@@ -340,7 +340,7 @@ func TestRemoteMultipleTabs(t *testing.T) {
 
 	// Connect to remote Chrome
 	ctx := context.Background()
-	profileMgr, _ := chromeprofiles.NewProfileManager()
+	profileMgr, _ := browserprofile.NewProfileManager()
 
 	b, err := browser.New(ctx, profileMgr,
 		browser.WithRemoteChrome("localhost", port),
@@ -408,7 +408,7 @@ func TestRemoteErrorHandling(t *testing.T) {
 	skipIfNoChromish(t)
 
 	ctx := context.Background()
-	profileMgr, _ := chromeprofiles.NewProfileManager()
+	profileMgr, _ := browserprofile.NewProfileManager()
 
 	// Test connecting to non-existent Chrome
 	b, err := browser.New(ctx, profileMgr,

@@ -18,7 +18,7 @@
 //   - internal/browser manages browser discovery, launch, and interaction
 //   - internal/recorder handles HAR and enhanced traffic capture
 //   - internal/differential compares capture runs
-//   - internal/chromeprofiles discovers and manages browser profiles
+//   - internal/browserprofile discovers and manages browser profiles
 //
 // The broader entry point is cmd/cdp. The narrower capture-oriented entry point
 // is cmd/chrome-to-har.

@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/tmc/cdp/internal/browser"
-	"github.com/tmc/cdp/internal/chromeprofiles"
+	"github.com/tmc/cdp/internal/browserprofile"
 )
 
 // TestPerformanceMultipleNavigations tests rapid sequential navigations
@@ -402,7 +402,7 @@ func BenchmarkBrowserLaunch(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		profileMgr, _ := chromeprofiles.NewProfileManager()
+		profileMgr, _ := browserprofile.NewProfileManager()
 		browser, err := browser.New(ctx, profileMgr,
 			browser.WithHeadless(true),
 			browser.WithChromePath(chromePath),

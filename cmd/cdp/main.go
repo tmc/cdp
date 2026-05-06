@@ -34,7 +34,7 @@ import (
 	"github.com/chromedp/chromedp"
 	"github.com/tmc/cdp/internal/browser"
 	"github.com/tmc/cdp/internal/cdpproxy"
-	"github.com/tmc/cdp/internal/chromeprofiles"
+	"github.com/tmc/cdp/internal/browserprofile"
 	"github.com/tmc/cdp/internal/htmltomd"
 	harrecorder "github.com/tmc/cdp/internal/recorder"
 	"github.com/tmc/cdp/internal/scrub"
@@ -1493,8 +1493,8 @@ func main() {
 
 	// Handle profile listing
 	if listProfiles {
-		pm, err := chromeprofiles.NewProfileManager(
-			chromeprofiles.WithVerbose(verbose),
+		pm, err := browserprofile.NewProfileManager(
+			browserprofile.WithVerbose(verbose),
 		)
 		if err != nil {
 			exitWithError(ExitGeneralError, ErrorTypeProfile, "Failed to create profile manager: %v", err)
@@ -2340,8 +2340,8 @@ func main() {
 			} else {
 				// Use enhanced browser API for interactive mode
 				// Create profile manager
-				pm, err := chromeprofiles.NewProfileManager(
-					chromeprofiles.WithVerbose(verbose),
+				pm, err := browserprofile.NewProfileManager(
+					browserprofile.WithVerbose(verbose),
 				)
 				if err != nil {
 					exitWithError(ExitGeneralError, ErrorTypeGeneral, "%v", err)
@@ -2459,13 +2459,13 @@ func main() {
 			browserCtx, browserCancel = chromedp.NewContext(allocCtx, ctxOpts...)
 		} else {
 			// Local Chrome instance with optional profile support
-			var profileManager chromeprofiles.ProfileManager
+			var profileManager browserprofile.ProfileManager
 			var err error
 
 			// Set up profile management if requested
 			if useProfile != "" {
-				profileManager, err = chromeprofiles.NewProfileManager(
-					chromeprofiles.WithVerbose(verbose),
+				profileManager, err = browserprofile.NewProfileManager(
+					browserprofile.WithVerbose(verbose),
 				)
 				if err != nil {
 					exitWithError(ExitGeneralError, ErrorTypeProfile, "Failed to create profile manager: %v", err)
@@ -4568,8 +4568,8 @@ func setupChromeForEnhanced(ctx context.Context, cfg fullCaptureConfig) (context
 	var profileCleanup func()
 	var userDataDir string
 	if cfg.UseProfile != "" {
-		pm, err := chromeprofiles.NewProfileManager(
-			chromeprofiles.WithVerbose(verbose),
+		pm, err := browserprofile.NewProfileManager(
+			browserprofile.WithVerbose(verbose),
 		)
 		if err != nil {
 			return nil, nil, false, fmt.Errorf("failed to create profile manager: %w", err)

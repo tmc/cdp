@@ -21,7 +21,7 @@ import (
 	"github.com/chromedp/chromedp"
 
 	"github.com/tmc/cdp/internal/browser"
-	"github.com/tmc/cdp/internal/chromeprofiles"
+	"github.com/tmc/cdp/internal/browserprofile"
 	"github.com/tmc/cdp/internal/discovery"
 
 	"github.com/tmc/cdp/internal/recorder"
@@ -170,9 +170,9 @@ func printRunError(err error, verbose bool) {
 		message = "One or more request headers are invalid."
 	case errors.Is(err, errInvalidScript):
 		message = "One or more JavaScript snippets are invalid."
-	case errors.Is(err, chromeprofiles.ErrProfileNotFound):
+	case errors.Is(err, browserprofile.ErrProfileNotFound):
 		message = "Chrome profile not found. Please check the profile name and ensure it exists."
-	case errors.Is(err, chromeprofiles.ErrProfileSetup), errors.Is(err, chromeprofiles.ErrProfileCopy):
+	case errors.Is(err, browserprofile.ErrProfileSetup), errors.Is(err, browserprofile.ErrProfileCopy):
 		message = "Failed to prepare the Chrome profile."
 	case errors.Is(err, errChromeLaunch), errors.Is(err, browser.ErrConnection), errors.Is(err, browser.ErrNotLaunched):
 		message = "Failed to launch or connect to Chrome."
@@ -448,8 +448,8 @@ func main() {
 	}
 
 	// Create profile manager
-	pm, err := chromeprofiles.NewProfileManager(
-		chromeprofiles.WithVerbose(opts.verbose),
+	pm, err := browserprofile.NewProfileManager(
+		browserprofile.WithVerbose(opts.verbose),
 	)
 	if err != nil {
 		log.Fatal(err)
@@ -474,7 +474,7 @@ func main() {
 	}
 }
 
-func run(ctx context.Context, pm chromeprofiles.ProfileManager, url string, opts options) error {
+func run(ctx context.Context, pm browserprofile.ProfileManager, url string, opts options) error {
 	if opts.verbose {
 		log.Printf("Starting run function with URL: %s", url)
 	}
@@ -522,7 +522,7 @@ func run(ctx context.Context, pm chromeprofiles.ProfileManager, url string, opts
 		}
 
 		if !profileExists {
-			return fmt.Errorf("%w: specified Chrome profile does not exist (profile=%s)", chromeprofiles.ErrProfileNotFound, opts.profileDir)
+			return fmt.Errorf("%w: specified Chrome profile does not exist (profile=%s)", browserprofile.ErrProfileNotFound, opts.profileDir)
 		}
 	}
 

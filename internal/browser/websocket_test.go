@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
-	"github.com/tmc/cdp/internal/chromeprofiles"
+	"github.com/tmc/cdp/internal/browserprofile"
 	"github.com/tmc/cdp/internal/testutil"
 )
 
@@ -49,7 +49,7 @@ func TestWebSocketMonitoring(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	pm, err := chromeprofiles.NewProfileManager()
+	pm, err := browserprofile.NewProfileManager()
 	if err != nil {
 		t.Fatalf("Failed to create profile manager: %v", err)
 	}
@@ -204,7 +204,7 @@ func TestWebSocketWaitConditions(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	pm, err := chromeprofiles.NewProfileManager()
+	pm, err := browserprofile.NewProfileManager()
 	if err != nil {
 		t.Fatalf("Failed to create profile manager: %v", err)
 	}
@@ -299,7 +299,7 @@ func TestWebSocketHARExport(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	pm, err := chromeprofiles.NewProfileManager()
+	pm, err := browserprofile.NewProfileManager()
 	if err != nil {
 		t.Fatalf("Failed to create profile manager: %v", err)
 	}
@@ -398,7 +398,7 @@ func TestWebSocketPerformanceMonitoring(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	pm, err := chromeprofiles.NewProfileManager()
+	pm, err := browserprofile.NewProfileManager()
 	if err != nil {
 		t.Fatalf("Failed to create profile manager: %v", err)
 	}
@@ -502,7 +502,7 @@ func TestWebSocketFiltering(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	pm, err := chromeprofiles.NewProfileManager()
+	pm, err := browserprofile.NewProfileManager()
 	if err != nil {
 		t.Fatalf("Failed to create profile manager: %v", err)
 	}
@@ -606,7 +606,7 @@ func TestWebSocketMultipleConnections(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	pm, err := chromeprofiles.NewProfileManager()
+	pm, err := browserprofile.NewProfileManager()
 	if err != nil {
 		t.Fatalf("Failed to create profile manager: %v", err)
 	}
@@ -760,7 +760,7 @@ func BenchmarkWebSocketMonitoring(b *testing.B) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
-	pm, err := chromeprofiles.NewProfileManager()
+	pm, err := browserprofile.NewProfileManager()
 	if err != nil {
 		b.Fatalf("Failed to create profile manager: %v", err)
 	}

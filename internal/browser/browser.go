@@ -17,7 +17,7 @@ import (
 	"github.com/chromedp/cdproto/page"
 	"github.com/chromedp/chromedp"
 	"github.com/tmc/cdp/internal/blocking"
-	"github.com/tmc/cdp/internal/chromeprofiles"
+	"github.com/tmc/cdp/internal/browserprofile"
 )
 
 // filteredErrorf filters out noisy chromedp error messages
@@ -53,14 +53,14 @@ type Browser struct {
 	ctx            context.Context
 	cancelFunc     context.CancelFunc
 	opts           *Options
-	profileMgr     chromeprofiles.ProfileManager
+	profileMgr     browserprofile.ProfileManager
 	interceptor    *requestInterceptor
 	blockingEngine *blocking.BlockingEngine
 	attachedToTab  bool // True if connected to existing tab (don't close on cleanup)
 }
 
 // New creates a new Browser with the provided options
-func New(ctx context.Context, profileMgr chromeprofiles.ProfileManager, opts ...Option) (*Browser, error) {
+func New(ctx context.Context, profileMgr browserprofile.ProfileManager, opts ...Option) (*Browser, error) {
 	// Create default options
 	options := defaultOptions()
 

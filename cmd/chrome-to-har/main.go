@@ -22,7 +22,7 @@ import (
 
 	"github.com/tmc/cdp/internal/blocking"
 	"github.com/tmc/cdp/internal/browser"
-	"github.com/tmc/cdp/internal/chromeprofiles"
+	"github.com/tmc/cdp/internal/browserprofile"
 	"github.com/tmc/cdp/internal/differential"
 	"github.com/tmc/cdp/internal/discovery"
 
@@ -102,10 +102,10 @@ type options struct {
 var errChromeConnection = errors.New("chrome connection error")
 
 type Runner struct {
-	pm chromeprofiles.ProfileManager
+	pm browserprofile.ProfileManager
 }
 
-func NewRunner(pm chromeprofiles.ProfileManager) *Runner {
+func NewRunner(pm browserprofile.ProfileManager) *Runner {
 	return &Runner{pm: pm}
 }
 
@@ -114,14 +114,14 @@ func printRunError(err error, verbose bool) {
 	var suggestions []string
 
 	switch {
-	case errors.Is(err, chromeprofiles.ErrProfileNotFound):
+	case errors.Is(err, browserprofile.ErrProfileNotFound):
 		message = "Chrome profile not found. Please check the profile name and ensure it exists."
 		suggestions = []string{
 			"List available profiles with --list-profiles",
 			"Check the profile name spelling",
 			"Ensure the profile directory exists",
 		}
-	case errors.Is(err, chromeprofiles.ErrProfileSetup), errors.Is(err, chromeprofiles.ErrProfileCopy):
+	case errors.Is(err, browserprofile.ErrProfileSetup), errors.Is(err, browserprofile.ErrProfileCopy):
 		message = "Failed to set up the Chrome profile."
 		suggestions = []string{
 			"Check that the browser profile directory is readable",
@@ -301,8 +301,8 @@ func main() {
 		log.Printf("Using global timeout of %d seconds", opts.timeout)
 	}
 
-	pm, err := chromeprofiles.NewProfileManager(
-		chromeprofiles.WithVerbose(opts.verbose),
+	pm, err := browserprofile.NewProfileManager(
+		browserprofile.WithVerbose(opts.verbose),
 	)
 	if err != nil {
 		log.Fatal(err)
@@ -319,8 +319,8 @@ func main() {
 }
 
 func listAvailableProfiles(verbose bool) error {
-	pm, err := chromeprofiles.NewProfileManager(
-		chromeprofiles.WithVerbose(verbose),
+	pm, err := browserprofile.NewProfileManager(
+		browserprofile.WithVerbose(verbose),
 	)
 	if err != nil {
 		return err
@@ -338,7 +338,7 @@ func listAvailableProfiles(verbose bool) error {
 	return nil
 }
 
-func run(ctx context.Context, pm chromeprofiles.ProfileManager, opts options) error {
+func run(ctx context.Context, pm browserprofile.ProfileManager, opts options) error {
 	// Validate profile
 	if opts.profileDir == "" {
 		profiles, err := pm.ListProfiles()
@@ -346,7 +346,7 @@ func run(ctx context.Context, pm chromeprofiles.ProfileManager, opts options) er
 			return fmt.Errorf("failed to list Chrome profiles: %w", err)
 		}
 		if len(profiles) == 0 {
-			return fmt.Errorf("%w: no Chrome profiles found", chromeprofiles.ErrProfileNotFound)
+			return fmt.Errorf("%w: no Chrome profiles found", browserprofile.ErrProfileNotFound)
 		}
 		opts.profileDir = profiles[0]
 		if opts.verbose {
@@ -367,7 +367,7 @@ func run(ctx context.Context, pm chromeprofiles.ProfileManager, opts options) er
 		}
 	}
 	if !profileExists {
-		return fmt.Errorf("%w: specified Chrome profile does not exist (profile=%s)", chromeprofiles.ErrProfileNotFound, opts.profileDir)
+		return fmt.Errorf("%w: specified Chrome profile does not exist (profile=%s)", browserprofile.ErrProfileNotFound, opts.profileDir)
 	}
 
 	runner := NewRunner(pm)

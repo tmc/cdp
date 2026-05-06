@@ -1,4 +1,4 @@
-package chromeprofiles
+package browserprofile
 
 // Option configures a profile manager
 type Option func(*profileManager)

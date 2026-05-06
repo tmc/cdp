@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"github.com/tmc/cdp/internal/browser"
-	"github.com/tmc/cdp/internal/chromeprofiles"
+	"github.com/tmc/cdp/internal/browserprofile"
 )
 
 // TestStressLongRunningSession tests browser under prolonged usage
@@ -106,7 +106,7 @@ func TestStressMassiveConcurrency(t *testing.T) {
 
 			// Create browser
 			ctx := context.Background()
-			profileMgr, err := chromeprofiles.NewProfileManager()
+			profileMgr, err := browserprofile.NewProfileManager()
 			if err != nil {
 				errors <- fmt.Errorf("browser %d: profile manager failed: %v", browserNum, err)
 				return

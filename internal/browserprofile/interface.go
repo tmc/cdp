@@ -1,4 +1,4 @@
-package chromeprofiles
+package browserprofile
 
 // ProfileManager handles Chrome profile operations
 type ProfileManager interface {

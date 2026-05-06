@@ -1,4 +1,4 @@
-package chromeprofiles
+package browserprofile
 
 import (
 	"bytes"

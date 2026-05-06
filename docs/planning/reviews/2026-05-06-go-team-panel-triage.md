@@ -19,8 +19,8 @@ before action. Buckets: VERIFIED, HALLUCINATED, OVERRULED, DEFERRED.
 | 2 | Collapse cmd/{churl,chdb,ndp,native-host} into cdp subcommands | L | **OVERRULED** | User explicitly disagrees (2026-05-06). Five binaries stay separate. Don't re-litigate. |
 | 3 | Unify cdpscript / cdpscripttest dialects via `internal/scriptcmds` | M | **VERIFIED** | Both `cdpscripttest/cmds.go` and `cdpscript/engine.go` exist; the dialect duplication is real. Already on the v3 plan as A1.something — confirm and execute. |
 | 4 | De-bloat mcpSession god object | M | **VERIFIED** | `cmd/cdp/mcp.go` `mcpSession` holds 12+ subsystems. Real but invasive — needs its own arc. |
-| 5 | Delete internal/secureio | S→M | **VERIFIED-but-bigger** | Panel called this "S" but has 5 callers in `internal/chromeprofiles` (`SecureWriteFile`, `CreateSecureTempDir`, `SecureRemoveAll`, `SecureDirPerms`). Delete requires touching profile package too. Closer to M. |
-| 6 | Rename `chromeprofiles` → `profile`, `cdpinput` → `input`, `cdpproxy` → `proxy` | S | **VERIFIED partially** | `profile`: SAFE, doing now via `gomvpkg`. `cdpinput → input`: HALLUCINATED — collides with `github.com/chromedp/cdproto/input` already imported in 4+ files. `cdpproxy → proxy`: HALLUCINATED — `cdpproxy` is CDP-protocol-message proxy, not HTTP proxy; the prefix disambiguates. Discard the latter two. |
+| 5 | Delete internal/secureio | S→M | **VERIFIED-but-bigger** | Panel called this "S" but has 5 callers in `internal/browserprofile` (`SecureWriteFile`, `CreateSecureTempDir`, `SecureRemoveAll`, `SecureDirPerms`). Delete requires touching browserprofile package too. Closer to M. |
+| 6 | Rename `chromeprofiles` → `profile`, `cdpinput` → `input`, `cdpproxy` → `proxy` | S | **VERIFIED partially** | Landed as `chromeprofiles → browserprofile` (not bare `profile`: `profile` is too generic and shadowed real loop variables in `cmd/cdp/main.go`; `browserprofile` is explicit per project naming guidelines). `cdpinput → input`: HALLUCINATED — collides with `github.com/chromedp/cdproto/input` already imported in 4+ files. `cdpproxy → proxy`: HALLUCINATED — `cdpproxy` is CDP-protocol-message proxy, not HTTP proxy; the prefix disambiguates. Discard the latter two. |
 | 7 | Extract Sourcemap Analyzer from `mcp_sourcemap_tools.go` | M | **VERIFIED** | Already on the v3 plan as A5. |
 | 8 | Remove `internal/browser` OOP wrappers | L | **DEFERRED** | Real and significant, but multi-day. Three of four `cmd/*` binaries depend on `browser.Page`. Treat as own arc. |
 | 9 | Eliminate `chromedp.Run(ctx, chromedp.ActionFunc(...))` nesting | S | **VERIFIED** | 100 occurrences confirmed via grep. Already on v3 plan as A6. Mechanical sweep, low risk. |
@@ -42,7 +42,7 @@ before action. Buckets: VERIFIED, HALLUCINATED, OVERRULED, DEFERRED.
 
 Cheapest wins that survive triage and don't conflict with the user-overruled item:
 
-1. `internal/chromeprofiles → internal/profile` rename (the only valid #6) — via `gomvpkg`.
+1. `internal/chromeprofiles → internal/browserprofile` rename (the only valid #6) — done mechanically (gomvpkg hung at 21min CPU and was killed). `browserprofile` chosen over bare `profile` to avoid shadowing real loop variables in `cmd/cdp/main.go` and to follow CLAUDE.md "explicit and specific" naming.
 2. Possibly: delete `internal/secureio` and inline `os.WriteFile`/`os.MkdirTemp`/`os.RemoveAll`
    in the 5 caller sites (#5).
 

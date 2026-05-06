@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/tmc/cdp/internal/browser"
-	"github.com/tmc/cdp/internal/chromeprofiles"
+	"github.com/tmc/cdp/internal/browserprofile"
 	"github.com/tmc/cdp/internal/testutil"
 )
 
@@ -287,7 +287,7 @@ func createTestBrowser(t testing.TB, opts ...browser.Option) (*browser.Browser, 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 
 	// Create temp profile manager
-	profileMgr, err := chromeprofiles.NewProfileManager()
+	profileMgr, err := browserprofile.NewProfileManager()
 	if err != nil {
 		t.Fatal(err)
 	}
