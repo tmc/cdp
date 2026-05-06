@@ -17,7 +17,7 @@ before action. Buckets: VERIFIED, HALLUCINATED, OVERRULED, DEFERRED.
 |---|---|---|---|---|
 | 1 | Recorder I/O mutex (Blocker) | M | **VERIFIED** | `internal/recorder/recorder.go:43,169,609` exist; comment at line 607 explicitly says "caller must hold r.Lock() … to avoid deadlock" — the I/O is in the lock by design. Real concurrency bug. |
 | 2 | Collapse cmd/{churl,chdb,ndp,native-host} into cdp subcommands | L | **OVERRULED** | User explicitly disagrees (2026-05-06). Five binaries stay separate. Don't re-litigate. |
-| 3 | Unify cdpscript / cdpscripttest dialects via `internal/scriptcmds` | M | **VERIFIED** | Both `cdpscripttest/cmds.go` and `cdpscript/engine.go` exist; the dialect duplication is real. Already on the v3 plan as A1.something — confirm and execute. |
+| 3 | Unify cdpscript / cdpscripttest dialects via `internal/scriptcmds` | M | **OVERRULED with confirmation** | User confirms (2026-05-06) the existing two-library split is correct: `cdpscript/` is the runtime engine for *running* scripts; `cdpscripttest/` is the `go test` harness for *exercising* scripts under test. The structural split is already in place (each is a top-level library package; `cmd/cdpscript/` and `cmd/cdpscripttest/` are thin CLI wrappers). `cdpscripttest/cdpscript.go` already bridges to the engine via `RunCDPScript`. The "command-table duplication" the panel flagged is intentional — `cdpscripttest` extends the runtime vocabulary with test-only commands (assertions, fixtures, WebRTC test helpers) that have no place in a runtime CLI. Re-engage only with explicit user request. |
 | 4 | De-bloat mcpSession god object | M | **VERIFIED** | `cmd/cdp/mcp.go` `mcpSession` holds 12+ subsystems. Real but invasive — needs its own arc. |
 | 5 | Delete internal/secureio | S→M | **VERIFIED-but-bigger** | Panel called this "S" but has 5 callers in `internal/browserprofile` (`SecureWriteFile`, `CreateSecureTempDir`, `SecureRemoveAll`, `SecureDirPerms`). Delete requires touching browserprofile package too. Closer to M. |
 | 6 | Rename `chromeprofiles` → `profile`, `cdpinput` → `input`, `cdpproxy` → `proxy` | S | **VERIFIED partially** | Landed as `chromeprofiles → browserprofile` (not bare `profile`: `profile` is too generic and shadowed real loop variables in `cmd/cdp/main.go`; `browserprofile` is explicit per project naming guidelines). `cdpinput → input`: HALLUCINATED — collides with `github.com/chromedp/cdproto/input` already imported in 4+ files. `cdpproxy → proxy`: HALLUCINATED — `cdpproxy` is CDP-protocol-message proxy, not HTTP proxy; the prefix disambiguates. Discard the latter two. |
@@ -37,6 +37,16 @@ before action. Buckets: VERIFIED, HALLUCINATED, OVERRULED, DEFERRED.
 - **#2 binary consolidation** — five `cmd/*` binaries stay as separate top-level commands.
   Reason: not recorded; treat as a project constraint going forward. Re-engage only with
   explicit user request.
+- **#3 cdpscript/cdpscripttest unification** — `cdpscript/` (runtime library, with
+  `cmd/cdpscript/` as its thin CLI binary) and `cdpscripttest/` (test harness library,
+  with `cmd/cdpscripttest/` as its thin CLI binary) stay as separate packages with
+  separate command tables. The structural split is already in place; `cdpscripttest`
+  already imports `cdpscript` for the case where it needs to drive the real runtime
+  (`cdpscripttest/cdpscript.go:RunCDPScript`). The remaining "duplication" is
+  intentional — `cdpscripttest` extends the runtime vocabulary with test-only
+  commands (assertions, fixtures, WebRTC helpers) that have no place in a runtime
+  CLI. Lifting into `internal/scriptcmds` would couple them and erase an intentional
+  seam. Re-engage only with explicit user request.
 
 ## What lands in this session
 
