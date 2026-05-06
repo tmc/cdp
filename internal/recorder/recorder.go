@@ -8,7 +8,6 @@ import (
 	"log"
 	"net/url"
 	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 	"text/template"
@@ -41,20 +40,19 @@ type TagRange struct {
 
 type Recorder struct {
 	sync.Mutex
-	requests      map[network.RequestID]*network.Request
-	responses     map[network.RequestID]*network.Response
-	bodies        map[network.RequestID][]byte
-	postData      map[network.RequestID]string
-	timings       map[network.RequestID]*network.EventLoadingFinished
-	requestTags   map[network.RequestID]string // Tag for each request
-	annotations   []*Annotation                // Manual annotations from shell commands
-	verbose       bool
-	streaming     bool
-	filter        *FilterOption
-	template      string
-	ctx           context.Context // Store context for async body fetching
-	outputDir     string
-	domainWriters map[string]*os.File
+	requests    map[network.RequestID]*network.Request
+	responses   map[network.RequestID]*network.Response
+	bodies      map[network.RequestID][]byte
+	postData    map[network.RequestID]string
+	timings     map[network.RequestID]*network.EventLoadingFinished
+	requestTags map[network.RequestID]string // Tag for each request
+	annotations []*Annotation                // Manual annotations from shell commands
+	verbose     bool
+	streaming   bool
+	filter      *FilterOption
+	template    string
+	ctx         context.Context // Store context for async body fetching
+	outputDir   string
 
 	// Fetch domain interception
 	fetchBodies map[network.RequestID][]byte // Bodies captured via Fetch domain
@@ -68,7 +66,21 @@ type Recorder struct {
 
 	// WebSocket capture (see websocket_capture.go).
 	ws wsLockedFields
+
+	// Writer goroutine: decouples disk I/O from the chromedp event loop.
+	// Per-host file handles live exclusively inside writerLoop; callers
+	// send commands via the writes channel. See writer.go.
+	writes         chan writerCmd
+	writerDone     chan struct{}
+	writerStopOnce sync.Once
+	dropped        uint64 // atomic; incremented when writes channel is full
 }
+
+// writeQueueSize bounds the writer goroutine's intake buffer. Sized for a
+// burst of streamed entries during a heavy navigation (a large page can
+// generate hundreds of network entries within a few hundred milliseconds);
+// disk throughput drains this in milliseconds at steady state.
+const writeQueueSize = 1024
 
 type FilterOption struct {
 	JQExpr   string
@@ -124,37 +136,40 @@ func WithScrubber(s *scrub.Scrubber) Option {
 // SetOutputDir changes the output directory, closing any open domain writers.
 // New writes will go to files in the new directory.
 func (r *Recorder) SetOutputDir(dir string) {
+	r.closeAllWriters() // synchronous — drains any in-flight writes first
 	r.Lock()
-	defer r.Unlock()
-	for hostname, f := range r.domainWriters {
-		f.Close()
-		delete(r.domainWriters, hostname)
-	}
 	r.outputDir = dir
+	r.Unlock()
 }
 
-// CloseDomainWriters closes all open domain file handles.
+// CloseDomainWriters closes all open domain file handles. The writer
+// goroutine continues running; subsequent writes will reopen handles
+// lazily.
 func (r *Recorder) CloseDomainWriters() {
-	r.Lock()
-	defer r.Unlock()
-	for hostname, f := range r.domainWriters {
-		f.Close()
-		delete(r.domainWriters, hostname)
-	}
+	r.closeAllWriters()
+}
+
+// Close stops the writer goroutine after draining any queued writes.
+// Safe to call more than once. Should be called before the Recorder
+// goes out of scope so file handles flush; HAR/Save flows that need
+// to read the on-disk record after writing must Close first.
+func (r *Recorder) Close() {
+	r.stopWriter()
 }
 
 func New(opts ...Option) (*Recorder, error) {
 	r := &Recorder{
-		requests:      make(map[network.RequestID]*network.Request),
-		responses:     make(map[network.RequestID]*network.Response),
-		bodies:        make(map[network.RequestID][]byte),
-		postData:      make(map[network.RequestID]string),
-		timings:       make(map[network.RequestID]*network.EventLoadingFinished),
-		requestTags:   make(map[network.RequestID]string),
-		annotations:   make([]*Annotation, 0),
-		fetchBodies:   make(map[network.RequestID][]byte),
-		domainWriters: make(map[string]*os.File),
-		tagRanges:     make([]*TagRange, 0),
+		requests:    make(map[network.RequestID]*network.Request),
+		responses:   make(map[network.RequestID]*network.Response),
+		bodies:      make(map[network.RequestID][]byte),
+		postData:    make(map[network.RequestID]string),
+		timings:     make(map[network.RequestID]*network.EventLoadingFinished),
+		requestTags: make(map[network.RequestID]string),
+		annotations: make([]*Annotation, 0),
+		fetchBodies: make(map[network.RequestID][]byte),
+		tagRanges:   make([]*TagRange, 0),
+		writes:      make(chan writerCmd, writeQueueSize),
+		writerDone:  make(chan struct{}),
 	}
 
 	for _, opt := range opts {
@@ -162,6 +177,8 @@ func New(opts ...Option) (*Recorder, error) {
 			return nil, err
 		}
 	}
+
+	go r.writerLoop()
 
 	return r, nil
 }
@@ -603,62 +620,25 @@ func (r *Recorder) streamEntry(entry *har.Entry) {
 	fmt.Println(string(jsonBytes))
 }
 
-// writeToDomainFile writes entry to a domain-specific file.
-// Note: caller must hold r.Lock() - this function does not acquire the lock
-// to avoid deadlock when called from streamEntry which is called from HandleNetworkEvent.
+// writeToDomainFile streams entry to a domain-specific file via the writer
+// goroutine. Returns immediately; disk I/O happens asynchronously.
 func (r *Recorder) writeToDomainFile(entry *har.Entry, data []byte) error {
 	var uStr string
 	if entry.Request != nil && entry.Request.URL != "" {
 		uStr = entry.Request.URL
 	}
-	// Note: har.Response doesn't have a URL field.
-	// If entry.Request.URL is empty, we can't determine the domain.
-
 	if uStr == "" {
 		return fmt.Errorf("no URL in entry")
 	}
 	return r.writeRawToDomainFile(uStr, r.outputDir, data)
 }
 
-// writeRawToDomainFile writes a pre-marshaled JSON line to the per-host
-// JSONL file under dir. Used by both HTTP and WebSocket streaming paths.
-// Caller must hold r.Lock().
+// writeRawToDomainFile enqueues a pre-marshaled JSON line for the writer
+// goroutine to deliver to the per-host JSONL file. Used by both HTTP and
+// WebSocket streaming paths. Non-blocking: under sustained backpressure the
+// write is dropped and Recorder.dropped is incremented (see writer.go).
 func (r *Recorder) writeRawToDomainFile(rawURL, dir string, data []byte) error {
-	if rawURL == "" {
-		return fmt.Errorf("no URL")
-	}
-	u, err := url.Parse(rawURL)
-	if err != nil {
-		return err
-	}
-	hostname := u.Hostname()
-	if hostname == "" {
-		hostname = "unknown_domain"
-	}
-
-	writer, ok := r.domainWriters[hostname]
-	if ok {
-		if _, statErr := writer.Stat(); statErr != nil {
-			writer.Close()
-			delete(r.domainWriters, hostname)
-			ok = false
-		}
-	}
-	if !ok {
-		if err := os.MkdirAll(dir, 0755); err != nil {
-			return err
-		}
-		filename := filepath.Join(dir, fmt.Sprintf("%s.jsonl", hostname))
-		f, err := os.OpenFile(filename, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-		if err != nil {
-			return err
-		}
-		writer = f
-		r.domainWriters[hostname] = writer
-	}
-
-	_, err = fmt.Fprintln(writer, string(data))
-	return err
+	return r.enqueueWrite(rawURL, dir, data)
 }
 
 // HAR returns the HAR data structure
