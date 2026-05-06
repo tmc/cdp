@@ -101,6 +101,19 @@ func New(outputDir string, verbose bool) *Collector {
 // only signal an attach-mode session ever sees for an idle, fully-loaded
 // page) will be missed.
 func (c *Collector) Enable(ctx context.Context) error {
+	// Create fetchCh and flip incremental BEFORE issuing Debugger.enable,
+	// so the replay burst that fires synchronously in the chromedp event
+	// loop while we're still blocked in Run is queued, not dropped. (The
+	// listener checks c.incremental under c.mu and skips the send when
+	// false; an unbuffered or absent channel meant every replayed
+	// scriptParsed event was lost for attach-mode pages.)
+	c.mu.Lock()
+	c.fetchCh = make(chan fetchItem, 256)
+	c.done = make(chan struct{})
+	c.incremental = true
+	c.mu.Unlock()
+	go c.backgroundFetcher()
+
 	var innerCtx context.Context
 	if err := chromedp.Run(ctx, chromedp.ActionFunc(func(ctx context.Context) error {
 		innerCtx = ctx
@@ -112,13 +125,18 @@ func (c *Collector) Enable(ctx context.Context) error {
 		}
 		return nil
 	})); err != nil {
+		// Roll back so Close() doesn't double-close and so a retry by the
+		// caller starts from a clean slate.
+		c.mu.Lock()
+		c.incremental = false
+		close(c.fetchCh)
+		c.fetchCh = nil
+		c.mu.Unlock()
 		return err
 	}
+	c.mu.Lock()
 	c.ctx = innerCtx
-	c.fetchCh = make(chan fetchItem, 256)
-	c.done = make(chan struct{})
-	c.incremental = true
-	go c.backgroundFetcher()
+	c.mu.Unlock()
 	return nil
 }
 

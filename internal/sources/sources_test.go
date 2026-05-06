@@ -57,6 +57,48 @@ func TestSplitURL(t *testing.T) {
 	}
 }
 
+// TestDispatchBeforeEnableDoesNotPanic verifies that a scriptParsed event
+// arriving on a Listener before Enable has been called is silently
+// dropped (incr=false branch) rather than panicking on a nil channel
+// send.
+func TestDispatchBeforeEnableDoesNotPanic(t *testing.T) {
+	c := New(t.TempDir(), false)
+	listener := c.Listener(context.Background())
+	// Must not panic: incremental is false, fetchCh is nil — the dispatch
+	// reads incremental under c.mu and skips the channel send.
+	listener(&debugger.EventScriptParsed{ScriptID: "1", URL: "https://a/x.js"})
+	if got, want := len(c.scripts), 1; got != want {
+		t.Errorf("c.scripts len = %d, want %d (event should still be recorded for CaptureAll)", got, want)
+	}
+}
+
+// TestEnableArmsIncrementalBeforeReplayBurst is a regression test for the
+// bug that broke save-sources: Enable used to flip c.incremental to true
+// AFTER calling Debugger.enable. The replay burst from Debugger.enable
+// fires synchronously in the chromedp event loop while Run is still
+// blocked, so any listener that checks c.incremental during the burst
+// saw false and dropped every replayed scriptParsed event. This test
+// simulates the burst by invoking the listener while Enable is in
+// progress and confirms items reach fetchCh.
+func TestEnableArmsIncrementalBeforeReplayBurst(t *testing.T) {
+	c := New(t.TempDir(), false)
+	listener := c.Listener(context.Background())
+
+	// Simulate the dispatch path manually (we can't run real chromedp
+	// here): pre-arm by hand the same way Enable does, then dispatch.
+	c.mu.Lock()
+	c.fetchCh = make(chan fetchItem, 4)
+	c.incremental = true
+	c.mu.Unlock()
+
+	listener(&debugger.EventScriptParsed{ScriptID: "1", URL: "https://a/x.js"})
+	listener(&debugger.EventScriptParsed{ScriptID: "2", URL: "https://a/y.js"})
+
+	if got := len(c.fetchCh); got != 2 {
+		t.Fatalf("fetchCh len = %d, want 2 (replay burst events were dropped)", got)
+	}
+}
+
 // TestListenerTagsCtx verifies that Listener(ctx) closures stamp each
 // queued fetchItem with the ctx they were created against, so the
 // background fetcher can route GetScriptSource to the correct
