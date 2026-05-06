@@ -113,6 +113,10 @@ func writeOne(domainWriters map[string]*os.File, hostname, dir string, data []by
 // channel saturation (buffer full), it drops the entry and increments the
 // dropped counter; the chromedp event loop must not stall on disk I/O.
 //
+// After Close(), enqueueWrite drops silently and returns nil — the writer
+// goroutine is gone, so there is no destination. Callers should not rely on
+// post-Close writes landing on disk.
+//
 // Returns an error only for inputs the writer can never handle (e.g. an
 // unparseable URL). Disk errors surface via the writer goroutine's verbose
 // log; callers do not see them.
@@ -125,6 +129,11 @@ func (r *Recorder) enqueueWrite(rawURL, dir string, data []byte) error {
 		return err
 	}
 	hostname := u.Hostname()
+
+	if r.writerStopped.Load() {
+		atomic.AddUint64(&r.dropped, 1)
+		return nil
+	}
 
 	cmd := writerCmd{op: opWrite, hostname: hostname, dir: dir, data: data}
 	select {
@@ -143,8 +152,9 @@ func (r *Recorder) enqueueWrite(rawURL, dir string, data []byte) error {
 
 // closeAllWriters synchronously flushes and closes any open per-host writers.
 // Used by SetOutputDir to ensure the directory swap is observable on disk.
+// No-op after Close.
 func (r *Recorder) closeAllWriters() {
-	if r.writes == nil {
+	if r.writes == nil || r.writerStopped.Load() {
 		return
 	}
 	ack := make(chan struct{})
@@ -163,6 +173,9 @@ func (r *Recorder) stopWriter() {
 		r.writes <- writerCmd{op: opStop, ack: ack}
 		<-ack
 		<-r.writerDone
+		// Mark stopped after the goroutine confirms exit so concurrent
+		// callers transitioning post-Close see consistent state.
+		r.writerStopped.Store(true)
 	})
 }
 

@@ -119,7 +119,11 @@ func TestWriterDropsOnSaturation(t *testing.T) {
 	}
 }
 
-// TestWriterCloseIsIdempotent verifies multiple Close() calls are safe.
+// TestWriterCloseIsIdempotent verifies multiple Close() calls are safe and
+// that post-Close write/control calls degrade gracefully (drop, not panic).
+// Without the writerStopped guard, post-Close calls would either hang
+// (closeAllWriters waiting on an ack the dead goroutine cannot produce) or
+// block forever (enqueueWrite filling a buffer with no draining receiver).
 func TestWriterCloseIsIdempotent(t *testing.T) {
 	t.Parallel()
 
@@ -131,6 +135,24 @@ func TestWriterCloseIsIdempotent(t *testing.T) {
 	r.Close()
 	r.Close() // must not panic on closed channel or re-entry
 	r.Close()
+
+	// Post-Close ops are no-ops, not panics or hangs.
+	dir := t.TempDir()
+	done := make(chan struct{})
+	go func() {
+		_ = r.writeRawToDomainFile("https://post-close.example.com/", dir, []byte(`{}`))
+		r.CloseDomainWriters()
+		r.SetOutputDir(dir)
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("post-Close ops blocked — writerStopped guard missing or broken")
+	}
+	if r.DroppedWrites() == 0 {
+		t.Errorf("expected post-Close write to count toward DroppedWrites; got 0")
+	}
 }
 
 // TestWriterConcurrentEventsAndCloseDomainWriters exercises the realistic

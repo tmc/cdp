@@ -10,6 +10,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"text/template"
 	"time"
 
@@ -73,7 +74,8 @@ type Recorder struct {
 	writes         chan writerCmd
 	writerDone     chan struct{}
 	writerStopOnce sync.Once
-	dropped        uint64 // atomic; incremented when writes channel is full
+	writerStopped  atomic.Bool // true after stopWriter completes
+	dropped        uint64      // atomic; incremented when writes channel is full
 }
 
 // writeQueueSize bounds the writer goroutine's intake buffer. Sized for a
