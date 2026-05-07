@@ -107,9 +107,7 @@ func registerDialogTools(server *mcp.Server, s *mcpSession) {
 			cmd = cmd.WithPromptText(input.PromptText)
 		}
 
-		if err := chromedp.Run(actx, chromedp.ActionFunc(func(ctx context.Context) error {
-			return cmd.Do(ctx)
-		})); err != nil {
+		if err := cmd.Do(actx); err != nil {
 			return nil, nil, fmt.Errorf("handle_dialog: %w", err)
 		}
 

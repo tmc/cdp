@@ -32,9 +32,7 @@ func registerScrollTool(server *mcp.Server, s *mcpSession) {
 				return nil, nil, fmt.Errorf("scroll: %w", err)
 			}
 			if backendID != 0 {
-				if err := chromedp.Run(actx, chromedp.ActionFunc(func(ctx context.Context) error {
-					return dom.ScrollIntoViewIfNeeded().WithBackendNodeID(backendID).Do(ctx)
-				})); err != nil {
+				if err := dom.ScrollIntoViewIfNeeded().WithBackendNodeID(backendID).Do(actx); err != nil {
 					return nil, nil, fmt.Errorf("scroll: %w", err)
 				}
 			} else {

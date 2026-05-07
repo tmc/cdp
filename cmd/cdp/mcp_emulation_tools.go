@@ -77,21 +77,21 @@ type devicePreset struct {
 }
 
 var devicePresets = map[string]devicePreset{
-	"iphone-14":        {Width: 390, Height: 844, ScaleFactor: 3, HasTouch: true, IsMobile: true, UserAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1"},
-	"iphone-14-pro":    {Width: 393, Height: 852, ScaleFactor: 3, HasTouch: true, IsMobile: true, UserAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1"},
-	"iphone-15-pro":    {Width: 393, Height: 852, ScaleFactor: 3, HasTouch: true, IsMobile: true, UserAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"},
+	"iphone-14":         {Width: 390, Height: 844, ScaleFactor: 3, HasTouch: true, IsMobile: true, UserAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1"},
+	"iphone-14-pro":     {Width: 393, Height: 852, ScaleFactor: 3, HasTouch: true, IsMobile: true, UserAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1"},
+	"iphone-15-pro":     {Width: 393, Height: 852, ScaleFactor: 3, HasTouch: true, IsMobile: true, UserAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"},
 	"iphone-15-pro-max": {Width: 430, Height: 932, ScaleFactor: 3, HasTouch: true, IsMobile: true, UserAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"},
-	"iphone-se":        {Width: 375, Height: 667, ScaleFactor: 2, HasTouch: true, IsMobile: true, UserAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1"},
-	"ipad":             {Width: 810, Height: 1080, ScaleFactor: 2, HasTouch: true, IsMobile: true, UserAgent: "Mozilla/5.0 (iPad; CPU OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1"},
-	"ipad-pro-11":      {Width: 834, Height: 1194, ScaleFactor: 2, HasTouch: true, IsMobile: true, UserAgent: "Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"},
-	"ipad-pro-12.9":    {Width: 1024, Height: 1366, ScaleFactor: 2, HasTouch: true, IsMobile: true, UserAgent: "Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"},
-	"pixel-7":          {Width: 412, Height: 915, ScaleFactor: 2.625, HasTouch: true, IsMobile: true, UserAgent: "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Mobile Safari/537.36"},
-	"pixel-7-pro":      {Width: 412, Height: 892, ScaleFactor: 2.625, HasTouch: true, IsMobile: true, UserAgent: "Mozilla/5.0 (Linux; Android 13; Pixel 7 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Mobile Safari/537.36"},
-	"galaxy-s23":       {Width: 360, Height: 780, ScaleFactor: 3, HasTouch: true, IsMobile: true, UserAgent: "Mozilla/5.0 (Linux; Android 13; SM-S911B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Mobile Safari/537.36"},
-	"galaxy-s23-ultra": {Width: 384, Height: 824, ScaleFactor: 3, HasTouch: true, IsMobile: true, UserAgent: "Mozilla/5.0 (Linux; Android 13; SM-S918B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Mobile Safari/537.36"},
-	"galaxy-tab-s8":    {Width: 800, Height: 1280, ScaleFactor: 2, HasTouch: true, IsMobile: true, UserAgent: "Mozilla/5.0 (Linux; Android 13; SM-X700) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Safari/537.36"},
-	"desktop-1080p":    {Width: 1920, Height: 1080, ScaleFactor: 1, HasTouch: false, IsMobile: false, UserAgent: ""},
-	"desktop-1440p":    {Width: 2560, Height: 1440, ScaleFactor: 1, HasTouch: false, IsMobile: false, UserAgent: ""},
+	"iphone-se":         {Width: 375, Height: 667, ScaleFactor: 2, HasTouch: true, IsMobile: true, UserAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1"},
+	"ipad":              {Width: 810, Height: 1080, ScaleFactor: 2, HasTouch: true, IsMobile: true, UserAgent: "Mozilla/5.0 (iPad; CPU OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1"},
+	"ipad-pro-11":       {Width: 834, Height: 1194, ScaleFactor: 2, HasTouch: true, IsMobile: true, UserAgent: "Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"},
+	"ipad-pro-12.9":     {Width: 1024, Height: 1366, ScaleFactor: 2, HasTouch: true, IsMobile: true, UserAgent: "Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"},
+	"pixel-7":           {Width: 412, Height: 915, ScaleFactor: 2.625, HasTouch: true, IsMobile: true, UserAgent: "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Mobile Safari/537.36"},
+	"pixel-7-pro":       {Width: 412, Height: 892, ScaleFactor: 2.625, HasTouch: true, IsMobile: true, UserAgent: "Mozilla/5.0 (Linux; Android 13; Pixel 7 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Mobile Safari/537.36"},
+	"galaxy-s23":        {Width: 360, Height: 780, ScaleFactor: 3, HasTouch: true, IsMobile: true, UserAgent: "Mozilla/5.0 (Linux; Android 13; SM-S911B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Mobile Safari/537.36"},
+	"galaxy-s23-ultra":  {Width: 384, Height: 824, ScaleFactor: 3, HasTouch: true, IsMobile: true, UserAgent: "Mozilla/5.0 (Linux; Android 13; SM-S918B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Mobile Safari/537.36"},
+	"galaxy-tab-s8":     {Width: 800, Height: 1280, ScaleFactor: 2, HasTouch: true, IsMobile: true, UserAgent: "Mozilla/5.0 (Linux; Android 13; SM-X700) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Safari/537.36"},
+	"desktop-1080p":     {Width: 1920, Height: 1080, ScaleFactor: 1, HasTouch: false, IsMobile: false, UserAgent: ""},
+	"desktop-1440p":     {Width: 2560, Height: 1440, ScaleFactor: 1, HasTouch: false, IsMobile: false, UserAgent: ""},
 }
 
 type SetDeviceInput struct {
@@ -164,9 +164,7 @@ func registerEmulationTools(server *mcp.Server, s *mcpSession) {
 			latency = input.CustomLatency
 		}
 
-		if err := chromedp.Run(actx, chromedp.ActionFunc(func(ctx context.Context) error {
-			return network.OverrideNetworkState(offline, latency, download, upload).Do(ctx)
-		})); err != nil {
+		if err := network.OverrideNetworkState(offline, latency, download, upload).Do(actx); err != nil {
 			return nil, nil, fmt.Errorf("set_throttling: network: %w", err)
 		}
 
@@ -176,9 +174,7 @@ func registerEmulationTools(server *mcp.Server, s *mcpSession) {
 			if cpuRate > 20 {
 				cpuRate = 20
 			}
-			if err := chromedp.Run(actx, chromedp.ActionFunc(func(ctx context.Context) error {
-				return emulation.SetCPUThrottlingRate(cpuRate).Do(ctx)
-			})); err != nil {
+			if err := emulation.SetCPUThrottlingRate(cpuRate).Do(actx); err != nil {
 				return nil, nil, fmt.Errorf("set_throttling: cpu: %w", err)
 			}
 		}
@@ -207,9 +203,7 @@ func registerEmulationTools(server *mcp.Server, s *mcpSession) {
 			scale = 1
 		}
 		actx := s.activeCtx()
-		if err := chromedp.Run(actx, chromedp.ActionFunc(func(ctx context.Context) error {
-			return emulation.SetDeviceMetricsOverride(input.Width, input.Height, scale, input.Mobile).Do(ctx)
-		})); err != nil {
+		if err := emulation.SetDeviceMetricsOverride(input.Width, input.Height, scale, input.Mobile).Do(actx); err != nil {
 			return nil, nil, fmt.Errorf("set_viewport: %w", err)
 		}
 		return &mcp.CallToolResult{
@@ -229,9 +223,7 @@ func registerEmulationTools(server *mcp.Server, s *mcpSession) {
 		if input.Platform != "" {
 			cmd = cmd.WithPlatform(input.Platform)
 		}
-		if err := chromedp.Run(actx, chromedp.ActionFunc(func(ctx context.Context) error {
-			return cmd.Do(ctx)
-		})); err != nil {
+		if err := cmd.Do(actx); err != nil {
 			return nil, nil, fmt.Errorf("set_user_agent: %w", err)
 		}
 		return &mcp.CallToolResult{
@@ -244,9 +236,7 @@ func registerEmulationTools(server *mcp.Server, s *mcpSession) {
 		Description: "Enable or disable network offline emulation",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input SetOfflineInput) (*mcp.CallToolResult, any, error) {
 		actx := s.activeCtx()
-		if err := chromedp.Run(actx, chromedp.ActionFunc(func(ctx context.Context) error {
-			return network.OverrideNetworkState(input.Offline, 0, -1, -1).Do(ctx)
-		})); err != nil {
+		if err := network.OverrideNetworkState(input.Offline, 0, -1, -1).Do(actx); err != nil {
 			return nil, nil, fmt.Errorf("set_offline: %w", err)
 		}
 		state := "online"
@@ -289,9 +279,7 @@ func registerEmulationTools(server *mcp.Server, s *mcpSession) {
 		for k, v := range input.Headers {
 			headers[k] = v
 		}
-		if err := chromedp.Run(actx, chromedp.ActionFunc(func(ctx context.Context) error {
-			return network.SetExtraHTTPHeaders(headers).Do(ctx)
-		})); err != nil {
+		if err := network.SetExtraHTTPHeaders(headers).Do(actx); err != nil {
 			return nil, nil, fmt.Errorf("set_extra_headers: %w", err)
 		}
 		return &mcp.CallToolResult{

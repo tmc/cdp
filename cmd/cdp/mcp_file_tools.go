@@ -33,9 +33,7 @@ func registerFileTools(server *mcp.Server, s *mcpSession) {
 		}
 
 		if backendID != 0 {
-			if err := chromedp.Run(actx, chromedp.ActionFunc(func(ctx context.Context) error {
-				return dom.SetFileInputFiles(input.Files).WithBackendNodeID(backendID).Do(ctx)
-			})); err != nil {
+			if err := dom.SetFileInputFiles(input.Files).WithBackendNodeID(backendID).Do(actx); err != nil {
 				return nil, nil, fmt.Errorf("upload_file: %w", err)
 			}
 		} else {

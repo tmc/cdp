@@ -138,9 +138,7 @@ func registerInputTools(server *mcp.Server, s *mcpSession) {
 		}
 
 		if backendID != 0 {
-			if err := chromedp.Run(actx, chromedp.ActionFunc(func(ctx context.Context) error {
-				return dom.Focus().WithBackendNodeID(backendID).Do(ctx)
-			})); err != nil {
+			if err := dom.Focus().WithBackendNodeID(backendID).Do(actx); err != nil {
 				return nil, nil, fmt.Errorf("focus: %w", err)
 			}
 		} else {
@@ -281,9 +279,7 @@ func elementCenter(ctx context.Context, refs *refRegistry, selector string) (flo
 		return 0, 0, err
 	}
 	if backendID != 0 {
-		if err := chromedp.Run(ctx, chromedp.ActionFunc(func(ctx context.Context) error {
-			return dom.ScrollIntoViewIfNeeded().WithBackendNodeID(backendID).Do(ctx)
-		})); err != nil {
+		if err := dom.ScrollIntoViewIfNeeded().WithBackendNodeID(backendID).Do(ctx); err != nil {
 			return 0, 0, fmt.Errorf("scroll: %w", err)
 		}
 		var quads []dom.Quad
@@ -424,7 +420,5 @@ func hoverBySelector(ctx context.Context, selector string) error {
 	}
 	x, _ := result["x"].(float64)
 	y, _ := result["y"].(float64)
-	return chromedp.Run(ctx, chromedp.ActionFunc(func(ctx context.Context) error {
-		return input.DispatchMouseEvent(input.MouseMoved, x, y).Do(ctx)
-	}))
+	return input.DispatchMouseEvent(input.MouseMoved, x, y).Do(ctx)
 }

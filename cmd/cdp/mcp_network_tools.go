@@ -31,7 +31,7 @@ type networkEntry struct {
 type networkCollector struct {
 	mu         sync.Mutex
 	entries    map[string]*networkEntry // keyed by request ID
-	order      []string                // request IDs in order
+	order      []string                 // request IDs in order
 	maxEntries int
 	running    bool
 }
@@ -161,9 +161,7 @@ func registerNetworkTools(server *mcp.Server, s *mcpSession) {
 		s.mu.Unlock()
 
 		actx := s.activeCtx()
-		if err := chromedp.Run(actx, chromedp.ActionFunc(func(ctx context.Context) error {
-			return network.Enable().Do(ctx)
-		})); err != nil {
+		if err := network.Enable().Do(actx); err != nil {
 			return nil, nil, fmt.Errorf("start_network_log: enable network: %w", err)
 		}
 
