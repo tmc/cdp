@@ -14,26 +14,26 @@ import (
 
 // SecurityConfig holds security configuration
 type SecurityConfig struct {
-	HMACSecret              string
-	NonceTimeout            time.Duration
-	MaxMessageSize          int64
-	RateLimitPerSecond      int
-	RateLimitBurst          int
-	AuditLoggingEnabled     bool
-	CapabilityCheckEnabled  bool
+	HMACSecret               string
+	NonceTimeout             time.Duration
+	MaxMessageSize           int64
+	RateLimitPerSecond       int
+	RateLimitBurst           int
+	AuditLoggingEnabled      bool
+	CapabilityCheckEnabled   bool
 	CommandSandboxingEnabled bool
 }
 
 // DefaultSecurityConfig returns secure defaults
 func DefaultSecurityConfig() SecurityConfig {
 	return SecurityConfig{
-		HMACSecret:              "", // Must be set by caller
-		NonceTimeout:            5 * time.Minute,
-		MaxMessageSize:          1024 * 1024, // 1MB
-		RateLimitPerSecond:      100,
-		RateLimitBurst:          10,
-		AuditLoggingEnabled:     true,
-		CapabilityCheckEnabled:  true,
+		HMACSecret:               "", // Must be set by caller
+		NonceTimeout:             5 * time.Minute,
+		MaxMessageSize:           1024 * 1024, // 1MB
+		RateLimitPerSecond:       100,
+		RateLimitBurst:           10,
+		AuditLoggingEnabled:      true,
+		CapabilityCheckEnabled:   true,
 		CommandSandboxingEnabled: true,
 	}
 }
@@ -48,13 +48,13 @@ type SignedMessage struct {
 
 // SecurityManager handles all security operations
 type SecurityManager struct {
-	config     SecurityConfig
-	mu         sync.RWMutex
-	nonces     map[string]int64 // nonce -> timestamp seen
-	seqNumber  int64            // monotonic sequence number for anti-replay
-	auditLog   *AuditLogger
+	config       SecurityConfig
+	mu           sync.RWMutex
+	nonces       map[string]int64 // nonce -> timestamp seen
+	seqNumber    int64            // monotonic sequence number for anti-replay
+	auditLog     *AuditLogger
 	capabilities *CapabilityManager
-	rateLimiter *RateLimiter
+	rateLimiter  *RateLimiter
 }
 
 // NewSecurityManager creates a new security manager
@@ -64,12 +64,12 @@ func NewSecurityManager(config SecurityConfig) (*SecurityManager, error) {
 	}
 
 	sm := &SecurityManager{
-		config:   config,
-		nonces:   make(map[string]int64),
-		seqNumber: 0,
-		auditLog: NewAuditLogger(config.AuditLoggingEnabled),
+		config:       config,
+		nonces:       make(map[string]int64),
+		seqNumber:    0,
+		auditLog:     NewAuditLogger(config.AuditLoggingEnabled),
 		capabilities: NewCapabilityManager(),
-		rateLimiter: NewRateLimiter(config.RateLimitPerSecond, config.RateLimitBurst),
+		rateLimiter:  NewRateLimiter(config.RateLimitPerSecond, config.RateLimitBurst),
 	}
 
 	// Start nonce cleanup goroutine
@@ -227,10 +227,10 @@ func (sm *SecurityManager) GetSecurityStats() map[string]interface{} {
 	sm.mu.RUnlock()
 
 	return map[string]interface{}{
-		"active_nonces":   nonceCount,
-		"sequence_number": seqNum,
-		"audit_enabled":   sm.config.AuditLoggingEnabled,
+		"active_nonces":    nonceCount,
+		"sequence_number":  seqNum,
+		"audit_enabled":    sm.config.AuditLoggingEnabled,
 		"capability_check": sm.config.CapabilityCheckEnabled,
-		"sandboxing":      sm.config.CommandSandboxingEnabled,
+		"sandboxing":       sm.config.CommandSandboxingEnabled,
 	}
 }

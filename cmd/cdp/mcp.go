@@ -194,19 +194,19 @@ func (s *mcpSession) contextPath() string {
 
 // mcpConfig holds configuration for the MCP server mode.
 type mcpConfig struct {
-	Headless           bool
-	Verbose            bool
-	OutputDir          string
-	URL                string
-	DebugPort          int
-	DebugPortExplicit  bool // true when --debug-port was explicitly set on the command line
-	ConnectExisting    bool // true when --connect-existing was set
-	ToolsDir           string
-	SaveSources        bool
-	NoScrub            bool
-	APIPort            int
-	LoadExtensions     string
-	EnableInspect      bool
+	Headless          bool
+	Verbose           bool
+	OutputDir         string
+	URL               string
+	DebugPort         int
+	DebugPortExplicit bool // true when --debug-port was explicitly set on the command line
+	ConnectExisting   bool // true when --connect-existing was set
+	ToolsDir          string
+	SaveSources       bool
+	NoScrub           bool
+	APIPort           int
+	LoadExtensions    string
+	EnableInspect     bool
 }
 
 // runMCP starts the MCP server with browser session tools on stdio.

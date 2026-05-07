@@ -108,7 +108,7 @@ func TestParseHeadersEdgeCases(t *testing.T) {
 				"Content-Length: 1024",
 			},
 			expected: map[string]interface{}{
-				"X-API-Version": "1.2.3",
+				"X-API-Version":  "1.2.3",
 				"Content-Length": "1024",
 			},
 		},

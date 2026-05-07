@@ -73,17 +73,17 @@ type Collector struct {
 	ctx            context.Context   // browser context for CDP calls
 	fetchCh        chan fetchItem    // channel for incremental capture
 	done           chan struct{}     // closed when background goroutine exits
-	incremental    bool             // whether incremental mode is active
+	incremental    bool              // whether incremental mode is active
 }
 
 // New creates a source collector that writes to outputDir.
 func New(outputDir string, verbose bool) *Collector {
 	return &Collector{
-		scripts:        make(map[cdp.ScriptID]*ScriptInfo),
-		styles:         make(map[cdp.StyleSheetID]*StyleInfo),
-		written:        make(map[string]bool),
-		outputDir:      outputDir,
-		verbose:        verbose,
+		scripts:   make(map[cdp.ScriptID]*ScriptInfo),
+		styles:    make(map[cdp.StyleSheetID]*StyleInfo),
+		written:   make(map[string]bool),
+		outputDir: outputDir,
+		verbose:   verbose,
 		httpClient: &http.Client{
 			Timeout: 30 * time.Second,
 		},

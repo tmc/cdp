@@ -386,10 +386,10 @@ func (d *V8Debugger) EvaluateOnCallFrame(callFrameID, expression string) (map[st
 // SetVariableValue sets the value of a variable in a call frame scope
 func (d *V8Debugger) SetVariableValue(scopeNumber int, variableName string, newValue map[string]interface{}, callFrameID string) error {
 	params := map[string]interface{}{
-		"scopeNumber":   scopeNumber,
-		"variableName":  variableName,
-		"newValue":      newValue,
-		"callFrameId":   callFrameID,
+		"scopeNumber":  scopeNumber,
+		"variableName": variableName,
+		"newValue":     newValue,
+		"callFrameId":  callFrameID,
 	}
 
 	_, err := d.client.SendCommand("Debugger.setVariableValue", params)

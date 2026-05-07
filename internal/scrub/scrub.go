@@ -30,17 +30,17 @@ var sensitiveHeaders = map[string]bool{
 
 // sensitiveParams lists query parameter names whose values should be redacted.
 var sensitiveParams = map[string]bool{
-	"token":          true,
-	"key":            true,
-	"api_key":        true,
-	"apikey":         true,
-	"secret":         true,
-	"password":       true,
-	"passwd":         true,
-	"access_token":   true,
-	"refresh_token":  true,
-	"client_secret":  true,
-	"session_id":     true,
+	"token":         true,
+	"key":           true,
+	"api_key":       true,
+	"apikey":        true,
+	"secret":        true,
+	"password":      true,
+	"passwd":        true,
+	"access_token":  true,
+	"refresh_token": true,
+	"client_secret": true,
+	"session_id":    true,
 }
 
 type rule struct {

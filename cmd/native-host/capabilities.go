@@ -11,10 +11,10 @@ type Capability string
 
 const (
 	// Core capabilities
-	CapabilityRead     Capability = "read"
-	CapabilityWrite    Capability = "write"
-	CapabilityExecute  Capability = "execute"
-	CapabilityAdmin    Capability = "admin"
+	CapabilityRead    Capability = "read"
+	CapabilityWrite   Capability = "write"
+	CapabilityExecute Capability = "execute"
+	CapabilityAdmin   Capability = "admin"
 
 	// Domain-specific capabilities
 	CapabilityAIRequest      Capability = "ai_request"

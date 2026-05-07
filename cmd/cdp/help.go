@@ -192,7 +192,7 @@ func (h *HelpSystem) SearchCommands(term string) {
 	// Search in command names, descriptions, and aliases
 	for _, cmd := range h.registry.commands {
 		if strings.Contains(strings.ToLower(cmd.Name), term) ||
-		   strings.Contains(strings.ToLower(cmd.Description), term) {
+			strings.Contains(strings.ToLower(cmd.Description), term) {
 			matches = append(matches, cmd)
 			continue
 		}

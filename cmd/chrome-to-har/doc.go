@@ -17,4 +17,3 @@
 //	chrome-to-har -filter "api\\." https://example.com
 //	chrome-to-har -block "analytics|tracking" https://news.site.com
 package main
-

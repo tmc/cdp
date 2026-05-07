@@ -292,7 +292,7 @@ func (c *V8Console) executeJavaScript(expression string) error {
 		ReturnByValue:         false, // Keep object references for inspection
 		GeneratePreview:       true,
 		IncludeCommandLineAPI: true,
-		ReplMode:             true,
+		ReplMode:              true,
 	}
 
 	result, err := c.runtime.Evaluate(expression, options)

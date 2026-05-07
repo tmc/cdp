@@ -20,23 +20,23 @@ import (
 
 // syntheticMap holds a generated sourcemap for a bundle URL.
 type syntheticMap struct {
-	BundleURL    string          `json:"bundle_url"`
-	MapJSON      []byte          `json:"-"`
-	Sources      *inferredResult `json:"sources,omitempty"`
-	Serving      bool            `json:"serving"`
-	InterceptID  string          `json:"intercept_id,omitempty"`
-	MapPath      string          `json:"map_path,omitempty"` // on-disk path to .map file
-	LogEntries   int             `json:"log_entries,omitempty"`
+	BundleURL   string          `json:"bundle_url"`
+	MapJSON     []byte          `json:"-"`
+	Sources     *inferredResult `json:"sources,omitempty"`
+	Serving     bool            `json:"serving"`
+	InterceptID string          `json:"intercept_id,omitempty"`
+	MapPath     string          `json:"map_path,omitempty"` // on-disk path to .map file
+	LogEntries  int             `json:"log_entries,omitempty"`
 }
 
 // analysisLogEntry records the reasoning behind sourcemap naming decisions.
 type analysisLogEntry struct {
-	Timestamp   string               `json:"timestamp"`
-	BundleURL   string               `json:"bundle_url"`
-	Context     string               `json:"context,omitempty"`
+	Timestamp    string              `json:"timestamp"`
+	BundleURL    string              `json:"bundle_url"`
+	Context      string              `json:"context,omitempty"`
 	IsRefinement bool                `json:"is_refinement"`
-	Summary     string               `json:"summary"`
-	Files       []analysisFileEntry  `json:"files"`
+	Summary      string              `json:"summary"`
+	Files        []analysisFileEntry `json:"files"`
 }
 
 type analysisFileEntry struct {
@@ -229,11 +229,11 @@ func writeStructureSidecar(mapPath string, sources *inferredResult) {
 }
 
 // activateSourcemap makes Chrome DevTools aware of a synthetic sourcemap by:
-// 1. Installing a response-stage Fetch intercept on the bundle URL that appends
-//    a //# sourceMappingURL comment and a SourceMap HTTP header.
-// 2. Triggering Page.reload() so scripts re-fetch through the intercept.
-// 3. DevTools sees the comment/header, requests the .map URL, our existing
-//    request-stage intercept serves the synthetic sourcemap.
+//  1. Installing a response-stage Fetch intercept on the bundle URL that appends
+//     a //# sourceMappingURL comment and a SourceMap HTTP header.
+//  2. Triggering Page.reload() so scripts re-fetch through the intercept.
+//  3. DevTools sees the comment/header, requests the .map URL, our existing
+//     request-stage intercept serves the synthetic sourcemap.
 //
 // Returns a human-readable status message.
 func activateSourcemap(s *mcpSession, bundleURL, mapURL string) string {
@@ -808,7 +808,7 @@ Otherwise, returns new chunks for you to re-analyze, then call set_bundle_struct
 // bundleCoverageData holds coverage data for a single bundle script.
 type bundleCoverageData struct {
 	Source    string
-	Chunks   []sourcemap.CodeChunk
+	Chunks    []sourcemap.CodeChunk
 	Functions []coverage.FunctionCoverage
 }
 
@@ -863,11 +863,10 @@ func extractBundleCoverage(s *mcpSession, bundleURL, snapshotName string) (*bund
 	chunks := sourcemap.ExtractChunks(scriptCov.Source, ranges, 3)
 	return &bundleCoverageData{
 		Source:    scriptCov.Source,
-		Chunks:   chunks,
+		Chunks:    chunks,
 		Functions: scriptCov.Functions,
 	}, nil
 }
-
 
 // sampleBundleAnalysis uses MCP sampling to ask the connected LLM to analyze
 // code chunks. Returns an error if the client doesn't support sampling.

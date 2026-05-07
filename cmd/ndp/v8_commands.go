@@ -260,8 +260,8 @@ Supports all JavaScript syntax and returns formatted results.`,
 			expression := args[0]
 
 			options := &EvaluateOptions{
-				ReturnByValue:    true,
-				GeneratePreview:  true,
+				ReturnByValue:         true,
+				GeneratePreview:       true,
 				IncludeCommandLineAPI: true,
 			}
 

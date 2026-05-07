@@ -55,7 +55,7 @@ func TestExtractChunks_MultipleDisjoint(t *testing.T) {
 	source := "aaaa\nbbbb\ncccc\ndddd\n"
 	ranges := []CoverageRange{
 		{0, 4, 1},   // "aaaa"
-		{10, 14, 1},  // "cccc"
+		{10, 14, 1}, // "cccc"
 	}
 	chunks := ExtractChunks(source, ranges, 0)
 	if len(chunks) != 2 {
@@ -108,9 +108,9 @@ func TestExtractChunks_LineCol(t *testing.T) {
 
 func TestMergeRanges(t *testing.T) {
 	tests := []struct {
-		name   string
-		input  []CoverageRange
-		want   int
+		name    string
+		input   []CoverageRange
+		want    int
 		wantEnd int
 	}{
 		{"empty", nil, 0, 0},

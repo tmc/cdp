@@ -50,7 +50,6 @@ func skipIfNoBrowser(t testing.TB) {
 		t.Skip("Skipping browser test due to chromedp context cancellation issue")
 	}
 
-
 	// Check if Chrome is available
 	chromePath, found := detectChromePath()
 	if !found {
@@ -657,4 +656,3 @@ func BenchmarkChurl_BasicFetch(b *testing.B) {
 		cancel()
 	}
 }
-

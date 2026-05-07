@@ -6,10 +6,10 @@ import (
 
 func TestOffsetToLineCol(t *testing.T) {
 	tests := []struct {
-		source     string
-		offset     int
-		wantLine   int
-		wantCol    int
+		source   string
+		offset   int
+		wantLine int
+		wantCol  int
 	}{
 		{"hello", 0, 1, 1},
 		{"hello", 4, 1, 5},

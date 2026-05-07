@@ -103,7 +103,7 @@ type CoverageSnapshotInput struct {
 }
 
 type WalkObjectInput struct {
-	Expression   string `json:"expression"`             // JS expression to evaluate
+	Expression   string `json:"expression"`              // JS expression to evaluate
 	Depth        int    `json:"depth,omitempty"`         // max recursion depth (default 2)
 	MaxKeys      int    `json:"max_keys,omitempty"`      // max keys per object (default 20)
 	SampleValues bool   `json:"sample_values,omitempty"` // include primitive values
@@ -126,8 +126,8 @@ func registerNDPTools(server *mcp.Server, s *ndpSession) {
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input EvaluateInput) (*mcp.CallToolResult, any, error) {
 		opts := &EvaluateOptions{
 			IncludeCommandLineAPI: true,
-			ReturnByValue:        true,
-			AwaitPromise:         input.AwaitPromise,
+			ReturnByValue:         true,
+			AwaitPromise:          input.AwaitPromise,
 		}
 		result, err := s.runtime.Evaluate(input.Expression, opts)
 		if err != nil {
@@ -468,7 +468,7 @@ func registerNDPTools(server *mcp.Server, s *ndpSession) {
 	// --- Object inspection ---
 
 	mcp.AddTool(server, &mcp.Tool{
-		Name: "walk_object",
+		Name:        "walk_object",
 		Description: `Recursively explore a JS object's structure. Returns a typed tree with key counts, function arities, string lengths, and optional sampled values. Handles cycles via WeakSet. Use depth (default 2) and max_keys (default 20) to control output size.`,
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input WalkObjectInput) (*mcp.CallToolResult, any, error) {
@@ -486,7 +486,7 @@ func registerNDPTools(server *mcp.Server, s *ndpSession) {
 
 		opts := &EvaluateOptions{
 			IncludeCommandLineAPI: true,
-			ReturnByValue:        true,
+			ReturnByValue:         true,
 		}
 		result, err := s.runtime.Evaluate(js, opts)
 		if err != nil {

@@ -6,11 +6,11 @@ import (
 
 func TestParseInspectorArgs(t *testing.T) {
 	tests := []struct {
-		name     string
-		args     []string
-		enabled  bool
-		host     string
-		port     string
+		name    string
+		args    []string
+		enabled bool
+		host    string
+		port    string
 	}{
 		{
 			name:    "no inspector flag",
@@ -87,8 +87,8 @@ func TestSplitPIDAndCommand(t *testing.T) {
 
 func TestDetectNodeScript(t *testing.T) {
 	tests := []struct {
-		args    []string
-		script  string
+		args   []string
+		script string
 	}{
 		{
 			args:   []string{"server.js"},

@@ -146,14 +146,14 @@ func annotateScreenshot(ctx context.Context, imgData []byte, refs *refRegistry) 
 // annotationColor returns a distinct color for a given index.
 func annotationColor(n int) color.RGBA {
 	colors := []color.RGBA{
-		{255, 0, 0, 255},     // red
-		{0, 128, 255, 255},   // blue
-		{0, 200, 0, 255},     // green
-		{255, 165, 0, 255},   // orange
-		{128, 0, 255, 255},   // purple
-		{255, 0, 128, 255},   // pink
-		{0, 200, 200, 255},   // teal
-		{200, 200, 0, 255},   // yellow
+		{255, 0, 0, 255},   // red
+		{0, 128, 255, 255}, // blue
+		{0, 200, 0, 255},   // green
+		{255, 165, 0, 255}, // orange
+		{128, 0, 255, 255}, // purple
+		{255, 0, 128, 255}, // pink
+		{0, 200, 200, 255}, // teal
+		{200, 200, 0, 255}, // yellow
 	}
 	return colors[(n-1)%len(colors)]
 }

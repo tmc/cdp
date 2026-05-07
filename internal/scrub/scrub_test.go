@@ -11,8 +11,8 @@ func TestScrubText(t *testing.T) {
 		t.Fatal("expected scrubber to be enabled")
 	}
 	tests := []struct {
-		name      string
-		input     string
+		name         string
+		input        string
 		wantRedacted bool
 		wantSubstr   string // substring expected in output
 	}{
@@ -151,4 +151,3 @@ func TestScrubberDisabled(t *testing.T) {
 		t.Errorf("disabled scrubber should pass through query param")
 	}
 }
-

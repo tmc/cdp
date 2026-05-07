@@ -105,7 +105,7 @@ type InspectIPCLogInput struct {
 
 func registerInspectIPCTools(server *mcp.Server, s *mcpSession) {
 	mcp.AddTool(server, &mcp.Tool{
-		Name: "inspect_ipc_start",
+		Name:        "inspect_ipc_start",
 		Description: `Start capturing Electron IPC messages. Monkey-patches known bridges (electronBridge, vscode, electron) and postMessage listener. Call inspect_ipc_log to read captured messages.`,
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input InspectIPCStartInput) (*mcp.CallToolResult, any, error) {
 		var result any
@@ -119,7 +119,7 @@ func registerInspectIPCTools(server *mcp.Server, s *mcpSession) {
 	})
 
 	mcp.AddTool(server, &mcp.Tool{
-		Name: "inspect_ipc_log",
+		Name:        "inspect_ipc_log",
 		Description: `Get captured IPC messages from inspect_ipc_start. Optional channel filter (substring match). Set clear=true to reset the log after reading.`,
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input InspectIPCLogInput) (*mcp.CallToolResult, any, error) {
@@ -215,7 +215,7 @@ const walkObjectJS = `(expr, maxDepth, maxKeys, sampleValues) => {
 `
 
 type InspectWalkInput struct {
-	Expression   string `json:"expression"`             // JS expression to evaluate
+	Expression   string `json:"expression"`              // JS expression to evaluate
 	Depth        int    `json:"depth,omitempty"`         // max recursion depth (default 2)
 	MaxKeys      int    `json:"max_keys,omitempty"`      // max keys per object (default 20)
 	SampleValues bool   `json:"sample_values,omitempty"` // include primitive values
@@ -223,7 +223,7 @@ type InspectWalkInput struct {
 
 func registerInspectWalkTool(server *mcp.Server, s *mcpSession) {
 	mcp.AddTool(server, &mcp.Tool{
-		Name: "inspect_walk",
+		Name:        "inspect_walk",
 		Description: `Recursively explore a JS object's structure. Returns a typed tree with key counts, function arities, string lengths, and optional sampled values. Handles cycles via WeakSet. Use depth (default 2) and max_keys (default 20) to control output size.`,
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input InspectWalkInput) (*mcp.CallToolResult, any, error) {
@@ -426,7 +426,7 @@ type InspectFingerprintInput struct{}
 
 func registerInspectFingerprintTool(server *mcp.Server, s *mcpSession) {
 	mcp.AddTool(server, &mcp.Tool{
-		Name: "inspect_fingerprint",
+		Name:        "inspect_fingerprint",
 		Description: `Automated app fingerprinting. Detects: identity (title, URL, Electron/Chrome versions), frameworks (React, Vue, Svelte, Angular), bundler (webpack, Vite), non-standard globals, bridge APIs (electronBridge, vscode), feature flags, error monitoring, script inventory, CSP.`,
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input InspectFingerprintInput) (*mcp.CallToolResult, any, error) {

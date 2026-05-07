@@ -63,7 +63,7 @@ func TestStrFromMap(t *testing.T) {
 	}{
 		{"name", "Test Extension"},
 		{"version", "1.0"},
-		{"count", ""},  // not a string
+		{"count", ""},   // not a string
 		{"missing", ""}, // not present
 	}
 	for _, tt := range tests {

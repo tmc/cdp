@@ -20,10 +20,10 @@ const wsBinaryFrameLimit = 64 * 1024
 // wsMessage is one frame in the Chrome DevTools _webSocketMessages convention.
 // It is serialized as part of wsHAREntry below.
 type wsMessage struct {
-	Type               string  `json:"type"`                         // "send" or "receive"
-	Time               float64 `json:"time"`                         // unix seconds (float)
-	Opcode             int     `json:"opcode"`                       // 1=text, 2=binary, 8=close, 9=ping, 10=pong
-	Data               string  `json:"data"`                         // utf-8 text (opcode 1) or base64 (others)
+	Type               string  `json:"type"`                           // "send" or "receive"
+	Time               float64 `json:"time"`                           // unix seconds (float)
+	Opcode             int     `json:"opcode"`                         // 1=text, 2=binary, 8=close, 9=ping, 10=pong
+	Data               string  `json:"data"`                           // utf-8 text (opcode 1) or base64 (others)
 	DataTruncatedBytes int     `json:"data_truncated_bytes,omitempty"` // original size if Data was truncated
 }
 
@@ -48,15 +48,15 @@ type wsConn struct {
 // _webSocketMessages extension plus a _resourceType marker for grep-friendly
 // filtering.
 type wsHAREntry struct {
-	StartedDateTime  string                  `json:"startedDateTime"`
-	Time             float64                 `json:"time"`
-	Request          *har.Request            `json:"request"`
-	Response         *har.Response           `json:"response"`
-	Cache            *har.Cache              `json:"cache,omitempty"`
-	Timings          *har.Timings            `json:"timings,omitempty"`
-	Comment          string                  `json:"comment,omitempty"`
-	ResourceType     string                  `json:"_resourceType"`
-	WebSocketMessages []wsMessage            `json:"_webSocketMessages"`
+	StartedDateTime   string        `json:"startedDateTime"`
+	Time              float64       `json:"time"`
+	Request           *har.Request  `json:"request"`
+	Response          *har.Response `json:"response"`
+	Cache             *har.Cache    `json:"cache,omitempty"`
+	Timings           *har.Timings  `json:"timings,omitempty"`
+	Comment           string        `json:"comment,omitempty"`
+	ResourceType      string        `json:"_resourceType"`
+	WebSocketMessages []wsMessage   `json:"_webSocketMessages"`
 }
 
 // wsLockedFields is the set of recorder fields used for WS tracking. These

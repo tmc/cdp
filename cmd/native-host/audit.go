@@ -25,10 +25,10 @@ type AuditEntry struct {
 
 // AuditLogger manages security audit logging
 type AuditLogger struct {
-	enabled    bool
-	mu         sync.Mutex
-	file       *os.File
-	logDir     string
+	enabled      bool
+	mu           sync.Mutex
+	file         *os.File
+	logDir       string
 	maxSizeBytes int64
 }
 

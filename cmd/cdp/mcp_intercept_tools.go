@@ -19,7 +19,7 @@ import (
 type interceptRule struct {
 	ID          string            `json:"id"`
 	URLPattern  string            `json:"url_pattern"`
-	Stage       string            `json:"stage"` // "request" or "response"
+	Stage       string            `json:"stage"`  // "request" or "response"
 	Action      string            `json:"action"` // "block", "modify", "fulfill", "continue"
 	StatusCode  int64             `json:"status_code,omitempty"`
 	Body        string            `json:"body,omitempty"`

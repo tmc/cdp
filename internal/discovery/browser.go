@@ -333,16 +333,16 @@ func discoverFromPATH() []BrowserCandidate {
 	var candidates []BrowserCandidate
 
 	commands := map[string]BrowserInfo{
-		"brave-browser":         {Type: Brave, Name: "Brave Browser", Priority: 1},
-		"brave":                 {Type: Brave, Name: "Brave Browser", Priority: 1},
-		"google-chrome":         {Type: Chrome, Name: "Google Chrome", Priority: 2},
-		"google-chrome-stable":  {Type: Chrome, Name: "Google Chrome", Priority: 2},
-		"chromium-browser":      {Type: Chromium, Name: "Chromium", Priority: 3},
-		"chromium":              {Type: Chromium, Name: "Chromium", Priority: 3},
-		"microsoft-edge":        {Type: Edge, Name: "Microsoft Edge", Priority: 4},
-		"msedge":                {Type: Edge, Name: "Microsoft Edge", Priority: 4},
-		"vivaldi":               {Type: Vivaldi, Name: "Vivaldi", Priority: 6},
-		"opera":                 {Type: Opera, Name: "Opera", Priority: 7},
+		"brave-browser":        {Type: Brave, Name: "Brave Browser", Priority: 1},
+		"brave":                {Type: Brave, Name: "Brave Browser", Priority: 1},
+		"google-chrome":        {Type: Chrome, Name: "Google Chrome", Priority: 2},
+		"google-chrome-stable": {Type: Chrome, Name: "Google Chrome", Priority: 2},
+		"chromium-browser":     {Type: Chromium, Name: "Chromium", Priority: 3},
+		"chromium":             {Type: Chromium, Name: "Chromium", Priority: 3},
+		"microsoft-edge":       {Type: Edge, Name: "Microsoft Edge", Priority: 4},
+		"msedge":               {Type: Edge, Name: "Microsoft Edge", Priority: 4},
+		"vivaldi":              {Type: Vivaldi, Name: "Vivaldi", Priority: 6},
+		"opera":                {Type: Opera, Name: "Opera", Priority: 7},
 	}
 
 	for cmd, info := range commands {

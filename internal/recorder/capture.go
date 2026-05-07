@@ -23,7 +23,7 @@ type CaptureEvent struct {
 	Headers   string    `json:"headers,omitempty"`
 	Body      string    `json:"body,omitempty"`
 	ChunkIdx  int       `json:"chunkIdx,omitempty"`
-	Channel   string    `json:"channel,omitempty"`  // DataChannel label
+	Channel   string    `json:"channel,omitempty"`   // DataChannel label
 	Direction string    `json:"direction,omitempty"` // "local" or "remote" for SDP
 	Data      string    `json:"data,omitempty"`
 }
