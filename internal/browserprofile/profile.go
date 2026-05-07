@@ -13,7 +13,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/tmc/cdp/internal/secureio"
 	"github.com/tmc/cdp/internal/validation"
 )
 
@@ -45,19 +44,19 @@ func (pm *profileManager) logf(format string, args ...interface{}) {
 }
 
 func (pm *profileManager) SetupWorkdir() error {
-	dir, err := secureio.CreateSecureTempDir("chrome-to-har-")
+	dir, err := os.MkdirTemp("", "chrome-to-har-")
 	if err != nil {
-		return fmt.Errorf("failed to create secure temporary directory: %w", err)
+		return fmt.Errorf("failed to create temporary directory: %w", err)
 	}
 	pm.workDir = dir
-	pm.logf("Created secure temporary working directory: %s", dir)
+	pm.logf("Created working directory: %s", dir)
 	return nil
 }
 
 func (pm *profileManager) Cleanup() error {
 	if pm.workDir != "" {
 		pm.logf("Cleaning up working directory: %s", pm.workDir)
-		return secureio.SecureRemoveAll(pm.workDir)
+		return os.RemoveAll(pm.workDir)
 	}
 	return nil
 }
@@ -161,7 +160,7 @@ func (pm *profileManager) copyProfileImpl(srcDir, profileName string, cookieDoma
 	pm.logf("Profile validation successful for %s profile: %s", browserType, profileName)
 
 	dstDir := filepath.Join(pm.workDir, "Default")
-	if err := os.MkdirAll(dstDir, secureio.SecureDirPerms); err != nil {
+	if err := os.MkdirAll(dstDir, 0o700); err != nil {
 		return withField(fileOpError("create", dstDir, err), "profile", profileName)
 	}
 
@@ -526,7 +525,7 @@ func (pm *profileManager) BraveSessionIsolation(name string, cookieDomains []str
 	// Create unique isolated profile directory with timestamp
 	// This prevents Brave's session reuse by making each launch use a different path
 	isolatedDir := filepath.Join(pm.workDir, fmt.Sprintf("Profile-%d", time.Now().UnixNano()))
-	if err := os.MkdirAll(isolatedDir, secureio.SecureDirPerms); err != nil {
+	if err := os.MkdirAll(isolatedDir, 0o700); err != nil {
 		return withField(fileOpError("create", isolatedDir, err), "profile", name)
 	}
 
@@ -549,7 +548,7 @@ func (pm *profileManager) BraveSessionIsolation(name string, cookieDomains []str
 // copyProfileToDir is a helper method that copies profile to a specific directory.
 func (pm *profileManager) copyProfileToDir(srcDir, dstDir, profileName string, cookieDomains []string) error {
 	dstProfileDir := filepath.Join(dstDir, "Default")
-	if err := os.MkdirAll(dstProfileDir, secureio.SecureDirPerms); err != nil {
+	if err := os.MkdirAll(dstProfileDir, 0o700); err != nil {
 		return withField(fileOpError("create", dstProfileDir, err), "profile", profileName)
 	}
 
