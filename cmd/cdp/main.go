@@ -4540,9 +4540,7 @@ func setupChromeForEnhanced(ctx context.Context, cfg fullCaptureConfig) (context
 						log.Printf("Target attach also failed: %v, launching new browser", err)
 					}
 				} else {
-					if verbose {
-						log.Printf("Connected to running browser on port %d (target: %s)", remotePort, targetTab.Title)
-					}
+					fmt.Fprintf(os.Stderr, "Attached to running browser at localhost:%d (target: %s)\n", remotePort, targetTab.Title)
 					cancel := func() {
 						browserCancel2()
 						allocCancel2()
@@ -4553,9 +4551,7 @@ func setupChromeForEnhanced(ctx context.Context, cfg fullCaptureConfig) (context
 				log.Printf("Failed to list targets: %v, launching new browser", listErr)
 			}
 		} else {
-			if verbose {
-				log.Printf("Connected to running browser on port %d", remotePort)
-			}
+			fmt.Fprintf(os.Stderr, "Attached to running browser at %s:%d\n", remoteHost, remotePort)
 			cancel := func() {
 				browserCancel()
 				allocCancel()
@@ -4671,9 +4667,7 @@ func setupChromeForEnhanced(ctx context.Context, cfg fullCaptureConfig) (context
 		return nil, nil, false, fmt.Errorf("failed to start browser: %w", err)
 	}
 
-	if verbose {
-		log.Println("Browser launched successfully")
-	}
+	fmt.Fprintf(os.Stderr, "Launched new browser on debug port %d\n", debugPort)
 
 	cancel := func() {
 		browserCancel()
