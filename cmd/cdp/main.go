@@ -1284,7 +1284,7 @@ func main() {
 	// Profile management flags
 	var profileDir string
 	var outputFormat string
-	flag.StringVar(&useProfile, "use-profile", "", "Use Chrome profile with cookies and session data")
+	flag.StringVar(&useProfile, "use-profile", "", "Copy the named Chrome profile (cookies, session) into a temp dir and launch against the copy; to attach to a running browser using that profile, use -remote-host")
 	flag.StringVar(&profileDir, "profile-dir", "", "Custom profile directory (overrides default locations)")
 	flag.StringVar(&cookieDomains, "cookie-domains", "", "Comma-separated list of domains to include cookies from (requires sqlite3 in PATH)")
 	flag.BoolVar(&listProfiles, "list-profiles", false, "List available Chrome profiles and exit")
@@ -2516,12 +2516,10 @@ func main() {
 					}
 				}
 
-				if verbose {
-					if len(cookieDomainsSlice) > 0 {
-						log.Printf("Using profile '%s' with cookies filtered for domains: %v", useProfile, cookieDomainsSlice)
-					} else {
-						log.Printf("Using profile '%s' with all cookies", useProfile)
-					}
+				if len(cookieDomainsSlice) > 0 {
+					fmt.Fprintf(os.Stderr, "Using profile '%s' (copy at %s) with cookies filtered for domains: %v\n", useProfile, profileManager.WorkDir(), cookieDomainsSlice)
+				} else {
+					fmt.Fprintf(os.Stderr, "Using profile '%s' (copy at %s)\n", useProfile, profileManager.WorkDir())
 				}
 			}
 
@@ -4596,12 +4594,10 @@ func setupChromeForEnhanced(ctx context.Context, cfg fullCaptureConfig) (context
 		userDataDir = pm.WorkDir()
 		profileCleanup = func() { pm.Cleanup() }
 
-		if verbose {
-			if len(cookieDomains) > 0 {
-				log.Printf("Using profile '%s' with cookies filtered for domains: %v", cfg.UseProfile, cookieDomains)
-			} else {
-				log.Printf("Using profile '%s' with all cookies", cfg.UseProfile)
-			}
+		if len(cookieDomains) > 0 {
+			fmt.Fprintf(os.Stderr, "Using profile '%s' (copy at %s) with cookies filtered for domains: %v\n", cfg.UseProfile, userDataDir, cookieDomains)
+		} else {
+			fmt.Fprintf(os.Stderr, "Using profile '%s' (copy at %s)\n", cfg.UseProfile, userDataDir)
 		}
 	}
 
