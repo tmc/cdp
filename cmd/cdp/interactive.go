@@ -966,6 +966,13 @@ func (im *InteractiveMode) showWelcome() {
 	fmt.Println()
 	fmt.Println("Type 'help' for available commands or 'quick' for quick reference")
 	fmt.Println("Type 'exit' or 'quit' to leave")
+	if im.cfg.OutputDir != "" {
+		if abs, err := filepath.Abs(im.cfg.OutputDir); err == nil {
+			fmt.Printf("Output dir: %s\n", abs)
+		} else {
+			fmt.Printf("Output dir: %s\n", im.cfg.OutputDir)
+		}
+	}
 	fmt.Println()
 }
 
