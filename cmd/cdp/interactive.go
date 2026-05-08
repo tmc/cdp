@@ -574,7 +574,15 @@ type terminalShellReader struct {
 
 func newShellReader(in *os.File, out io.Writer, history *[]string, complete func(string) []string) (shellReader, error) {
 	if !term.IsTerminal(int(in.Fd())) {
-		return newScannerShellReader(in, out, false), nil
+		// Even when stdin isn't a TTY (piped input, fresh pane with no parent
+		// shell, etc.) print the prompt as long as the user can see it on a
+		// TTY stdout. Without this, the shell appears hung after the welcome
+		// banner.
+		showPrompt := false
+		if f, ok := out.(*os.File); ok && term.IsTerminal(int(f.Fd())) {
+			showPrompt = true
+		}
+		return newScannerShellReader(in, out, showPrompt), nil
 	}
 	return &terminalShellReader{
 		in:       in,
