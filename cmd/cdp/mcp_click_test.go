@@ -159,3 +159,25 @@ func TestParseRawCDPCommand(t *testing.T) {
 		})
 	}
 }
+
+func TestIsRawCDPCommandName(t *testing.T) {
+	tests := []struct {
+		name string
+		in   string
+		want bool
+	}{
+		{name: "raw method", in: "Runtime.evaluate", want: true},
+		{name: "builtin command", in: "click", want: false},
+		{name: "empty", in: "", want: false},
+		{name: "too many dots", in: "Runtime.evaluate.now", want: false},
+		{name: "blocked method", in: "Browser.close", want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := isRawCDPCommandName(tt.in); got != tt.want {
+				t.Fatalf("isRawCDPCommandName(%q) = %v, want %v", tt.in, got, tt.want)
+			}
+		})
+	}
+}

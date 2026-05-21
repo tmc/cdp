@@ -4351,6 +4351,13 @@ func handleEnhancedMode(command string, interactive bool, cfg fullCaptureConfig)
 	}
 	defer chromeCancel()
 
+	if isRawCDPCommandName(cmdName) {
+		if err := executeCommand(chromeCtx, command); err != nil {
+			exitWithError(ExitGeneralError, ErrorTypeGeneral, "Command failed: %v", err)
+		}
+		return
+	}
+
 	// Check for special commands
 	switch cmdName {
 	case "help", "h":

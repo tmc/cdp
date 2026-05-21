@@ -60,6 +60,11 @@ func validateRawCDPMethod(method string) (string, error) {
 	return method, nil
 }
 
+func isRawCDPCommandName(name string) bool {
+	_, err := validateRawCDPMethod(name)
+	return err == nil
+}
+
 func validateRawCDPTarget(target string) (string, error) {
 	target = strings.TrimSpace(target)
 	if target == "" {
