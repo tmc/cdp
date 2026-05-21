@@ -405,8 +405,15 @@ func checkRunningChrome(port int) (bool, string) {
 
 // getChromeTabs gets list of available tabs from Chrome
 func getChromeTabs(port int) ([]ChromeTab, error) {
+	return getChromeTabsFrom("localhost", port)
+}
+
+func getChromeTabsFrom(host string, port int) ([]ChromeTab, error) {
+	if host == "" {
+		host = "localhost"
+	}
 	client := &http.Client{Timeout: 5 * time.Second}
-	resp, err := client.Get(fmt.Sprintf("http://localhost:%d/json/list", port))
+	resp, err := client.Get(fmt.Sprintf("http://%s:%d/json/list", host, port))
 	if err != nil {
 		return nil, err
 	}
@@ -1538,19 +1545,24 @@ func main() {
 	// Handle enhanced command mode
 	if fullCapture || command != "" {
 		handleEnhancedMode(command, fullCapture, fullCaptureConfig{
-			Verbose:         verbose,
-			ChromePath:      chromePath,
-			ShowChromeFlags: showChromeFlags,
-			UseProfile:      useProfile,
-			CookieDomains:   cookieDomains,
-			DebugPort:       debugPort,
-			OutputDir:       outputDir,
-			ToolsDir:        toolsDir,
-			SaveSources:     saveSources,
-			NoScrub:         noScrub,
-			APIPort:         apiPort,
-			HarlStream:      harlStream,
-			HarlFile:        harlFile,
+			Verbose:           verbose,
+			ChromePath:        chromePath,
+			ShowChromeFlags:   showChromeFlags,
+			UseProfile:        useProfile,
+			CookieDomains:     cookieDomains,
+			DebugPort:         debugPort,
+			DebugPortExplicit: debugPortExplicit,
+			ConnectExisting:   connectExisting,
+			RemoteHost:        remoteHost,
+			RemotePort:        remotePort,
+			TabID:             tabID,
+			OutputDir:         outputDir,
+			ToolsDir:          toolsDir,
+			SaveSources:       saveSources,
+			NoScrub:           noScrub,
+			APIPort:           apiPort,
+			HarlStream:        harlStream,
+			HarlFile:          harlFile,
 		})
 		return
 	}
@@ -1700,6 +1712,22 @@ func main() {
 	// This scans a fixed set of common debug ports rather than using debugPort,
 	// since the intent is to discover any running Chrome regardless of how it was launched.
 	if listTabs {
+		if remoteHost != "" {
+			tabs, err := browser.ListTabs(remoteHost, remotePort)
+			if err != nil {
+				exitWithError(ExitBrowserError, ErrorTypeBrowser, "Failed to list tabs at %s:%d: %v", remoteHost, remotePort, err)
+			}
+
+			fmt.Printf("Available tabs on %s:%d:\n\n", remoteHost, remotePort)
+			for i, tab := range tabs {
+				fmt.Printf("[%d] %s\n", i, tab.Title)
+				fmt.Printf("    URL: %s\n", tab.URL)
+				fmt.Printf("    Type: %s\n", tab.Type)
+				fmt.Printf("    ID: %s\n\n", tab.ID)
+			}
+			return
+		}
+
 		debugPorts := []int{9222, 9223, 9224, 9225}
 		for _, port := range debugPorts {
 			if ok, _ := checkRunningChrome(port); ok {
@@ -1716,23 +1744,6 @@ func main() {
 				}
 				return
 			}
-		}
-
-		// Fallback to remote host if specified
-		if remoteHost != "" {
-			tabs, err := browser.ListTabs(remoteHost, remotePort)
-			if err != nil {
-				exitWithError(ExitBrowserError, ErrorTypeBrowser, "Failed to list tabs: %v", err)
-			}
-
-			fmt.Printf("Available tabs on %s:%d:\n\n", remoteHost, remotePort)
-			for i, tab := range tabs {
-				fmt.Printf("[%d] %s\n", i, tab.Title)
-				fmt.Printf("    URL: %s\n", tab.URL)
-				fmt.Printf("    Type: %s\n", tab.Type)
-				fmt.Printf("    ID: %s\n\n", tab.ID)
-			}
-			return
 		}
 
 		exitWithError(ExitBrowserError, ErrorTypeBrowser, "No running Chrome found with debug port enabled")
@@ -1786,9 +1797,9 @@ func main() {
 		// Handle direct tab connection for specific operations (only when connecting to remote)
 		if remoteHost != "" && (len(jsScripts) > 0 || tabID != "" || harFile != "" || harlStream || extractSelector != "" || screenshotRequested || renderRequested) {
 			// Get available tabs
-			_, err := getChromeTabs(remotePort)
+			_, err := getChromeTabsFrom(remoteHost, remotePort)
 			if err != nil {
-				exitWithError(ExitBrowserError, ErrorTypeBrowser, "Failed to get tabs: %v", err)
+				exitWithError(ExitBrowserError, ErrorTypeBrowser, "Failed to get tabs at %s:%d: %v", remoteHost, remotePort, err)
 			}
 
 			// Find target tab
@@ -1800,9 +1811,9 @@ func main() {
 			// Connect to specific tab
 			var remoteURL string
 			if targetTabID != "" {
-				remoteURL = fmt.Sprintf("ws://localhost:%d/devtools/page/%s", remotePort, targetTabID)
+				remoteURL = fmt.Sprintf("ws://%s:%d/devtools/page/%s", remoteHost, remotePort, targetTabID)
 			} else {
-				remoteURL = fmt.Sprintf("ws://localhost:%d", remotePort)
+				remoteURL = fmt.Sprintf("ws://%s:%d", remoteHost, remotePort)
 			}
 
 			allocCtx, allocCancel := chromedp.NewRemoteAllocator(ctx, remoteURL)
@@ -1817,7 +1828,7 @@ func main() {
 
 			if targetTabID != "" {
 				// Connect to browser first, then attach to existing target
-				allocCtx, allocCancel = chromedp.NewRemoteAllocator(ctx, fmt.Sprintf("ws://localhost:%d", remotePort))
+				allocCtx, allocCancel = chromedp.NewRemoteAllocator(ctx, fmt.Sprintf("ws://%s:%d", remoteHost, remotePort))
 				opts = append(opts, chromedp.WithTargetID(target.ID(targetTabID)))
 				// Use existing target without managing its lifecycle
 				opts = append(opts, chromedp.WithBrowserOption(
@@ -1852,181 +1863,182 @@ func main() {
 			}
 
 			if harFile != "" || harlStream || len(jsScripts) > 0 || extractSelector != "" || screenshotRequested {
-				if harMode == "enhanced" {
-					// Use enhanced recorder with full capture
-					var err error
-					recOpts := []harrecorder.Option{
-						harrecorder.WithVerbose(verbose),
-						harrecorder.WithStreaming(harlStream),
-						harrecorder.WithOutputDir(outputDir),
-					}
-					if !noScrub {
-						recOpts = append(recOpts, harrecorder.WithScrubber(scrub.New()))
-					}
-					enhancedRecorder, err = harrecorder.New(recOpts...)
-					if err != nil {
-						exitWithError(ExitGeneralError, ErrorTypeGeneral, "Failed to create enhanced recorder: %v", err)
-					}
-				} else {
-					// Use local recorder for simple mode (if not enhanced)
-					// But wait, recorder variable is just a struct without domain writing logic.
-					// We need to implement it for simple mode too.
-					recorder = &NetworkRecorder{}
-				}
-
-				// Map for domain writers in simple mode
-				simpleDomainWriters := make(map[string]*os.File)
-				var simpleWritersMu sync.Mutex
-
-				// Check if all-tabs monitoring is enabled
-				if monitorAllTabs && harMode == "enhanced" {
-					// Use AllTabsMonitor for monitoring all browser tabs
-					allTabsMonitor := NewAllTabsMonitor(browserCtx, enhancedRecorder, verbose)
-					if err := allTabsMonitor.Start(); err != nil {
-						exitWithError(ExitGeneralError, ErrorTypeNetwork, "Failed to start all-tabs monitoring: %v", err)
-					}
-					defer allTabsMonitor.Stop()
-
-					if harFile != "" {
-						fmt.Printf("Recording network traffic from ALL TABS to: %s (enhanced mode)\n", harFile)
-					} else {
-						fmt.Println("Monitoring network traffic from ALL TABS")
-					}
-				} else {
-					// Standard single-target monitoring
-					// Enable network monitoring
-					if err := chromedp.Run(browserCtx, network.Enable()); err != nil {
-						exitWithError(ExitGeneralError, ErrorTypeNetwork, "Failed to enable network monitoring: %v", err)
-					}
-
-					// Set up network event listeners based on mode
+				wantsNetworkCapture := harFile != "" || harlStream || monitorAllTabs
+				if wantsNetworkCapture {
 					if harMode == "enhanced" {
-						chromedp.ListenTarget(browserCtx, enhancedRecorder.HandleNetworkEvent(browserCtx))
+						// Use enhanced recorder with full capture
+						var err error
+						recOpts := []harrecorder.Option{
+							harrecorder.WithVerbose(verbose),
+							harrecorder.WithStreaming(harlStream),
+							harrecorder.WithOutputDir(outputDir),
+						}
+						if !noScrub {
+							recOpts = append(recOpts, harrecorder.WithScrubber(scrub.New()))
+						}
+						enhancedRecorder, err = harrecorder.New(recOpts...)
+						if err != nil {
+							exitWithError(ExitGeneralError, ErrorTypeGeneral, "Failed to create enhanced recorder: %v", err)
+						}
+					} else {
+						// Simple mode records into NetworkRecorder; domain writers are set up below.
+						recorder = &NetworkRecorder{}
+					}
 
-						// Enable Fetch domain interception for shell mode.
-						if err := chromedp.Run(browserCtx, fetch.Enable().WithPatterns([]*fetch.RequestPattern{
-							{URLPattern: "*", RequestStage: fetch.RequestStageResponse},
-						})); err != nil {
-							if verbose {
-								log.Printf("Warning: failed to enable Fetch domain: %v", err)
-							}
+					// Map for domain writers in simple mode
+					simpleDomainWriters := make(map[string]*os.File)
+					var simpleWritersMu sync.Mutex
+
+					// Check if all-tabs monitoring is enabled
+					if monitorAllTabs && harMode == "enhanced" {
+						// Use AllTabsMonitor for monitoring all browser tabs
+						allTabsMonitor := NewAllTabsMonitor(browserCtx, enhancedRecorder, verbose)
+						if err := allTabsMonitor.Start(); err != nil {
+							exitWithError(ExitGeneralError, ErrorTypeNetwork, "Failed to start all-tabs monitoring: %v", err)
+						}
+						defer allTabsMonitor.Stop()
+
+						if harFile != "" {
+							fmt.Printf("Recording network traffic from ALL TABS to: %s (enhanced mode)\n", harFile)
 						} else {
-							chromedp.ListenTarget(browserCtx, enhancedRecorder.HandleFetchEvent(browserCtx))
-							if verbose {
-								log.Printf("Fetch domain interception enabled for response body capture")
-							}
+							fmt.Println("Monitoring network traffic from ALL TABS")
+						}
+					} else {
+						// Standard single-target monitoring
+						// Enable network monitoring
+						if err := chromedp.Run(browserCtx, network.Enable()); err != nil {
+							exitWithError(ExitGeneralError, ErrorTypeNetwork, "Failed to enable network monitoring: %v", err)
 						}
 
-						// Inject JS capture scripts for gRPC-Web streaming and
-						// WebRTC DataChannel traffic.
-						for name, script := range map[string]string{
-							"fetch-capture":  harrecorder.FetchCaptureScript,
-							"webrtc-capture": harrecorder.WebRTCCaptureScript,
-						} {
-							if err := chromedp.Run(browserCtx, chromedp.ActionFunc(func(ctx context.Context) error {
-								_, err := page.AddScriptToEvaluateOnNewDocument(script).Do(ctx)
-								return err
+						// Set up network event listeners based on mode
+						if harMode == "enhanced" {
+							chromedp.ListenTarget(browserCtx, enhancedRecorder.HandleNetworkEvent(browserCtx))
+
+							// Enable Fetch domain interception for shell mode.
+							if err := chromedp.Run(browserCtx, fetch.Enable().WithPatterns([]*fetch.RequestPattern{
+								{URLPattern: "*", RequestStage: fetch.RequestStageResponse},
 							})); err != nil {
 								if verbose {
-									log.Printf("Warning: failed to inject %s script: %v", name, err)
+									log.Printf("Warning: failed to enable Fetch domain: %v", err)
 								}
-							} else if verbose {
-								log.Printf("Injected %s script for enhanced capture", name)
-							}
-						}
-
-						// Route structured capture console messages to recorder.
-						chromedp.ListenTarget(browserCtx, func(ev interface{}) {
-							if ce, ok := ev.(*runtime.EventConsoleAPICalled); ok {
-								enhancedRecorder.HandleConsoleCapture(ce)
-							}
-						})
-
-						if harFile != "" {
-							fmt.Printf("Recording network traffic to: %s (enhanced mode)\n", harFile)
-						}
-					} else {
-						chromedp.ListenTarget(browserCtx, func(ev interface{}) {
-							switch ev := ev.(type) {
-							case *network.EventResponseReceived:
+							} else {
+								chromedp.ListenTarget(browserCtx, enhancedRecorder.HandleFetchEvent(browserCtx))
 								if verbose {
-									log.Printf("Response received: %s", ev.Response.URL)
+									log.Printf("Fetch domain interception enabled for response body capture")
 								}
+							}
 
-								// Create basic HAR entry
-								entry := HAREntry{
-									StartedDateTime: time.Now().Format(time.RFC3339),
-									Request: map[string]interface{}{
-										"method":  "GET", // Simplified
-										"url":     ev.Response.URL,
-										"headers": []interface{}{},
-									},
-									Response: map[string]interface{}{
-										"status":     ev.Response.Status,
-										"statusText": ev.Response.StatusText,
-										"headers":    []interface{}{},
-										"content": map[string]interface{}{
-											"size":     0,
-											"mimeType": ev.Response.MimeType,
-										},
-									},
-									Time: 0, // Simplified
+							// Inject JS capture scripts for gRPC-Web streaming and
+							// WebRTC DataChannel traffic.
+							for name, script := range map[string]string{
+								"fetch-capture":  harrecorder.FetchCaptureScript,
+								"webrtc-capture": harrecorder.WebRTCCaptureScript,
+							} {
+								if err := chromedp.Run(browserCtx, chromedp.ActionFunc(func(ctx context.Context) error {
+									_, err := page.AddScriptToEvaluateOnNewDocument(script).Do(ctx)
+									return err
+								})); err != nil {
+									if verbose {
+										log.Printf("Warning: failed to inject %s script: %v", name, err)
+									}
+								} else if verbose {
+									log.Printf("Injected %s script for enhanced capture", name)
 								}
+							}
 
-								recorder.AddEntry(entry)
+							// Route structured capture console messages to recorder.
+							chromedp.ListenTarget(browserCtx, func(ev interface{}) {
+								if ce, ok := ev.(*runtime.EventConsoleAPICalled); ok {
+									enhancedRecorder.HandleConsoleCapture(ce)
+								}
+							})
 
-								// Stream entry as NDJSON if --harl is enabled
-								if harlStream {
-									jsonBytes, err := json.Marshal(entry)
-									if err != nil {
-										return
+							if harFile != "" {
+								fmt.Printf("Recording network traffic to: %s (enhanced mode)\n", harFile)
+							}
+						} else {
+							chromedp.ListenTarget(browserCtx, func(ev interface{}) {
+								switch ev := ev.(type) {
+								case *network.EventResponseReceived:
+									if verbose {
+										log.Printf("Response received: %s", ev.Response.URL)
 									}
 
-									if outputDir != "" {
-										// Simple mode domain organization
-										uStr := entry.Request["url"].(string)
-										u, err := neturl.Parse(uStr)
-										if err == nil {
-											hostname := u.Hostname()
-											if hostname == "" {
-												hostname = "unknown_domain"
-											}
+									// Create basic HAR entry
+									entry := HAREntry{
+										StartedDateTime: time.Now().Format(time.RFC3339),
+										Request: map[string]interface{}{
+											"method":  "GET", // Simplified
+											"url":     ev.Response.URL,
+											"headers": []interface{}{},
+										},
+										Response: map[string]interface{}{
+											"status":     ev.Response.Status,
+											"statusText": ev.Response.StatusText,
+											"headers":    []interface{}{},
+											"content": map[string]interface{}{
+												"size":     0,
+												"mimeType": ev.Response.MimeType,
+											},
+										},
+										Time: 0, // Simplified
+									}
 
-											simpleWritersMu.Lock()
-											writer, ok := simpleDomainWriters[hostname]
-											if !ok {
-												if err := os.MkdirAll(outputDir, 0755); err == nil {
-													fname := filepath.Join(outputDir, fmt.Sprintf("%s.jsonl", hostname))
-													if f, err := os.OpenFile(fname, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644); err == nil {
-														writer = f
-														simpleDomainWriters[hostname] = writer
+									recorder.AddEntry(entry)
+
+									// Stream entry as NDJSON if --harl is enabled
+									if harlStream {
+										jsonBytes, err := json.Marshal(entry)
+										if err != nil {
+											return
+										}
+
+										if outputDir != "" {
+											// Simple mode domain organization
+											uStr := entry.Request["url"].(string)
+											u, err := neturl.Parse(uStr)
+											if err == nil {
+												hostname := u.Hostname()
+												if hostname == "" {
+													hostname = "unknown_domain"
+												}
+
+												simpleWritersMu.Lock()
+												writer, ok := simpleDomainWriters[hostname]
+												if !ok {
+													if err := os.MkdirAll(outputDir, 0755); err == nil {
+														fname := filepath.Join(outputDir, fmt.Sprintf("%s.jsonl", hostname))
+														if f, err := os.OpenFile(fname, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644); err == nil {
+															writer = f
+															simpleDomainWriters[hostname] = writer
+														}
 													}
 												}
-											}
-											simpleWritersMu.Unlock()
+												simpleWritersMu.Unlock()
 
-											if writer != nil {
-												fmt.Fprintln(writer, string(jsonBytes))
+												if writer != nil {
+													fmt.Fprintln(writer, string(jsonBytes))
+												}
 											}
+										} else {
+											fmt.Fprintln(harlWriter, string(jsonBytes))
 										}
-									} else {
-										fmt.Fprintln(harlWriter, string(jsonBytes))
 									}
 								}
+							})
+
+							if harFile != "" {
+								fmt.Printf("Recording network traffic to: %s\n", harFile)
 							}
-						})
-
-						if harFile != "" {
-							fmt.Printf("Recording network traffic to: %s\n", harFile)
 						}
-					}
 
-					if harlStream {
-						if verbose {
-							if harlFile == "-" {
-								log.Println("Streaming HAR entries as NDJSON to stdout")
-							} else {
-								log.Printf("Streaming HAR entries as NDJSON to %s", harlFile)
+						if harlStream {
+							if verbose {
+								if harlFile == "-" {
+									log.Println("Streaming HAR entries as NDJSON to stdout")
+								} else {
+									log.Printf("Streaming HAR entries as NDJSON to %s", harlFile)
+								}
 							}
 						}
 					}
@@ -4389,6 +4401,9 @@ type fullCaptureConfig struct {
 	DebugPort         int
 	DebugPortExplicit bool // true when --debug-port was explicitly set
 	ConnectExisting   bool // true when --connect-existing was set
+	RemoteHost        string
+	RemotePort        int
+	TabID             string
 	OutputDir         string
 	ToolsDir          string
 	SaveSources       bool
@@ -4456,7 +4471,13 @@ func setupChromeForEnhanced(ctx context.Context, cfg fullCaptureConfig) (context
 	// directly to that port instead of auto-discovering a different browser.
 	var remoteHost string
 	var remotePort int
-	if cfg.ConnectExisting && cfg.DebugPortExplicit {
+	if cfg.RemoteHost != "" && cfg.RemotePort > 0 {
+		remoteHost = cfg.RemoteHost
+		remotePort = cfg.RemotePort
+		if verbose {
+			log.Printf("connecting directly to %s:%d", remoteHost, remotePort)
+		}
+	} else if cfg.ConnectExisting && cfg.DebugPortExplicit {
 		remoteHost = "localhost"
 		remotePort = debugPort
 		if verbose {
@@ -4489,6 +4510,24 @@ func setupChromeForEnhanced(ctx context.Context, cfg fullCaptureConfig) (context
 			log.Printf("Connecting to running browser at %s", remoteURL)
 		}
 		allocCtx, allocCancel := chromedp.NewRemoteAllocator(ctx, remoteURL)
+
+		if cfg.TabID != "" {
+			browserCtx, browserCancel := chromedp.NewContext(allocCtx,
+				chromedp.WithErrorf(filteredErrorf),
+				chromedp.WithTargetID(target.ID(cfg.TabID)),
+			)
+			if err := chromedp.Run(browserCtx, chromedp.Evaluate("1", nil)); err != nil {
+				browserCancel()
+				allocCancel()
+				return nil, nil, false, fmt.Errorf("attach to target %s at %s:%d: %w", cfg.TabID, remoteHost, remotePort, err)
+			}
+			fmt.Fprintf(os.Stderr, "Attached to running browser at %s:%d (target: %s)\n", remoteHost, remotePort, cfg.TabID)
+			cancel := func() {
+				browserCancel()
+				allocCancel()
+			}
+			return browserCtx, cancel, false, nil
+		}
 
 		// First try creating a new target (works for Chrome/Brave).
 		browserCtx, browserCancel := chromedp.NewContext(allocCtx,
