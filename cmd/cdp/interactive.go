@@ -109,6 +109,16 @@ func (im *InteractiveMode) SetSourceCollector(sc *sources.Collector) {
 	im.registerSourceCommands()
 }
 
+func (im *InteractiveMode) attachSourceCollector(ctx context.Context) {
+	if im.sourceCollector == nil {
+		return
+	}
+	chromedp.ListenTarget(ctx, im.sourceCollector.Listener(ctx))
+	if err := im.sourceCollector.AttachToTarget(ctx); err != nil && im.verbose {
+		log.Printf("Warning: source capture target attach: %v", err)
+	}
+}
+
 func interactiveHistoryPath() (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -1097,6 +1107,7 @@ func (im *InteractiveMode) reconnect() error {
 	im.ctx = ctx
 	im.cancel = cancel
 	im.launched = launched
+	im.attachSourceCollector(ctx)
 	fmt.Println("Reconnected.")
 	return nil
 }
@@ -1141,6 +1152,7 @@ func (im *InteractiveMode) listTabs() {
 // newTab creates a new browser tab and switches to it.
 func (im *InteractiveMode) newTab(url string) {
 	tabCtx, _ := chromedp.NewContext(im.browserCtx)
+	im.attachSourceCollector(tabCtx)
 	if err := chromedp.Run(tabCtx, chromedp.Navigate(url)); err != nil {
 		fmt.Printf("Error creating tab: %v\n", err)
 		return
@@ -1195,6 +1207,7 @@ func (im *InteractiveMode) switchTab(selector string) {
 		fmt.Printf("Error switching to tab: %v\n", err)
 		return
 	}
+	im.attachSourceCollector(tabCtx)
 	im.ctx = tabCtx
 
 	title := targetInfo.Title
