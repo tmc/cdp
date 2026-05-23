@@ -1546,6 +1546,7 @@ func main() {
 	if fullCapture || command != "" {
 		handleEnhancedMode(command, fullCapture, fullCaptureConfig{
 			Verbose:           verbose,
+			Headless:          headless,
 			ChromePath:        chromePath,
 			ShowChromeFlags:   showChromeFlags,
 			UseProfile:        useProfile,
