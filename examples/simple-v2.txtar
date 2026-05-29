@@ -1,3 +1,5 @@
+# Verification: exploratory live-only; external site flow, not a curated CI fixture.
+
 # Simple test for rsc.io/script engine-- main.cdp --
 # Navigate to example.com
 goto https://example.com

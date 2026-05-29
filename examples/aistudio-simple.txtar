@@ -1,3 +1,5 @@
+# Verification: exploratory live-only; external site flow, not a curated CI fixture.
+
 # Simple AI Studio Navigation
 # Tests navigation to AI Studio (no login required for viewing)
 -- main.cdp --

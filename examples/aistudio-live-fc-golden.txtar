@@ -1,3 +1,5 @@
+# Verification: exploratory live-only; external site flow, not a curated CI fixture.
+
 -- main.cdp --
 goto https://aistudio.google.com/live?model=gemini-2.5-flash-native-audio-preview-12-2025
 wait 10s

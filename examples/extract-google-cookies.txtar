@@ -1,3 +1,8 @@
+# Purpose: extract Google session cookies from a signed-in browser profile.
+# Usage: cdp run examples/extract-google-cookies.txtar
+# Inputs: an attached or launched browser profile already signed in to Google.
+# Verification: live-only; authenticated Google cookie extraction, stdout may include sensitive cookie material.
+
 -- main.cdp --
 # Extract Google Session Cookies
 #

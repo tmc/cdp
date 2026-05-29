@@ -1,3 +1,8 @@
+# Purpose: automate a Google OAuth consent flow for gdocsmd token setup.
+# Usage: cdp run --tab <existing-tab-id> examples/gdocsmd-auth.txtar
+# Inputs: Google OAuth client credentials and a browser profile signed in to Google.
+# Verification: live-only; authenticated OAuth flow, stdout may include authorization code material.
+
 -- main.cdp --
 # gdocsmd OAuth Token Generator
 #

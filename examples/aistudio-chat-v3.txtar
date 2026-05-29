@@ -1,3 +1,5 @@
+# Verification: exploratory live-only; external site flow, not a curated CI fixture.
+
 # AI Studio Chat Script - Supports existing tab or opens new one-- main.cdp --
 # If no existing tab, navigate to AI Studio
 [!has-tab] goto https://aistudio.google.com/live?model=$MODEL

@@ -1,28 +1,23 @@
-# Google Doc to Markdown
-#
-# Usage:
-#   GDOC_URL="https://docs.google.com/document/d/YOUR_DOC_ID/edit" cdpscript examples/gdoc-to-markdown.txtar
+# Purpose: extract visible Google Docs content and print Markdown.
+# Usage: GDOC_URL="https://docs.google.com/document/d/YOUR_DOC_ID/edit" cdpscript examples/gdoc-to-markdown.txtar
+# Inputs: GDOC_URL and a browser profile with access to the document.
+# Verification: live-only; authenticated Google Docs UI flow, output is printed to stdout.
 
 -- main.cdp --
 # Google Doc to Markdown Converter
 # Usage: Set GDOC_URL env var to your Google Doc URL
 # Example: GDOC_URL="https://docs.google.com/document/d/abc123/edit" cdp run gdoc-to-markdown.txtar
 
-log Navigating to Google Doc...
 goto ${GDOC_URL}
 
 # Wait for the document editor to load
 wait 5s
 wait .kix-appview-editor
 
-log Waiting for document content to fully load...
 wait 3s
 
 # Extract and convert the document content
-log Extracting document content...
 jsfile extract-and-convert.js
-
-log Done!
 
 -- extract-and-convert.js --
 (() => {
@@ -278,7 +273,15 @@ log Done!
       }
     }
 
-    // Method 3: Try clipboard approach (requires user action)
+    // Method 3: use the same signed-in browser session to request the document
+    // as plain text. This keeps the script read-only and avoids scraping
+    // account state or browser storage.
+    const exported = exportPlainText();
+    if (exported && exported.trim()) {
+      return exported;
+    }
+
+    // Method 4: Try clipboard approach (requires user action)
     // This is a hint for users - they can Ctrl+A, Ctrl+C and paste elsewhere
 
     return 'Unable to extract content. Google Docs may be using canvas rendering.\n\n' +
@@ -288,8 +291,30 @@ log Done!
            '3. Select all (Ctrl+A), copy (Ctrl+C), and paste into a markdown editor';
   }
 
-  // Main extraction
-  const markdown = extractGoogleDocContent();
+  function exportPlainText() {
+    const match = location.href.match(/\/document\/d\/([^/]+)/);
+    if (!match) {
+      return '';
+    }
+    const exportURL = location.origin + '/document/d/' + match[1] + '/export?format=txt';
+    const req = new XMLHttpRequest();
+    try {
+      req.open('GET', exportURL, false);
+      req.send(null);
+    } catch (err) {
+      return '';
+    }
+    if (req.status < 200 || req.status >= 300) {
+      return '';
+    }
+    return req.responseText || '';
+  }
+
+  // Main extraction. Prefer the read-only export endpoint when it is
+  // available; current Google Docs renders most document text into canvas
+  // layers, which makes DOM text extraction unreliable.
+  const exported = exportPlainText();
+  const markdown = exported && exported.trim() ? exported : extractGoogleDocContent();
 
   // Clean up the markdown
   const cleaned = markdown

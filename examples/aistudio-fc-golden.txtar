@@ -1,3 +1,5 @@
+# Verification: exploratory live-only; external site flow, not a curated CI fixture.
+
 -- main.cdp --
 # Start fresh
 goto https://aistudio.google.com/prompts/new_chat?model=gemini-3-flash-preview

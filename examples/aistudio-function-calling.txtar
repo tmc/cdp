@@ -1,3 +1,5 @@
+# Verification: exploratory live-only; external site flow, not a curated CI fixture.
+
 -- main.cdp --
 # AI Studio Function Calling Setup
 # This script enables function calling and adds custom tool definitions

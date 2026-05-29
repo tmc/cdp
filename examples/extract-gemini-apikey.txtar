@@ -1,9 +1,10 @@
+# Purpose: extract a Gemini API key from Google AI Studio.
+# Usage: cdp run examples/extract-gemini-apikey.txtar
+# Inputs: an attached or launched browser profile already signed in to Google.
+# Verification: live-only; authenticated Google UI flow, output is printed to stdout.
+
 -- main.cdp --
 # Extract Gemini API Key from Google AI Studio
-# Requires: User logged into Google account in browser
-#
-# Usage: cdp run extract-gemini-apikey.txtar
-# Output: API key printed to stdout
 
 log Navigating to Google AI Studio API Keys page...
 goto https://aistudio.google.com/apikey

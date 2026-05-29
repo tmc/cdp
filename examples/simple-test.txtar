@@ -1,3 +1,5 @@
+# Verification: exploratory live-only; external site flow, not a curated CI fixture.
+
 # Simple Test Script
 # Usage: cdp run simple-test.txtar
 -- main.cdp --

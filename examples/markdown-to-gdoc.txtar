@@ -1,3 +1,5 @@
+# Verification: exploratory live-only; authenticated Google Docs write flow, not a curated CI fixture.
+
 # Markdown to Google Doc
 #
 # Usage:

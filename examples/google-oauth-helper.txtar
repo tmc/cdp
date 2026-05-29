@@ -1,7 +1,7 @@
-# Google OAuth Helper
-#
-# Usage:
-#   OAUTH_URL="https://accounts.google.com/..." cdpscript examples/google-oauth-helper.txtar
+# Purpose: drive a user-approved Google OAuth consent URL in an attached browser.
+# Usage: OAUTH_URL="https://accounts.google.com/..." cdpscript examples/google-oauth-helper.txtar
+# Inputs: OAUTH_URL and a browser profile signed in to the intended Google account.
+# Verification: live-only; authenticated OAuth UI flow, stdout may include callback URL or authorization-code material.
 
 -- main.cdp --
 # Google OAuth Consent Flow Helper

@@ -1,3 +1,8 @@
+# Purpose: extract Slack session tokens and cookies from a signed-in browser profile.
+# Usage: cdp run examples/extract-slack-tokens.txtar
+# Inputs: an attached or launched browser profile already signed in to Slack.
+# Verification: live-only; authenticated Slack token extraction, stdout may include sensitive token material.
+
 -- main.cdp --
 # Extract Slack Session Tokens
 #
