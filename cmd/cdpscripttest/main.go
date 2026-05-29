@@ -32,6 +32,7 @@ import (
 
 	"github.com/chromedp/chromedp"
 	"github.com/tmc/cdp/cdpscripttest"
+	"github.com/tmc/cdp/internal/browser"
 	"golang.org/x/term"
 	"golang.org/x/tools/txtar"
 )
@@ -41,7 +42,12 @@ func main() {
 }
 
 func run() int {
+	return runArgs(os.Args[1:], os.Stdout, os.Stderr)
+}
+
+func runArgs(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("cdpscripttest", flag.ContinueOnError)
+	fs.SetOutput(stderr)
 	baseURL := fs.String("url", "http://localhost:8090", "base URL for navigate commands")
 	headful := fs.Bool("headful", false, "run Chrome with a visible window")
 	interactive := fs.Bool("interactive", false, "drop to cdp> REPL after each script")
@@ -59,7 +65,7 @@ func run() int {
 	emitReport := fs.Bool("emit-cdp-report", false, "generate report.md in the artifact directory")
 	combinedReport := fs.Bool("emit-cdp-report-combined", false, "write all reports into one combined file (implies --emit-cdp-report)")
 
-	if err := fs.Parse(os.Args[1:]); err != nil {
+	if err := fs.Parse(args); err != nil {
 		if err == flag.ErrHelp {
 			return 0
 		}
@@ -70,20 +76,21 @@ func run() int {
 		*interactive = true
 	}
 
-	isColorEnabled := !*noColor && isatty(os.Stdout) && os.Getenv("NO_COLOR") == ""
+	stdoutFile, _ := stdout.(*os.File)
+	isColorEnabled := !*noColor && stdoutFile != nil && isatty(stdoutFile) && os.Getenv("NO_COLOR") == ""
 	imgProto := imageProtocol(*inlineImages)
-	out := &printer{w: os.Stdout, color: isColorEnabled, imageProto: imgProto, verbose: *verbose}
+	out := &printer{w: stdout, color: isColorEnabled, imageProto: imgProto, verbose: *verbose}
 
-	args := fs.Args()
-	if len(args) == 0 {
-		fmt.Fprintf(os.Stderr, "cdpscripttest: no scripts specified\n")
+	scriptArgs := fs.Args()
+	if len(scriptArgs) == 0 {
+		fmt.Fprintf(stderr, "cdpscripttest: no scripts specified\n")
 		fs.Usage()
 		return 2
 	}
 
-	files, err := cdpscripttest.ExpandGlobs(args)
+	files, err := cdpscripttest.ExpandGlobs(scriptArgs)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "cdpscripttest: %v\n", err)
+		fmt.Fprintf(stderr, "cdpscripttest: %v\n", err)
 		return 2
 	}
 
@@ -113,6 +120,7 @@ func run() int {
 		opts := append(chromedp.DefaultExecAllocatorOptions[:],
 			chromedp.Flag("headless", !*headful),
 			chromedp.WindowSize(w, h),
+			browser.EnableOptimizationGuideOnDeviceModel(),
 		)
 		if path != "" {
 			opts = append(opts, chromedp.ExecPath(path))
