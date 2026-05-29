@@ -45,7 +45,7 @@ type InteractiveMode struct {
 	toolsDir          string                // directory for .cdp tool definitions
 	sourceCollector   *sources.Collector
 	coverageCollector *coverage.Collector
-	syntheticMaps     *syntheticMapStore
+	syntheticMaps     *sourcemapManager
 }
 
 func (im *InteractiveMode) getCoverageStore() coverage.Store {
@@ -99,10 +99,7 @@ func (im *InteractiveMode) SetRecorder(rec recorderWithOutputDir, baseOutputDir 
 func (im *InteractiveMode) SetSourceCollector(sc *sources.Collector) {
 	im.sourceCollector = sc
 	if sc != nil {
-		if im.syntheticMaps == nil {
-			im.syntheticMaps = newSyntheticMapStore()
-		}
-		if n := loadSourcemapsFromDisk(sc.OutputDir(), im.syntheticMaps); n > 0 {
+		if n := im.ensureSourcemaps().loadFromDisk(sc.OutputDir()); n > 0 {
 			fmt.Printf("Loaded %d sourcemap(s) from %s\n", n, sc.OutputDir())
 		}
 	}
@@ -1219,11 +1216,7 @@ func (im *InteractiveMode) switchTab(selector string) {
 
 // contextOutputDir returns the output directory for the current context stack.
 func (im *InteractiveMode) contextOutputDir() string {
-	dir := im.baseOutputDir
-	for _, name := range im.contextStack {
-		dir = filepath.Join(dir, name)
-	}
-	return dir
+	return contextStackOutputDir(im.baseOutputDir, im.contextStack)
 }
 
 // pushContext pushes a named context, directing HAR/HARL writes to a subdirectory.
@@ -1255,7 +1248,7 @@ func (im *InteractiveMode) pushContext(name string) {
 			fmt.Printf("Coverage: auto-snapshot %s\n", snapName)
 		}
 	}
-	fmt.Printf("Context: %s — %s\n", strings.Join(im.contextStack, "/"), dir)
+	fmt.Printf("Context: %s — %s\n", contextStackDisplay(im.contextStack), dir)
 }
 
 // popContext pops the current context, returning to the parent directory.
@@ -1288,17 +1281,9 @@ func (im *InteractiveMode) popContext() {
 		}
 		im.recorder.SetOutputDir(dir)
 		// Restore parent context's tag or clear.
-		parentTag := ""
-		if len(im.contextStack) > 0 {
-			parentTag = im.contextStack[len(im.contextStack)-1]
-		}
-		im.recorder.SetTag(parentTag)
+		im.recorder.SetTag(contextStackParentTag(im.contextStack))
 	}
-	if len(im.contextStack) == 0 {
-		fmt.Printf("Context: (root) — %s\n", dir)
-	} else {
-		fmt.Printf("Context: %s — %s\n", strings.Join(im.contextStack, "/"), dir)
-	}
+	fmt.Printf("Context: %s — %s\n", contextStackDisplay(im.contextStack), dir)
 }
 
 // writeCoverageLcov writes delta and cumulative lcov files for a context pop.
@@ -1344,11 +1329,7 @@ func (im *InteractiveMode) showContext() {
 		fmt.Println("No --output-dir configured.")
 		return
 	}
-	if len(im.contextStack) == 0 {
-		fmt.Printf("Context: (root) — %s\n", im.baseOutputDir)
-	} else {
-		fmt.Printf("Context: %s — %s\n", strings.Join(im.contextStack, "/"), im.contextOutputDir())
-	}
+	fmt.Printf("Context: %s — %s\n", contextStackDisplay(im.contextStack), im.contextOutputDir())
 }
 
 // isDisconnected reports whether an error indicates the browser connection is lost.
@@ -1841,39 +1822,37 @@ func (im *InteractiveMode) sourcemapSetStructure(bundleURL, jsonStr string) erro
 		}
 	}
 
-	if im.syntheticMaps == nil {
-		im.syntheticMaps = newSyntheticMapStore()
-	}
+	maps := im.ensureSourcemaps()
+	sm := maps.get(bundleURL)
+	isRefinement := sm != nil && sm.Sources != nil && len(sm.Sources.Files) > 0
 
-	sm := im.syntheticMaps.get(bundleURL)
-	if sm == nil {
-		sm = &syntheticMap{BundleURL: bundleURL}
-	}
-	sm.Sources = &result
-
-	mapJSON, err := generateMapFromInferred(scriptCov.Source, &result)
+	mapJSON, err := sourcemap.GenerateFromStructure(scriptCov.Source, &result)
 	if err != nil {
 		return fmt.Errorf("generate sourcemap: %w", err)
 	}
-	sm.MapJSON = mapJSON
 
 	// Write to disk alongside saved sources.
 	sourcesDir := ""
 	if im.sourceCollector != nil {
 		sourcesDir = im.sourceCollector.OutputDir()
 	}
-	isRefinement := sm.Sources != nil && len(sm.Sources.Files) > 0
+	mapPath := ""
 	if path := writeSourcemapToDisk(sourcesDir, bundleURL, mapJSON); path != "" {
-		sm.MapPath = path
+		mapPath = path
 		writeStructureSidecar(path, &result)
-		ctxName := ""
-		if len(im.contextStack) > 0 {
-			ctxName = strings.Join(im.contextStack, "/")
+		ctxName := contextStackDisplay(im.contextStack)
+		if ctxName == "(root)" {
+			ctxName = ""
 		}
 		appendAnalysisLog(path, bundleURL, ctxName, &result, scriptCov.Source, isRefinement)
 	}
-
-	im.syntheticMaps.set(bundleURL, sm)
+	sm = maps.update(bundleURL, func(sm *syntheticMap) {
+		sm.Sources = &result
+		sm.MapJSON = mapJSON
+		if mapPath != "" {
+			sm.MapPath = mapPath
+		}
+	})
 
 	fmt.Printf("Sourcemap generated: %d files, %d bytes\n", len(result.Files), len(mapJSON))
 	for _, f := range result.Files {
@@ -1934,7 +1913,7 @@ func (im *InteractiveMode) sourcemapList() error {
 		if sm.Serving {
 			status = fmt.Sprintf("serving (rule %s)", sm.InterceptID)
 		}
-		logCount := countAnalysisLogEntries(sm.MapPath)
+		logCount := sourcemap.CountAnalysisLogEntries(sm.MapPath)
 		logInfo := ""
 		if logCount > 0 {
 			logInfo = fmt.Sprintf(", %d log entries", logCount)
@@ -1965,7 +1944,7 @@ func (im *InteractiveMode) sourcemapLog(bundleURL string) error {
 		return fmt.Errorf("no on-disk sourcemap for %s", bundleURL)
 	}
 
-	entries, err := readAnalysisLog(sm.MapPath)
+	entries, err := sourcemap.ReadAnalysisLog(sm.MapPath)
 	if err != nil {
 		return fmt.Errorf("read log: %w", err)
 	}

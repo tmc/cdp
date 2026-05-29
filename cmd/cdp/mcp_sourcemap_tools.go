@@ -5,227 +5,46 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"net/url"
-	"os"
-	"path/filepath"
 	"strings"
-	"sync"
-	"time"
 
 	"github.com/chromedp/chromedp"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	"github.com/tmc/cdp/internal/coverage"
 	"github.com/tmc/cdp/internal/sourcemap"
 )
 
-// syntheticMap holds a generated sourcemap for a bundle URL.
-type syntheticMap struct {
-	BundleURL   string          `json:"bundle_url"`
-	MapJSON     []byte          `json:"-"`
-	Sources     *inferredResult `json:"sources,omitempty"`
-	Serving     bool            `json:"serving"`
-	InterceptID string          `json:"intercept_id,omitempty"`
-	MapPath     string          `json:"map_path,omitempty"` // on-disk path to .map file
-	LogEntries  int             `json:"log_entries,omitempty"`
-}
-
-// analysisLogEntry records the reasoning behind sourcemap naming decisions.
-type analysisLogEntry struct {
-	Timestamp    string              `json:"timestamp"`
-	BundleURL    string              `json:"bundle_url"`
-	Context      string              `json:"context,omitempty"`
-	IsRefinement bool                `json:"is_refinement"`
-	Summary      string              `json:"summary"`
-	Files        []analysisFileEntry `json:"files"`
-}
-
-type analysisFileEntry struct {
-	Path        string              `json:"path"`
-	StartOffset int                 `json:"start_offset"`
-	EndOffset   int                 `json:"end_offset"`
-	Snippet     string              `json:"snippet"`
-	Reasoning   string              `json:"reasoning"`
-	Functions   []analysisFuncEntry `json:"functions,omitempty"`
-}
-
-type analysisFuncEntry struct {
-	Name      string `json:"name"`
-	StartLine int    `json:"start_line"`
-	EndLine   int    `json:"end_line"`
-	Reasoning string `json:"reasoning"`
-}
-
-// inferredResult is the LLM's structured response about bundle structure.
-type inferredResult struct {
-	Files   []inferredFile `json:"files"`
-	Summary string         `json:"summary"`
-}
-
-type inferredFile struct {
-	Path        string         `json:"path"`
-	Description string         `json:"description"`
-	StartLine   int            `json:"start_line"`
-	EndLine     int            `json:"end_line"`
-	StartOffset int            `json:"start_offset"`
-	EndOffset   int            `json:"end_offset"`
-	Functions   []inferredFunc `json:"functions,omitempty"`
-	Framework   string         `json:"framework,omitempty"`
-	Module      string         `json:"module,omitempty"`
-}
-
-type inferredFunc struct {
-	Name        string `json:"name"`
-	StartLine   int    `json:"start_line"`
-	EndLine     int    `json:"end_line"`
-	Description string `json:"description"`
-	Exported    bool   `json:"exported,omitempty"`
-}
-
-// syntheticMapStore manages sourcemaps keyed by bundle URL.
-type syntheticMapStore struct {
-	mu   sync.Mutex
-	maps map[string]*syntheticMap
-}
-
-func newSyntheticMapStore() *syntheticMapStore {
-	return &syntheticMapStore{maps: make(map[string]*syntheticMap)}
-}
-
-func (s *syntheticMapStore) get(url string) *syntheticMap {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.maps[url]
-}
-
-func (s *syntheticMapStore) set(url string, m *syntheticMap) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.maps[url] = m
-}
-
-func (s *syntheticMapStore) list() []*syntheticMap {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	var result []*syntheticMap
-	for _, m := range s.maps {
-		result = append(result, m)
-	}
-	return result
-}
+type inferredResult = sourcemap.Structure
+type inferredFile = sourcemap.File
+type inferredFunc = sourcemap.Function
 
 // sourcemapDiskPath returns the on-disk path for a bundle URL's .map file.
 // Follows the same layout as sources: outputDir/origin/_compiled/path.map
 func sourcemapDiskPath(sourcesDir, bundleURL string) string {
-	u, err := url.Parse(bundleURL)
-	if err != nil || u.Host == "" {
-		return ""
-	}
-	relPath := strings.TrimPrefix(u.Path, "/")
-	if relPath == "" {
-		relPath = "index.js"
-	}
-	return filepath.Join(sourcesDir, u.Host, "_compiled", relPath+".map")
+	return sourcemap.DiskPath(sourcesDir, bundleURL)
 }
 
 // writeSourcemapToDisk writes a .map file alongside the saved source.
 // Returns the path written, or empty string if sourcesDir is not configured.
 func writeSourcemapToDisk(sourcesDir, bundleURL string, mapJSON []byte) string {
-	if sourcesDir == "" {
-		return ""
-	}
-	path := sourcemapDiskPath(sourcesDir, bundleURL)
-	if path == "" {
-		return ""
-	}
-	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		log.Printf("sourcemap: mkdir %s: %v", dir, err)
-		return ""
-	}
-	if err := os.WriteFile(path, mapJSON, 0644); err != nil {
-		log.Printf("sourcemap: write %s: %v", path, err)
+	path, err := sourcemap.WriteMap(sourcesDir, bundleURL, mapJSON)
+	if err != nil {
+		log.Printf("sourcemap: %v", err)
 		return ""
 	}
 	return path
 }
 
-// loadSourcemapsFromDisk scans a sources directory for .map files and loads
-// them into the store. Returns the number of maps loaded.
-func loadSourcemapsFromDisk(sourcesDir string, store *syntheticMapStore) int {
-	if sourcesDir == "" {
-		return 0
-	}
-	loaded := 0
-	filepath.Walk(sourcesDir, func(path string, info os.FileInfo, err error) error {
-		if err != nil || info.IsDir() {
-			return nil
-		}
-		if !strings.HasSuffix(path, ".js.map") {
-			return nil
-		}
-		data, err := os.ReadFile(path)
-		if err != nil {
-			return nil
-		}
-		// Validate it's a sourcemap v3.
-		var sm struct {
-			Version int `json:"version"`
-		}
-		if json.Unmarshal(data, &sm) != nil || sm.Version != 3 {
-			return nil
-		}
-
-		// Reconstruct the bundle URL from the path.
-		// Path: sourcesDir/origin/_compiled/path.js.map
-		// Bundle URL: http://origin/path.js
-		rel, err := filepath.Rel(sourcesDir, path)
-		if err != nil {
-			return nil
-		}
-		parts := strings.SplitN(rel, string(filepath.Separator), 2)
-		if len(parts) < 2 {
-			return nil
-		}
-		origin := parts[0]
-		rest := parts[1]
-		rest = strings.TrimPrefix(rest, "_compiled"+string(filepath.Separator))
-		rest = strings.TrimSuffix(rest, ".map") // remove .map suffix to get bundle path
-		bundleURL := "https://" + origin + "/" + filepath.ToSlash(rest)
-
-		// Try to load the inferred structure if a .structure.json sidecar exists.
-		var sources *inferredResult
-		structPath := strings.TrimSuffix(path, ".map") + ".structure.json"
-		if structData, err := os.ReadFile(structPath); err == nil {
-			var ir inferredResult
-			if json.Unmarshal(structData, &ir) == nil && len(ir.Files) > 0 {
-				sources = &ir
-			}
-		}
-
-		store.set(bundleURL, &syntheticMap{
-			BundleURL: bundleURL,
-			MapJSON:   data,
-			Sources:   sources,
-			MapPath:   path,
-		})
-		loaded++
-		return nil
-	})
-	return loaded
-}
-
 // writeStructureSidecar writes the inferred file structure as a JSON sidecar
 // next to the .map file, so it can be reloaded on startup.
 func writeStructureSidecar(mapPath string, sources *inferredResult) {
-	if mapPath == "" || sources == nil {
-		return
+	if err := sourcemap.WriteStructureSidecar(mapPath, sources); err != nil {
+		log.Printf("sourcemap: %v", err)
 	}
-	structPath := strings.TrimSuffix(mapPath, ".map") + ".structure.json"
-	data, err := json.MarshalIndent(sources, "", "  ")
-	if err != nil {
-		return
+}
+
+func appendAnalysisLog(mapPath, bundleURL, contextName string, result *inferredResult, bundleSource string, isRefinement bool) {
+	if err := sourcemap.AppendAnalysisLog(mapPath, bundleURL, contextName, result, bundleSource, isRefinement); err != nil {
+		log.Printf("analysis log: %v", err)
 	}
-	os.WriteFile(structPath, data, 0644)
 }
 
 // activateSourcemap makes Chrome DevTools aware of a synthetic sourcemap by:
@@ -265,106 +84,6 @@ func activateSourcemap(s *mcpSession, bundleURL, mapURL string) string {
 	}
 
 	return strings.Join(messages, "; ")
-}
-
-// analysisLogPath returns the .analysis-log.jsonl path for a bundle's .map path.
-func analysisLogPath(mapPath string) string {
-	if mapPath == "" {
-		return ""
-	}
-	return strings.TrimSuffix(mapPath, ".map") + ".analysis-log.jsonl"
-}
-
-// appendAnalysisLog appends an entry to the analysis log.
-// bundleSource is used to extract code snippets for each file.
-func appendAnalysisLog(mapPath, bundleURL, contextName string, result *inferredResult, bundleSource string, isRefinement bool) {
-	logPath := analysisLogPath(mapPath)
-	if logPath == "" {
-		return
-	}
-
-	entry := analysisLogEntry{
-		Timestamp:    time.Now().UTC().Format(time.RFC3339),
-		BundleURL:    bundleURL,
-		Context:      contextName,
-		IsRefinement: isRefinement,
-		Summary:      result.Summary,
-	}
-
-	for _, f := range result.Files {
-		snippet := ""
-		if bundleSource != "" && f.StartOffset >= 0 && f.EndOffset > f.StartOffset && f.EndOffset <= len(bundleSource) {
-			snippet = bundleSource[f.StartOffset:f.EndOffset]
-		}
-		if len(snippet) > 200 {
-			snippet = snippet[:200] + "..."
-		}
-
-		fe := analysisFileEntry{
-			Path:        f.Path,
-			StartOffset: f.StartOffset,
-			EndOffset:   f.EndOffset,
-			Snippet:     snippet,
-			Reasoning:   f.Description,
-		}
-		for _, fn := range f.Functions {
-			fe.Functions = append(fe.Functions, analysisFuncEntry{
-				Name:      fn.Name,
-				StartLine: fn.StartLine,
-				EndLine:   fn.EndLine,
-				Reasoning: fn.Description,
-			})
-		}
-		entry.Files = append(entry.Files, fe)
-	}
-
-	data, err := json.Marshal(entry)
-	if err != nil {
-		log.Printf("analysis log: marshal: %v", err)
-		return
-	}
-	data = append(data, '\n')
-
-	f, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		log.Printf("analysis log: open %s: %v", logPath, err)
-		return
-	}
-	defer f.Close()
-	f.Write(data)
-}
-
-// readAnalysisLog reads all entries from an analysis log file.
-func readAnalysisLog(mapPath string) ([]analysisLogEntry, error) {
-	logPath := analysisLogPath(mapPath)
-	if logPath == "" {
-		return nil, fmt.Errorf("no log path")
-	}
-	data, err := os.ReadFile(logPath)
-	if err != nil {
-		return nil, err
-	}
-	var entries []analysisLogEntry
-	for _, line := range strings.Split(strings.TrimSpace(string(data)), "\n") {
-		if line == "" {
-			continue
-		}
-		var e analysisLogEntry
-		if err := json.Unmarshal([]byte(line), &e); err != nil {
-			continue
-		}
-		entries = append(entries, e)
-	}
-	return entries, nil
-}
-
-// countAnalysisLogEntries returns the number of entries in an analysis log.
-func countAnalysisLogEntries(mapPath string) int {
-	entries, err := readAnalysisLog(mapPath)
-	if err != nil {
-		return 0
-	}
-	return len(entries)
 }
 
 // --- MCP tool registration ---
@@ -421,21 +140,14 @@ set_bundle_structure with the inferred file structure.`,
 		// Try MCP sampling first — works with clients that support CreateMessage.
 		result, samplingErr := sampleBundleAnalysis(ctx, req.Session, input.BundleURL, data.Chunks, input.ActionLabel)
 		if samplingErr == nil && result != nil {
-			if s.syntheticMaps == nil {
-				s.syntheticMaps = newSyntheticMapStore()
-			}
-			sm := s.syntheticMaps.get(input.BundleURL)
-			if sm == nil {
-				sm = &syntheticMap{BundleURL: input.BundleURL}
-			}
-			sm.Sources = result
-
-			mapJSON, err := generateMapFromInferred(data.Source, result)
+			mapJSON, err := sourcemap.GenerateFromStructure(data.Source, result)
 			if err != nil {
 				return nil, nil, fmt.Errorf("analyze_bundle: generate map: %w", err)
 			}
-			sm.MapJSON = mapJSON
-			s.syntheticMaps.set(input.BundleURL, sm)
+			s.ensureSourcemaps().update(input.BundleURL, func(sm *syntheticMap) {
+				sm.Sources = result
+				sm.MapJSON = mapJSON
+			})
 
 			var b strings.Builder
 			fmt.Fprintf(&b, "Analyzed %s: %d inferred source files\n", input.BundleURL, len(result.Files))
@@ -452,7 +164,10 @@ set_bundle_structure with the inferred file structure.`,
 		}
 
 		// Sampling not available — return function-level coverage for agent analysis.
-		prompt := buildFunctionAnalysisPrompt(input.BundleURL, data, input.ActionLabel)
+		prompt := sourcemap.FunctionAnalysisPrompt(input.BundleURL, sourcemap.FunctionPromptData{
+			Source:    data.Source,
+			Functions: data.Functions,
+		}, input.ActionLabel)
 
 		var b strings.Builder
 		fmt.Fprintf(&b, "Bundle: %s (%d bytes, %d functions, %d executed chunks)\n",
@@ -482,7 +197,7 @@ functions (optional), framework (optional), module (optional).`,
 		}
 
 		var result inferredResult
-		structJSON := stripCodeFences(input.Structure)
+		structJSON := sourcemap.StripCodeFences(input.Structure)
 		if err := json.Unmarshal([]byte(structJSON), &result); err != nil {
 			return nil, nil, fmt.Errorf("set_bundle_structure: invalid structure JSON: %w", err)
 		}
@@ -496,47 +211,51 @@ functions (optional), framework (optional), module (optional).`,
 			return nil, nil, fmt.Errorf("set_bundle_structure: %w", err)
 		}
 
-		// Generate the sourcemap.
-		if s.syntheticMaps == nil {
-			s.syntheticMaps = newSyntheticMapStore()
+		maps := s.ensureSourcemaps()
+		sm := maps.get(input.BundleURL)
+		serving := sm != nil && sm.Serving
+		interceptID := ""
+		if sm != nil {
+			interceptID = sm.InterceptID
 		}
-		sm := s.syntheticMaps.get(input.BundleURL)
-		if sm == nil {
-			sm = &syntheticMap{BundleURL: input.BundleURL}
-		}
-		sm.Sources = &result
+		isRefinement := sm != nil && sm.Sources != nil && len(sm.Sources.Files) > 0
 
-		mapJSON, err := generateMapFromInferred(bundleSource, &result)
+		mapJSON, err := sourcemap.GenerateFromStructure(bundleSource, &result)
 		if err != nil {
 			return nil, nil, fmt.Errorf("set_bundle_structure: generate map: %w", err)
 		}
-		sm.MapJSON = mapJSON
 
 		// Write to disk alongside saved sources.
 		sourcesDir := ""
 		if s.sourceCollector != nil {
 			sourcesDir = s.sourceCollector.OutputDir()
 		}
-		isRefinement := sm.Sources != nil && len(sm.Sources.Files) > 0
+		mapPath := ""
 		if path := writeSourcemapToDisk(sourcesDir, input.BundleURL, mapJSON); path != "" {
-			sm.MapPath = path
+			mapPath = path
 			writeStructureSidecar(path, &result)
 			appendAnalysisLog(path, input.BundleURL, s.contextPath(), &result, bundleSource, isRefinement)
 		}
 
+		sm = maps.update(input.BundleURL, func(sm *syntheticMap) {
+			sm.Sources = &result
+			sm.MapJSON = mapJSON
+			if mapPath != "" {
+				sm.MapPath = mapPath
+			}
+		})
+
 		// Hot-update the intercept rule if already serving.
-		if sm.Serving && sm.InterceptID != "" && s.intercepts != nil {
+		if serving && interceptID != "" && s.intercepts != nil {
 			s.intercepts.mu.Lock()
 			for i := range s.intercepts.rules {
-				if s.intercepts.rules[i].ID == sm.InterceptID {
+				if s.intercepts.rules[i].ID == interceptID {
 					s.intercepts.rules[i].Body = string(mapJSON)
 					break
 				}
 			}
 			s.intercepts.mu.Unlock()
 		}
-
-		s.syntheticMaps.set(input.BundleURL, sm)
 
 		var b strings.Builder
 		fmt.Fprintf(&b, "Sourcemap generated for %s: %d source files, %d bytes\n", input.BundleURL, len(result.Files), len(mapJSON))
@@ -549,8 +268,8 @@ functions (optional), framework (optional), module (optional).`,
 		if sm.MapPath != "" {
 			fmt.Fprintf(&b, "\nWritten to %s\n", sm.MapPath)
 		}
-		if sm.Serving {
-			fmt.Fprintf(&b, "Sourcemap hot-updated (serving via rule %s).\n", sm.InterceptID)
+		if serving {
+			fmt.Fprintf(&b, "Sourcemap hot-updated (serving via rule %s).\n", interceptID)
 		} else {
 			fmt.Fprintf(&b, "Use serve_sourcemap to activate, or generate_sourcemap to get the raw JSON.\n")
 		}
@@ -612,9 +331,10 @@ functions (optional), framework (optional), module (optional).`,
 			},
 		}
 		id := s.intercepts.addRule(rule)
-		sm.Serving = true
-		sm.InterceptID = id
-		s.syntheticMaps.set(input.BundleURL, sm)
+		sm = s.syntheticMaps.update(input.BundleURL, func(sm *syntheticMap) {
+			sm.Serving = true
+			sm.InterceptID = id
+		})
 
 		// Activate: install bundle response intercept + reload page.
 		activateMsg := activateSourcemap(s, input.BundleURL, mapURL)
@@ -663,7 +383,7 @@ functions (optional), framework (optional), module (optional).`,
 				Serving:     m.Serving,
 				InterceptID: m.InterceptID,
 				MapPath:     m.MapPath,
-				LogEntries:  countAnalysisLogEntries(m.MapPath),
+				LogEntries:  sourcemap.CountAnalysisLogEntries(m.MapPath),
 			})
 		}
 		data, _ := json.Marshal(infos)
@@ -696,36 +416,36 @@ Otherwise, returns new chunks for you to re-analyze, then call set_bundle_struct
 		// Try MCP sampling first.
 		result, samplingErr := sampleBundleAnalysis(ctx, req.Session, input.BundleURL, chunks, input.ActionLabel)
 		if samplingErr == nil && result != nil {
-			if s.syntheticMaps == nil {
-				s.syntheticMaps = newSyntheticMapStore()
-			}
-			sm := s.syntheticMaps.get(input.BundleURL)
-			if sm == nil {
-				sm = &syntheticMap{BundleURL: input.BundleURL}
-			}
-			sm.Sources = result
-
-			mapJSON, err := generateMapFromInferred(bundleSource, result)
+			mapJSON, err := sourcemap.GenerateFromStructure(bundleSource, result)
 			if err != nil {
 				return nil, nil, fmt.Errorf("refine_sourcemap: generate map: %w", err)
 			}
-			sm.MapJSON = mapJSON
+			maps := s.ensureSourcemaps()
+			sm := maps.get(input.BundleURL)
+			serving := sm != nil && sm.Serving
+			interceptID := ""
+			if sm != nil {
+				interceptID = sm.InterceptID
+			}
 
 			// Hot-update if serving.
-			if sm.Serving && sm.InterceptID != "" && s.intercepts != nil {
+			if serving && interceptID != "" && s.intercepts != nil {
 				s.intercepts.mu.Lock()
 				for i := range s.intercepts.rules {
-					if s.intercepts.rules[i].ID == sm.InterceptID {
+					if s.intercepts.rules[i].ID == interceptID {
 						s.intercepts.rules[i].Body = string(mapJSON)
 						break
 					}
 				}
 				s.intercepts.mu.Unlock()
 			}
-			s.syntheticMaps.set(input.BundleURL, sm)
+			maps.update(input.BundleURL, func(sm *syntheticMap) {
+				sm.Sources = result
+				sm.MapJSON = mapJSON
+			})
 
 			status := "generated"
-			if sm.Serving {
+			if serving {
 				status = "hot-updated"
 			}
 			return &mcp.CallToolResult{
@@ -746,7 +466,7 @@ Otherwise, returns new chunks for you to re-analyze, then call set_bundle_struct
 				b.WriteString("\n")
 				// Include prior reasoning from analysis log.
 				if existing.MapPath != "" {
-					if entries, err := readAnalysisLog(existing.MapPath); err == nil && len(entries) > 0 {
+					if entries, err := sourcemap.ReadAnalysisLog(existing.MapPath); err == nil && len(entries) > 0 {
 						last := entries[len(entries)-1]
 						fmt.Fprintf(&b, "\nPrior analysis (%s):\n", last.Timestamp)
 						for _, f := range last.Files {
@@ -759,7 +479,7 @@ Otherwise, returns new chunks for you to re-analyze, then call set_bundle_struct
 		}
 		b.WriteString("\n")
 
-		prompt := buildAnalysisPrompt(input.BundleURL, chunks, input.ActionLabel)
+		prompt := sourcemap.ChunkAnalysisPrompt(input.BundleURL, chunks, input.ActionLabel)
 		b.WriteString(prompt)
 		b.WriteString("\n\nAfter analyzing, call set_bundle_structure to update the sourcemap.\n")
 		b.WriteString("If the sourcemap is being served, it will be hot-updated automatically.\n")
@@ -786,7 +506,7 @@ Otherwise, returns new chunks for you to re-analyze, then call set_bundle_struct
 		if sm == nil || sm.MapPath == "" {
 			return nil, nil, fmt.Errorf("get_analysis_log: no on-disk sourcemap for %s", input.BundleURL)
 		}
-		entries, err := readAnalysisLog(sm.MapPath)
+		entries, err := sourcemap.ReadAnalysisLog(sm.MapPath)
 		if err != nil {
 			return nil, nil, fmt.Errorf("get_analysis_log: %w", err)
 		}
@@ -809,7 +529,7 @@ Otherwise, returns new chunks for you to re-analyze, then call set_bundle_struct
 type bundleCoverageData struct {
 	Source    string
 	Chunks    []sourcemap.CodeChunk
-	Functions []coverage.FunctionCoverage
+	Functions []sourcemap.FunctionCoverage
 }
 
 // extractBundleChunks gets coverage data for a specific bundle URL.
@@ -860,11 +580,30 @@ func extractBundleCoverage(s *mcpSession, bundleURL, snapshotName string) (*bund
 		})
 	}
 
+	var functions []sourcemap.FunctionCoverage
+	for _, fn := range scriptCov.Functions {
+		var fnRanges []sourcemap.CoverageRange
+		for _, r := range fn.Ranges {
+			fnRanges = append(fnRanges, sourcemap.CoverageRange{
+				StartOffset: r.StartOffset,
+				EndOffset:   r.EndOffset,
+				Count:       r.Count,
+			})
+		}
+		functions = append(functions, sourcemap.FunctionCoverage{
+			Name:      fn.Name,
+			StartLine: fn.StartLine,
+			EndLine:   fn.EndLine,
+			HitCount:  fn.HitCount,
+			Ranges:    fnRanges,
+		})
+	}
+
 	chunks := sourcemap.ExtractChunks(scriptCov.Source, ranges, 3)
 	return &bundleCoverageData{
 		Source:    scriptCov.Source,
 		Chunks:    chunks,
-		Functions: scriptCov.Functions,
+		Functions: functions,
 	}, nil
 }
 
@@ -875,7 +614,7 @@ func sampleBundleAnalysis(ctx context.Context, session *mcp.ServerSession, bundl
 		return nil, fmt.Errorf("no MCP session")
 	}
 
-	prompt := buildAnalysisPrompt(bundleURL, chunks, actionLabel)
+	prompt := sourcemap.ChunkAnalysisPrompt(bundleURL, chunks, actionLabel)
 
 	result, err := session.CreateMessage(ctx, &mcp.CreateMessageParams{
 		Messages: []*mcp.SamplingMessage{
@@ -900,339 +639,11 @@ func sampleBundleAnalysis(ctx context.Context, session *mcp.ServerSession, bundl
 		return nil, fmt.Errorf("empty sampling response")
 	}
 
-	text = stripCodeFences(text)
+	text = sourcemap.StripCodeFences(text)
 
 	var inferred inferredResult
 	if err := json.Unmarshal([]byte(text), &inferred); err != nil {
 		return nil, fmt.Errorf("parse sampling response: %w\nraw: %.500s", err, text)
 	}
 	return &inferred, nil
-}
-
-// buildFunctionAnalysisPrompt creates a prompt using V8's per-function coverage data.
-// This is superior to chunk-based analysis for minified bundles because V8 gives us
-// precise function boundaries regardless of how the code was bundled.
-func buildFunctionAnalysisPrompt(bundleURL string, data *bundleCoverageData, actionLabel string) string {
-	var b strings.Builder
-	b.WriteString("Analyze this JavaScript bundle to infer original source files.\n")
-	b.WriteString("V8 has identified individual functions with precise byte ranges.\n\n")
-	fmt.Fprintf(&b, "Bundle URL: %s\n", bundleURL)
-	fmt.Fprintf(&b, "Bundle size: %d bytes\n", len(data.Source))
-	if actionLabel != "" {
-		fmt.Fprintf(&b, "Action context: %s\n", actionLabel)
-	}
-
-	// Show executed functions with their source text.
-	executedFns := 0
-	for _, fn := range data.Functions {
-		if fn.HitCount > 0 {
-			executedFns++
-		}
-	}
-	fmt.Fprintf(&b, "Total functions: %d (%d executed)\n\n", len(data.Functions), executedFns)
-
-	b.WriteString("=== EXECUTED FUNCTIONS ===\n\n")
-	shown := 0
-	for _, fn := range data.Functions {
-		if fn.HitCount == 0 {
-			continue
-		}
-		if shown >= 50 {
-			fmt.Fprintf(&b, "... and %d more executed functions (truncated)\n", executedFns-50)
-			break
-		}
-		shown++
-
-		name := fn.Name
-		if name == "" {
-			name = "(anonymous)"
-		}
-
-		// Extract the function's source text from the bundle using byte ranges.
-		funcSource := ""
-		if len(fn.Ranges) > 0 {
-			start := fn.Ranges[0].StartOffset
-			end := fn.Ranges[0].EndOffset
-			if start >= 0 && end <= len(data.Source) && start < end {
-				funcSource = data.Source[start:end]
-			}
-		}
-
-		fmt.Fprintf(&b, "--- Function: %s (bytes %d-%d, %d hits) ---\n",
-			name, fn.StartLine, fn.EndLine, fn.HitCount) // StartLine/EndLine are already computed
-		if len(fn.Ranges) > 0 {
-			fmt.Fprintf(&b, "    byte range: %d-%d\n", fn.Ranges[0].StartOffset, fn.Ranges[0].EndOffset)
-		}
-		if funcSource != "" {
-			if len(funcSource) > 1500 {
-				funcSource = funcSource[:1500] + "\n// ... truncated"
-			}
-			b.WriteString(funcSource)
-			b.WriteString("\n\n")
-		}
-	}
-
-	// Also list non-executed functions briefly (they might be dead code or lazy-loaded).
-	unexecuted := 0
-	for _, fn := range data.Functions {
-		if fn.HitCount == 0 {
-			unexecuted++
-		}
-	}
-	if unexecuted > 0 {
-		fmt.Fprintf(&b, "\n=== NON-EXECUTED FUNCTIONS (%d) ===\n", unexecuted)
-		shown = 0
-		for _, fn := range data.Functions {
-			if fn.HitCount != 0 {
-				continue
-			}
-			if shown >= 20 {
-				fmt.Fprintf(&b, "... and %d more\n", unexecuted-20)
-				break
-			}
-			shown++
-			name := fn.Name
-			if name == "" {
-				name = "(anonymous)"
-			}
-			if len(fn.Ranges) > 0 {
-				fmt.Fprintf(&b, "  %s (bytes %d-%d)\n", name, fn.Ranges[0].StartOffset, fn.Ranges[0].EndOffset)
-			} else {
-				fmt.Fprintf(&b, "  %s\n", name)
-			}
-		}
-	}
-
-	b.WriteString(`
-
-Respond with JSON:
-{
-  "files": [
-    {
-      "path": "src/router.js",
-      "description": "Client-side router",
-      "start_offset": 0,
-      "end_offset": 5000,
-      "start_line": 1,
-      "end_line": 1,
-      "functions": [
-        {"name": "navigate", "start_line": 1, "end_line": 1, "description": "Navigate to path", "exported": true}
-      ],
-      "framework": "next",
-      "module": "routing"
-    }
-  ],
-  "summary": "Brief description"
-}
-
-Rules:
-- Group functions into inferred source files based on naming, call patterns, and co-activation
-- start_offset/end_offset are BYTE positions in the bundle (critical for minified single-line code)
-- For webpack/turbopack: module IDs in require() calls hint at module boundaries
-- Export names (Object.defineProperty patterns) often match original file/function names
-- Cluster co-activated functions (similar hit counts) into the same module
-`)
-	return b.String()
-}
-
-func buildAnalysisPrompt(bundleURL string, chunks []sourcemap.CodeChunk, actionLabel string) string {
-	var b strings.Builder
-	b.WriteString("Analyze this bundled/minified JavaScript to infer original source files.\n\n")
-	fmt.Fprintf(&b, "Bundle URL: %s\n", bundleURL)
-	if actionLabel != "" {
-		fmt.Fprintf(&b, "Action that triggered this code: %s\n", actionLabel)
-	}
-	fmt.Fprintf(&b, "Executed chunks: %d\n\n", len(chunks))
-
-	for i, c := range chunks {
-		if i >= 30 {
-			fmt.Fprintf(&b, "\n... and %d more chunks (truncated)\n", len(chunks)-30)
-			break
-		}
-		fmt.Fprintf(&b, "=== Chunk %d (bytes %d-%d, lines %d-%d, hits %d) ===\n",
-			i+1, c.StartOffset, c.EndOffset, c.StartLine, c.EndLine, c.HitCount)
-		code := c.Code
-		if len(code) > 2000 {
-			code = code[:2000] + "\n// ... truncated"
-		}
-		b.WriteString(code)
-		b.WriteString("\n\n")
-	}
-
-	b.WriteString(`Respond with JSON:
-{
-  "files": [
-    {
-      "path": "src/components/Login.tsx",
-      "description": "Login form component",
-      "start_line": 1,
-      "end_line": 45,
-      "start_offset": 0,
-      "end_offset": 1234,
-      "functions": [
-        {"name": "handleSubmit", "start_line": 10, "end_line": 25, "description": "Form handler", "exported": false}
-      ],
-      "framework": "react",
-      "module": "auth"
-    }
-  ],
-  "summary": "Brief description of the bundle contents"
-}
-
-Rules:
-- Infer realistic paths based on code patterns (src/..., lib/..., etc.)
-- start_offset/end_offset are BYTE positions in the bundle (critical for minified single-line bundles)
-- start_line/end_line are line positions (may all be line 1 for minified code — use byte offsets instead)
-- Assign every chunk to a file
-- Identify framework (react, vue, angular, vanilla, etc.)
-- Group into logical modules
-- For webpack bundles: look for moduleId:(e,t,r)=>{...} patterns and use module IDs as grouping
-`)
-	return b.String()
-}
-
-// generateMapFromInferred builds a sourcemap v3 from inferred file structure.
-//
-// For single-line minified bundles (common in production), byte offsets are
-// used as column positions in the sourcemap. This is critical because line-level
-// mappings are useless when the entire bundle is one line.
-func generateMapFromInferred(bundleSource string, inferred *inferredResult) ([]byte, error) {
-	if len(inferred.Files) == 0 {
-		return nil, fmt.Errorf("no inferred files")
-	}
-
-	totalLines := sourcemap.CountLinesInString(bundleSource)
-
-	// Detect single-line bundles: if the bundle has very few lines relative
-	// to its size, use byte-offset (column) based mappings.
-	useByteOffsets := totalLines <= 3 && len(bundleSource) > 1000
-
-	var sources []string
-	var sourcesContent []string
-	var mappings []sourcemap.Mapping
-	var names []string
-	nameIdx := make(map[string]int)
-
-	for srcIdx, f := range inferred.Files {
-		sources = append(sources, f.Path)
-
-		if useByteOffsets {
-			// Single-line bundle: use byte offsets as columns.
-			startOff := clampLine(f.StartOffset, 0, len(bundleSource))
-			endOff := clampLine(f.EndOffset, startOff, len(bundleSource))
-			if endOff <= startOff && f.EndOffset == 0 {
-				// Fallback: estimate from line numbers (line 1 = whole file).
-				startOff = 0
-				endOff = len(bundleSource)
-			}
-			content := bundleSource[startOff:endOff]
-			sourcesContent = append(sourcesContent, content)
-
-			// Single mapping at the start of this file's region.
-			mappings = append(mappings, sourcemap.Mapping{
-				GeneratedLine: 0,
-				GeneratedCol:  startOff,
-				SourceIdx:     srcIdx,
-				OriginalLine:  0,
-				OriginalCol:   0,
-				NameIdx:       -1,
-			})
-		} else {
-			// Multi-line bundle: use line-based mappings.
-			startLine := clampLine(f.StartLine, 1, totalLines)
-			endLine := clampLine(f.EndLine, startLine, totalLines)
-			content := extractLineRange(bundleSource, startLine, endLine)
-			sourcesContent = append(sourcesContent, content)
-
-			for line := startLine; line <= endLine; line++ {
-				origLine := line - startLine
-				mappings = append(mappings, sourcemap.Mapping{
-					GeneratedLine: line - 1,
-					GeneratedCol:  0,
-					SourceIdx:     srcIdx,
-					OriginalLine:  origLine,
-					OriginalCol:   0,
-					NameIdx:       -1,
-				})
-			}
-		}
-
-		// Add function names.
-		for _, fn := range f.Functions {
-			if fn.Name == "" {
-				continue
-			}
-			idx, ok := nameIdx[fn.Name]
-			if !ok {
-				idx = len(names)
-				names = append(names, fn.Name)
-				nameIdx[fn.Name] = idx
-			}
-
-			if useByteOffsets {
-				// Use the function's byte offset as column position.
-				fnOff := clampLine(f.StartOffset, 0, len(bundleSource))
-				if fn.StartLine > f.StartLine {
-					// Rough estimate: scale within the file's range.
-					fileRange := f.EndOffset - f.StartOffset
-					lineRange := f.EndLine - f.StartLine
-					if lineRange > 0 {
-						fnOff = f.StartOffset + (fn.StartLine-f.StartLine)*fileRange/lineRange
-					}
-				}
-				mappings = append(mappings, sourcemap.Mapping{
-					GeneratedLine: 0,
-					GeneratedCol:  clampLine(fnOff, 0, len(bundleSource)),
-					SourceIdx:     srcIdx,
-					OriginalLine:  0,
-					OriginalCol:   0,
-					NameIdx:       idx,
-				})
-			} else {
-				mappings = append(mappings, sourcemap.Mapping{
-					GeneratedLine: clampLine(fn.StartLine, 1, totalLines) - 1,
-					GeneratedCol:  0,
-					SourceIdx:     srcIdx,
-					OriginalLine:  clampLine(fn.StartLine, f.StartLine, f.EndLine) - f.StartLine,
-					OriginalCol:   0,
-					NameIdx:       idx,
-				})
-			}
-		}
-	}
-
-	return sourcemap.GenerateV3("bundle.js", sources, sourcesContent, mappings, names)
-}
-
-func extractLineRange(source string, startLine, endLine int) string {
-	lines := strings.Split(source, "\n")
-	start := clampLine(startLine, 1, len(lines)) - 1
-	end := clampLine(endLine, 1, len(lines))
-	if start >= end {
-		return ""
-	}
-	return strings.Join(lines[start:end], "\n")
-}
-
-func clampLine(v, lo, hi int) int {
-	if v < lo {
-		return lo
-	}
-	if v > hi {
-		return hi
-	}
-	return v
-}
-
-func stripCodeFences(s string) string {
-	s = strings.TrimSpace(s)
-	if strings.HasPrefix(s, "```json") {
-		s = s[7:]
-	} else if strings.HasPrefix(s, "```") {
-		s = s[3:]
-	}
-	if strings.HasSuffix(s, "```") {
-		s = s[:len(s)-3]
-	}
-	return strings.TrimSpace(s)
 }

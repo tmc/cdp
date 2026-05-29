@@ -7,7 +7,6 @@ import (
 	"net"
 	"os"
 	"path/filepath"
-	"strings"
 	"sync"
 
 	"github.com/chromedp/cdproto/cdp"
@@ -35,7 +34,7 @@ type mcpSession struct {
 	intercepts        *interceptor
 	traces            *traceCollector
 	domSnapshots      *domSnapshotStore
-	syntheticMaps     *syntheticMapStore
+	syntheticMaps     *sourcemapManager
 	webMCP            *webMCPCollector
 	networkLog        *networkCollector
 	activeFrameID     cdp.FrameID
@@ -70,11 +69,7 @@ func (s *mcpSession) setActiveCtx(ctx context.Context, cancel context.CancelFunc
 
 // contextOutputDir returns the output directory for the current context stack.
 func (s *mcpSession) contextOutputDir() string {
-	dir := s.outputDir
-	for _, name := range s.contextStack {
-		dir = filepath.Join(dir, name)
-	}
-	return dir
+	return contextStackOutputDir(s.outputDir, s.contextStack)
 }
 
 // pushContext pushes a named context and updates the output directory.
@@ -123,10 +118,7 @@ func (s *mcpSession) popContext() (string, error) {
 	if s.recorder != nil {
 		s.recorder.SetOutputDir(dir)
 		// Restore parent context's tag or clear.
-		parentTag := ""
-		if len(s.contextStack) > 0 {
-			parentTag = s.contextStack[len(s.contextStack)-1]
-		}
+		parentTag := contextStackParentTag(s.contextStack)
 		if err := s.recorder.AddNote(s.ctx, fmt.Sprintf("context: %s ended", name)); err != nil {
 			log.Printf("context: add note: %v", err)
 		}
@@ -186,10 +178,7 @@ func (s *mcpSession) writeCoverageLcov(contextDir, name string, endSnap *coverag
 func (s *mcpSession) contextPath() string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if len(s.contextStack) == 0 {
-		return "(root)"
-	}
-	return strings.Join(s.contextStack, "/")
+	return contextStackDisplay(s.contextStack)
 }
 
 // mcpConfig holds configuration for the MCP server mode.
@@ -371,11 +360,8 @@ func runMCP(cfg mcpConfig) error {
 
 		// Auto-load sourcemaps from disk if --save-sources is active.
 		if sourceCollector != nil {
-			store := newSyntheticMapStore()
-			if n := loadSourcemapsFromDisk(sourceCollector.OutputDir(), store); n > 0 {
-				session.mu.Lock()
-				session.syntheticMaps = store
-				session.mu.Unlock()
+			store := session.ensureSourcemaps()
+			if n := store.loadFromDisk(sourceCollector.OutputDir()); n > 0 {
 				log.Printf("loaded %d sourcemap(s) from %s", n, sourceCollector.OutputDir())
 			}
 		}

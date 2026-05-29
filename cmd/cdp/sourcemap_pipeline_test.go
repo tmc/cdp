@@ -322,7 +322,7 @@ func TestSourcemapPipeline_EndToEnd(t *testing.T) {
 			}
 
 			// Generate the sourcemap.
-			mapJSON, err := generateMapFromInferred(bundleCov.Source, inferred)
+			mapJSON, err := sourcemap.GenerateFromStructure(bundleCov.Source, inferred)
 			if err != nil {
 				t.Fatalf("generate sourcemap: %v", err)
 			}
@@ -428,8 +428,8 @@ func TestSourcemapPipeline_EndToEnd(t *testing.T) {
 					t.Error("expected no match for bundle URL (not .map)")
 				}
 
-				// Test syntheticMapStore.
-				store := newSyntheticMapStore()
+				// Test sourcemapManager.
+				store := newSourcemapManager()
 				store.set(bundleURL, &syntheticMap{
 					BundleURL:   bundleURL,
 					MapJSON:     mapJSON,
@@ -564,7 +564,7 @@ func TestSourcemapPipeline_EndToEnd(t *testing.T) {
 }
 
 // TestSourcemapPipeline_NoChrome tests the non-browser parts of the pipeline:
-// chunk extraction, sourcemap generation, intercept store, and syntheticMapStore.
+// chunk extraction, sourcemap generation, intercept store, and sourcemapManager.
 func TestSourcemapPipeline_NoChrome(t *testing.T) {
 	// Simulate coverage data (no browser needed).
 	source := bundleJS
@@ -598,7 +598,7 @@ func TestSourcemapPipeline_NoChrome(t *testing.T) {
 			},
 		}
 
-		mapJSON, err := generateMapFromInferred(source, inferred)
+		mapJSON, err := sourcemap.GenerateFromStructure(source, inferred)
 		if err != nil {
 			t.Fatalf("generate sourcemap: %v", err)
 		}
@@ -619,7 +619,7 @@ func TestSourcemapPipeline_NoChrome(t *testing.T) {
 	})
 
 	t.Run("SyntheticMapStore", func(t *testing.T) {
-		store := newSyntheticMapStore()
+		store := newSourcemapManager()
 		if got := store.list(); len(got) != 0 {
 			t.Errorf("empty store has %d entries", len(got))
 		}
@@ -688,9 +688,9 @@ func TestSourcemapPipeline_NoChrome(t *testing.T) {
 			{"  ```json\n{}\n```  ", `{}`},
 		}
 		for _, tt := range tests {
-			got := stripCodeFences(tt.input)
+			got := sourcemap.StripCodeFences(tt.input)
 			if got != tt.want {
-				t.Errorf("stripCodeFences(%q) = %q, want %q", tt.input, got, tt.want)
+				t.Errorf("sourcemap.StripCodeFences(%q) = %q, want %q", tt.input, got, tt.want)
 			}
 		}
 	})
@@ -785,8 +785,8 @@ func TestSourcemapDiskPersistence(t *testing.T) {
 	})
 
 	t.Run("LoadFromDisk", func(t *testing.T) {
-		store := newSyntheticMapStore()
-		n := loadSourcemapsFromDisk(tmpDir, store)
+		store := newSourcemapManager()
+		n := store.loadFromDisk(tmpDir)
 		if n != 1 {
 			t.Fatalf("loaded %d, want 1", n)
 		}
@@ -811,8 +811,8 @@ func TestSourcemapDiskPersistence(t *testing.T) {
 	})
 
 	t.Run("EmptyDir", func(t *testing.T) {
-		store := newSyntheticMapStore()
-		n := loadSourcemapsFromDisk(t.TempDir(), store)
+		store := newSourcemapManager()
+		n := store.loadFromDisk(t.TempDir())
 		if n != 0 {
 			t.Errorf("loaded %d from empty dir, want 0", n)
 		}
@@ -823,7 +823,7 @@ func TestSourcemapDiskPersistence(t *testing.T) {
 		if path != "" {
 			t.Error("expected empty path when sourcesDir is empty")
 		}
-		n := loadSourcemapsFromDisk("", newSyntheticMapStore())
+		n := newSourcemapManager().loadFromDisk("")
 		if n != 0 {
 			t.Error("expected 0 from empty sourcesDir")
 		}
@@ -857,7 +857,7 @@ func TestSourcemapDiskPersistence(t *testing.T) {
 		// Write first entry.
 		appendAnalysisLog(mapPath, bundleURL, "homepage", inferred, bundleSource, false)
 
-		entries, err := readAnalysisLog(mapPath)
+		entries, err := sourcemap.ReadAnalysisLog(mapPath)
 		if err != nil {
 			t.Fatalf("read log: %v", err)
 		}
@@ -894,7 +894,7 @@ func TestSourcemapDiskPersistence(t *testing.T) {
 		inferred.Summary = "Refined with new coverage data"
 		appendAnalysisLog(mapPath, bundleURL, "after-click", inferred, bundleSource, true)
 
-		entries, err = readAnalysisLog(mapPath)
+		entries, err = sourcemap.ReadAnalysisLog(mapPath)
 		if err != nil {
 			t.Fatalf("read log after refinement: %v", err)
 		}
@@ -909,10 +909,10 @@ func TestSourcemapDiskPersistence(t *testing.T) {
 		}
 
 		// Verify countAnalysisLogEntries.
-		if n := countAnalysisLogEntries(mapPath); n != 2 {
+		if n := sourcemap.CountAnalysisLogEntries(mapPath); n != 2 {
 			t.Errorf("count = %d, want 2", n)
 		}
-		if n := countAnalysisLogEntries(""); n != 0 {
+		if n := sourcemap.CountAnalysisLogEntries(""); n != 0 {
 			t.Errorf("count for empty path = %d, want 0", n)
 		}
 	})
@@ -939,7 +939,7 @@ func TestBuildAnalysisPrompt(t *testing.T) {
 		},
 	}
 
-	prompt := buildAnalysisPrompt("http://example.com/bundle.js", chunks, "click login button")
+	prompt := sourcemap.ChunkAnalysisPrompt("http://example.com/bundle.js", chunks, "click login button")
 
 	if !strings.Contains(prompt, "http://example.com/bundle.js") {
 		t.Error("prompt missing bundle URL")
@@ -961,7 +961,7 @@ func TestBuildAnalysisPrompt(t *testing.T) {
 	}
 
 	// Test without action label.
-	prompt2 := buildAnalysisPrompt("http://example.com/app.js", chunks[:1], "")
+	prompt2 := sourcemap.ChunkAnalysisPrompt("http://example.com/app.js", chunks[:1], "")
 	if strings.Contains(prompt2, "Action that triggered") {
 		t.Error("prompt should omit action line when label is empty")
 	}
@@ -983,7 +983,7 @@ func TestBuildAnalysisPrompt_TruncatesLargeChunks(t *testing.T) {
 		}
 	}
 
-	prompt := buildAnalysisPrompt("http://example.com/huge.js", chunks, "")
+	prompt := sourcemap.ChunkAnalysisPrompt("http://example.com/huge.js", chunks, "")
 
 	// Should truncate code.
 	if !strings.Contains(prompt, "// ... truncated") {
