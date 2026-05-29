@@ -52,7 +52,7 @@ func Example_webRTC() {
 	//     # RTCPeerConnection monkey-patch runs at page load.
 	//     rtc-inject
 	//     navigate /video-call.html
-	//     waitVisible '#status'
+	//     wait-visible '#status'
 	//
 	//     # Wait up to 60s for the connection to reach "connected".
 	//     rtc-wait connected 60s

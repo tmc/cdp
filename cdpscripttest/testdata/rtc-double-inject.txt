@@ -1,0 +1,12 @@
+# Verify calling rtc-inject twice does not break monitoring.
+# The helper script guards against double-injection with __cdpst_rtc_initialized.
+rtc-inject
+rtc-inject
+navigate /webrtc-loopback.html
+wait-visible '#status'
+rtc-wait connected 60s
+rtc-peers
+stdout 'count:'
+stdout 'connected'
+rtc-state
+stdout 'connected'

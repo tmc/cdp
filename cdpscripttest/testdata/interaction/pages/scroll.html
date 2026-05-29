@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Scroll Fixture</title>
+<style>
+body {
+	font-family: sans-serif;
+	margin: 0;
+}
+
+#status {
+	position: fixed;
+	top: 0;
+	left: 0;
+	right: 0;
+	padding: 0.75rem 1rem;
+	background: #f4f7fb;
+	border-bottom: 1px solid #9aacbf;
+	z-index: 1;
+}
+
+.spacer {
+	height: 1500px;
+	padding: 6rem 2rem 2rem;
+}
+
+#marker {
+	margin: 0 2rem 900px;
+	padding: 2rem;
+	background: #e8f4ec;
+	border: 1px solid #80a889;
+}
+</style>
+<script>
+window.addEventListener("DOMContentLoaded", function() {
+	const status = document.getElementById("status");
+	const marker = document.getElementById("marker");
+
+	function update() {
+		const rect = marker.getBoundingClientRect();
+		const markerInView = rect.top >= 0 && rect.bottom <= window.innerHeight;
+		const scrolled = window.scrollY > 300;
+
+		status.className = scrolled ? "scrolled" : "top";
+		status.textContent = scrolled ? "scrolled" : "top";
+		if (markerInView) {
+			status.className += " marker-in-view";
+			status.textContent = "marker-in-view";
+		}
+	}
+
+	update();
+	window.addEventListener("scroll", update);
+	window.addEventListener("resize", update);
+});
+</script>
+</head>
+<body>
+<div id="status" class="top">top</div>
+<main>
+	<section class="spacer">
+		<h1>Scroll Fixture</h1>
+		<p>Scrollable content before the marker.</p>
+	</section>
+	<section id="marker">
+		<h2>Marker</h2>
+		<p>This section is used to verify selector-based scrolling.</p>
+	</section>
+</main>
+</body>
+</html>

@@ -1,0 +1,9 @@
+-- main.cdp --
+goto $FIXTURE_BASE_URL/interaction/pages/coordinate-compositor-surfaces.html
+wait '#shadow-status.pending'
+click coord:150,75
+wait '#shadow-status.done'
+assert text '#shadow-status' shadow activated
+click coord:150,205
+wait '#frame-status.done'
+assert text '#frame-status' iframe activated

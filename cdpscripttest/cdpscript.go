@@ -26,6 +26,11 @@ type CDPScriptRunOptions struct {
 
 	// Verbose enables runtime logging.
 	Verbose bool
+
+	// TabID connects the runtime to an existing browser tab instead of
+	// launching a new browser. Port is the DevTools port; if zero, 9222 is used.
+	TabID string
+	Port  int
 }
 
 // RunCDPScript executes a cdpscript txtar archive through the real runtime
@@ -41,6 +46,9 @@ func RunCDPScript(ctx context.Context, path string, opts CDPScriptRunOptions) er
 	}
 	if opts.OutputDir != "" {
 		engineOpts = append(engineOpts, cdpscript.WithOutputDir(opts.OutputDir))
+	}
+	if opts.TabID != "" {
+		engineOpts = append(engineOpts, cdpscript.WithRemoteTab(opts.TabID, opts.Port))
 	}
 
 	engine := cdpscript.New(engineOpts...)

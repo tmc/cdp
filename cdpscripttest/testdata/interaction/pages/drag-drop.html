@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Drag Drop Fixture</title>
+<style>
+body {
+	margin: 0;
+	font-family: sans-serif;
+}
+
+#source,
+#drop {
+	position: absolute;
+	top: 80px;
+	width: 120px;
+	height: 80px;
+	display: grid;
+	place-items: center;
+	border: 1px solid #7799bb;
+	user-select: none;
+}
+
+#source {
+	left: 60px;
+	background: #eef6ff;
+}
+
+#drop {
+	left: 300px;
+	background: #f2f6ec;
+}
+
+#status {
+	position: absolute;
+	left: 60px;
+	top: 200px;
+	padding: 0.5rem 0.75rem;
+	background: #f4f7fb;
+	border: 1px solid #9aacbf;
+}
+</style>
+<script>
+window.addEventListener("DOMContentLoaded", function() {
+	const source = document.getElementById("source");
+	const drop = document.getElementById("drop");
+	const status = document.getElementById("status");
+	let dragging = false;
+
+	source.addEventListener("mousedown", function() {
+		dragging = true;
+	});
+	drop.addEventListener("mouseup", function() {
+		if (!dragging) {
+			return;
+		}
+		status.textContent = "dropped";
+		status.className = "done";
+	});
+	document.addEventListener("mouseup", function() {
+		dragging = false;
+	});
+});
+</script>
+</head>
+<body>
+<main>
+	<h1 hidden>Drag Drop Fixture</h1>
+	<div id="source">Drag</div>
+	<div id="drop">Drop</div>
+	<p id="status" class="pending">pending</p>
+</main>
+</body>
+</html>

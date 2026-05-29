@@ -11,8 +11,20 @@ import (
 )
 
 func TestCDP(t *testing.T) {
-	if matches, _ := filepath.Glob("testdata/blur-*.txt"); len(matches) == 0 {
-		t.Skip("no blur fixtures found")
+	patterns := []string{
+		"testdata/hyphenated-*.txt",
+		"testdata/blur-*.txt",
+	}
+
+	var matched []string
+	for _, pattern := range patterns {
+		matches, _ := filepath.Glob(pattern)
+		if len(matches) > 0 {
+			matched = append(matched, pattern)
+		}
+	}
+	if len(matched) == 0 {
+		t.Skip("no cdp fixtures found")
 	}
 
 	opts := append(chromedp.DefaultExecAllocatorOptions[:],
@@ -29,5 +41,7 @@ func TestCDP(t *testing.T) {
 	baseURL := startTestServer(t)
 	e := cdpscripttest.NewEngine()
 
-	cdpscripttest.Test(t, e, allocCtx, baseURL, "testdata/blur-*.txt", nil)
+	for _, pattern := range matched {
+		cdpscripttest.Test(t, e, allocCtx, baseURL, pattern, nil)
+	}
 }

@@ -38,14 +38,15 @@ var ErrStop = errors.New("stop")
 // DefaultCmds returns the full command set: scripttest's defaults plus all
 // CDP-aware commands. Callers may add, replace, or remove entries.
 //
-// Aliases mirror the cmd/cdp interactive shell for familiarity:
+// Hyphenated names are canonical. Short aliases remain where they improve
+// script ergonomics or mirror the cmd/cdp interactive shell vocabulary:
 //
 //	goto        → navigate
-//	wait        → waitVisible
+//	wait        → wait-visible
 //	js          → eval
 //	jsfile      → evalfile
 //	pause       → sleep
-//	type, fill  → sendKeys
+//	type, fill  → send-keys
 func DefaultCmds() map[string]script.Cmd {
 	cmds := scripttest.DefaultCmds()
 
@@ -54,17 +55,21 @@ func DefaultCmds() map[string]script.Cmd {
 	cmds["goto"] = nav // alias: matches cmd/cdp shell
 
 	wv := WaitVisible()
-	cmds["waitVisible"] = wv
+	cmds["wait-visible"] = wv
 	cmds["wait"] = wv // alias: matches cmd/cdp shell
+	cmds["waitVisible"] = wv
 
-	cmds["waitNotVisible"] = WaitNotVisible()
+	wnv := WaitNotVisible()
+	cmds["wait-not-visible"] = wnv
+	cmds["waitNotVisible"] = wnv
 	cmds["timeout"] = Timeout()
 	cmds["click"] = Click()
 
 	sk := SendKeys()
-	cmds["sendKeys"] = sk
+	cmds["send-keys"] = sk
 	cmds["type"] = sk // alias: matches cmd/cdp shell
 	cmds["fill"] = sk // alias: matches cmd/cdp shell
+	cmds["sendKeys"] = sk
 
 	ev := Eval()
 	cmds["eval"] = ev
@@ -86,7 +91,9 @@ func DefaultCmds() map[string]script.Cmd {
 	cmds["sleep"] = sl
 	cmds["pause"] = sl // alias: matches cmd/cdp shell
 
-	cmds["setBaseURL"] = SetBaseURL()
+	sbu := SetBaseURL()
+	cmds["set-base-url"] = sbu
+	cmds["setBaseURL"] = sbu
 
 	cmds["inject"] = Inject()
 	cmds["inject-clear"] = InjectClear()
@@ -147,7 +154,7 @@ func Navigate() script.Cmd {
 
 // WaitVisible returns a command that waits for a CSS selector to be visible.
 //
-// Usage: waitVisible [--timeout <duration>] <selector>
+// Usage: wait-visible [--timeout <duration>] <selector>
 func WaitVisible() script.Cmd {
 	return script.Command(
 		script.CmdUsage{
@@ -165,7 +172,7 @@ func WaitVisible() script.Cmd {
 			}
 			sel := args[0]
 			return func(s *script.State) (stdout, stderr string, err error) {
-				out, err := runWithWaitTimeout(cs, "waitVisible", sel, timeout,
+				out, err := runWithWaitTimeout(cs, "wait-visible", sel, timeout,
 					chromedp.WaitVisible(sel, chromedp.ByQuery),
 				)
 				return out, "", err
@@ -176,7 +183,7 @@ func WaitVisible() script.Cmd {
 
 // WaitNotVisible returns a command that waits for a CSS selector to disappear.
 //
-// Usage: waitNotVisible [--timeout <duration>] <selector>
+// Usage: wait-not-visible [--timeout <duration>] <selector>
 func WaitNotVisible() script.Cmd {
 	return script.Command(
 		script.CmdUsage{
@@ -194,7 +201,7 @@ func WaitNotVisible() script.Cmd {
 			}
 			sel := args[0]
 			return func(s *script.State) (stdout, stderr string, err error) {
-				out, err := runWithWaitTimeout(cs, "waitNotVisible", sel, timeout,
+				out, err := runWithWaitTimeout(cs, "wait-not-visible", sel, timeout,
 					chromedp.WaitNotPresent(sel, chromedp.ByQuery),
 				)
 				return out, "", err
@@ -204,7 +211,7 @@ func WaitNotVisible() script.Cmd {
 }
 
 // Timeout returns a command that sets the default wait timeout for subsequent
-// wait commands (waitVisible, waitNotVisible) in the current script.
+// wait commands (wait-visible, wait-not-visible) in the current script.
 //
 // Usage: timeout <duration>
 func Timeout() script.Cmd {
@@ -345,7 +352,7 @@ func Click() script.Cmd {
 
 // SendKeys returns a command that sends keystrokes to a CSS selector.
 //
-// Usage: sendKeys <selector> <text>
+// Usage: send-keys <selector> <text>
 func SendKeys() script.Cmd {
 	return script.Command(
 		script.CmdUsage{
@@ -362,7 +369,7 @@ func SendKeys() script.Cmd {
 			}
 			sel, text := args[0], args[1]
 			return func(s *script.State) (stdout, stderr string, err error) {
-				stdout, err = runWithWaitTimeout(cs, "sendKeys", sel, 0,
+				stdout, err = runWithWaitTimeout(cs, "send-keys", sel, 0,
 					chromedp.SendKeys(sel, text, chromedp.ByQuery),
 				)
 				return stdout, "", err
@@ -1210,10 +1217,7 @@ func InjectClear() script.Cmd {
 				ids := cs.injectedScripts
 				cs.injectedScripts = nil
 				for _, id := range ids {
-					id := id
-					if err := chromedp.Run(cs.cdpCtx, chromedp.ActionFunc(func(ctx context.Context) error {
-						return page.RemoveScriptToEvaluateOnNewDocument(id).Do(ctx)
-					})); err != nil {
+					if err := chromedp.Run(cs.cdpCtx, page.RemoveScriptToEvaluateOnNewDocument(id)); err != nil {
 						return "", "", err
 					}
 				}
@@ -1278,7 +1282,7 @@ func Stop() script.Cmd {
 
 // SetBaseURL returns a command that overrides the base URL for subsequent commands.
 //
-// Usage: setBaseURL <url>
+// Usage: set-base-url <url>
 func SetBaseURL() script.Cmd {
 	return script.Command(
 		script.CmdUsage{

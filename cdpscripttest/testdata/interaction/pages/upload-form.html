@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Upload Fixture</title>
+<style>
+body {
+	font-family: sans-serif;
+	margin: 2rem;
+}
+
+.stack {
+	display: grid;
+	gap: 0.75rem;
+	max-width: 28rem;
+}
+
+#result {
+	padding: 0.75rem;
+	background: #eef6ee;
+	border: 1px solid #8fb38f;
+}
+</style>
+<script>
+window.addEventListener("DOMContentLoaded", function() {
+	const file = document.getElementById("file");
+	const result = document.getElementById("result");
+
+	file.addEventListener("change", function() {
+		const selected = Array.from(file.files).map(function(f) {
+			return [f.name, f.type || "application/octet-stream", f.size].join(":");
+		});
+		result.textContent = selected.join(",");
+		result.className = "ready";
+	});
+});
+</script>
+</head>
+<body>
+<main class="stack">
+	<h1>Upload Fixture</h1>
+	<label for="file">Choose a file
+		<input id="file" name="file" type="file">
+	</label>
+	<p id="result" aria-live="polite">No file selected</p>
+</main>
+</body>
+</html>

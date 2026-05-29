@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Hyphenated Commands</title>
+<script>
+function copyName() {
+	const input = document.querySelector("#name");
+	const output = document.querySelector("#output");
+	output.textContent = input.value;
+	output.className = "ready";
+}
+</script>
+</head>
+<body>
+<label for="name">Name</label>
+<input id="name" type="text">
+<button id="copy" onclick="copyName()">Copy</button>
+<p id="output"></p>
+</body>
+</html>

@@ -55,7 +55,9 @@
 //
 // For cdpscript-format txtars containing main.cdp, use RunCDPScript. That path
 // delegates to the real cdpscript runtime instead of the legacy cdpscripttest
-// command table, so runtime behavior stays aligned.
+// command table, so runtime behavior stays aligned. Set
+// CDPScriptRunOptions.TabID and Port to run a fixture against an already
+// running DevTools tab.
 //
 // # Commands
 //
@@ -66,19 +68,19 @@
 // Navigation and waiting:
 //
 //	navigate <path>              navigate to BASE_URL+path, wait for <body>
-//	waitVisible [opts] <sel>     wait for a CSS selector to become visible
-//	waitNotVisible [opts] <sel>  wait for a CSS selector to disappear
+//	wait-visible [opts] <sel>     wait for a CSS selector to become visible
+//	wait-not-visible [opts] <sel>  wait for a CSS selector to disappear
 //	timeout <duration>           set default wait timeout (default 10s)
 //	sleep <duration>             pause (e.g. "500ms", "2s")
 //
-// waitVisible/waitNotVisible options:
+// wait-visible/wait-not-visible options:
 //
 //	--timeout <duration>   override the default wait timeout for this command
 //
 // Interaction:
 //
 //	click <selector>             click a CSS selector
-//	sendKeys <selector> <text>   send keystrokes to a CSS selector
+//	send-keys <selector> <text>   send keystrokes to a CSS selector
 //
 // Evaluation:
 //
@@ -124,19 +126,26 @@
 //
 //	skip [msg]             skip the current script (not a failure)
 //	stop [msg]             halt the script early without failure or skip
-//	setBaseURL <url>       override BASE_URL for subsequent commands
+//	set-base-url <url>       override BASE_URL for subsequent commands
 //
 // # Command Aliases
 //
 // Aliases mirror the interactive cmd/cdp shell for familiarity:
 //
 //	goto   → navigate
-//	wait   → waitVisible
+//	wait   → wait-visible
 //	js     → eval
 //	jsfile → evalfile
 //	pause  → sleep
-//	type   → sendKeys
-//	fill   → sendKeys
+//	type   → send-keys
+//	fill   → send-keys
+//
+// Compatibility aliases are also accepted for older scripts:
+//
+//	waitVisible     → wait-visible
+//	waitNotVisible  → wait-not-visible
+//	sendKeys        → send-keys
+//	setBaseURL      → set-base-url
 //
 // # WebRTC Commands
 //
@@ -217,7 +226,7 @@
 //
 //	WORK          the test's working directory
 //	TMPDIR        a temporary directory (cleaned up after the test)
-//	BASE_URL      the base URL passed to Test() (read-only in env; use setBaseURL)
+//	BASE_URL      the base URL passed to Test() (read-only in env; use set-base-url)
 //	SCREENSHOT_DIR  override the screenshot output directory
 //
 // Additional variables used by the test runner:
@@ -275,13 +284,13 @@
 //
 //	# Navigate and verify the page title.
 //	navigate /app
-//	waitVisible h1
+//	wait-visible h1
 //	title
 //	stdout 'MyApp'
 //
 //	# Navigate to settings, check heading.
 //	navigate /app/settings
-//	waitVisible h1
+//	wait-visible h1
 //	text h1
 //	stdout 'Settings'
 //
@@ -293,7 +302,7 @@
 //	# Inject before navigate so the monkey-patch runs at page load.
 //	rtc-inject
 //	navigate /video-call
-//	waitVisible '#status'
+//	wait-visible '#status'
 //	rtc-wait connected 60s
 //
 //	# Inspect connection details.

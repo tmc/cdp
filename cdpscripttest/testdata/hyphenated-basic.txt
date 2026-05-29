@@ -1,0 +1,10 @@
+# Verify the canonical hyphenated command names.
+set-base-url ${BASE_URL}
+navigate /hyphenated-basic.html
+wait-visible '#name'
+send-keys '#name' Ada
+click '#copy'
+wait-visible '#output.ready'
+text '#output'
+stdout 'Ada'
+wait-not-visible '#missing'

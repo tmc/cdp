@@ -1,0 +1,9 @@
+# Verify event log and track enumeration after connection.
+rtc-inject
+navigate /webrtc-loopback.html
+wait-visible '#status'
+rtc-wait connected 60s
+rtc-events
+stdout 'connectionstatechange'
+rtc-tracks
+stdout 'video'

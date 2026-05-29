@@ -39,9 +39,19 @@ func findChromePath() string {
 }
 
 func TestWebRTC(t *testing.T) {
-	rtcMatches, _ := filepath.Glob("testdata/rtc-*.txt")
-	networkMatches, _ := filepath.Glob("testdata/network-*.txt")
-	if len(rtcMatches) == 0 && len(networkMatches) == 0 {
+	patterns := []string{
+		"testdata/rtc-*.txt",
+		"testdata/network-*.txt",
+	}
+
+	var matched []string
+	for _, pattern := range patterns {
+		matches, _ := filepath.Glob(pattern)
+		if len(matches) > 0 {
+			matched = append(matched, pattern)
+		}
+	}
+	if len(matched) == 0 {
 		t.Skip("no webrtc or network fixtures found")
 	}
 
@@ -60,6 +70,7 @@ func TestWebRTC(t *testing.T) {
 	baseURL := startTestServer(t)
 	e := cdpscripttest.NewEngine()
 
-	cdpscripttest.Test(t, e, allocCtx, baseURL, "testdata/rtc-*.txt", nil)
-	cdpscripttest.Test(t, e, allocCtx, baseURL, "testdata/network-*.txt", nil)
+	for _, pattern := range matched {
+		cdpscripttest.Test(t, e, allocCtx, baseURL, pattern, nil)
+	}
 }

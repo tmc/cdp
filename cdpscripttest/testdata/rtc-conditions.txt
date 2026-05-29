@@ -1,0 +1,24 @@
+# Verify WebRTC conditions work for gating script commands.
+rtc-inject
+navigate /webrtc-loopback.html
+wait-visible '#status'
+rtc-wait connected 60s
+
+# [rtc] should be true after injection and page load.
+[rtc] rtc-state
+stdout 'connected'
+
+# [rtc-state:connected] should be true for the selected peer.
+[rtc-state:connected] rtc-peers
+stdout 'count:'
+
+# Wait for stats cache to populate.
+sleep 2s
+
+# [!rtc-state:failed] should also work (negated condition).
+[!rtc-state:failed] rtc-stats
+stdout 'type:'
+
+# [rtc-dc:test-dc] should be true since the loopback page creates one.
+[rtc-dc:test-dc] rtc-state
+stdout 'connected'

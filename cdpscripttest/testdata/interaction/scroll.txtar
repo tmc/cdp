@@ -1,0 +1,9 @@
+-- main.cdp --
+goto $FIXTURE_BASE_URL/interaction/pages/scroll.html
+wait '#status.top'
+scroll down 700
+wait '#status.scrolled'
+assert text '#status' scrolled
+scroll '#marker'
+wait '#status.marker-in-view'
+assert text '#status' marker-in-view

@@ -1,0 +1,10 @@
+-- main.cdp --
+goto $FIXTURE_BASE_URL/interaction/pages/viewport.html
+wait '#mode.desktop'
+assert text '#mode' desktop
+viewport 390 640
+wait '#mode.mobile'
+assert text '#mode' mobile
+viewport 1000 640
+wait '#mode.desktop'
+assert text '#mode' desktop

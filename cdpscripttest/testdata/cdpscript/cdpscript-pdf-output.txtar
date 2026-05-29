@@ -1,0 +1,6 @@
+# cdpscript PDF output fixture
+
+-- main.cdp --
+goto data:text/html,%3C!doctype%20html%3E%3Chtml%3E%3Cbody%3E%3Ch1%20id%3Dstatus%3EPDF%20Fixture%3C%2Fh1%3E%3C%2Fbody%3E%3C%2Fhtml%3E
+wait '#status'
+pdf page.pdf

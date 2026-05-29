@@ -11,7 +11,7 @@ func TestParseLog(t *testing.T) {
 	log := `
 # Navigate and wait (0.567s)
 > navigate /blur-dashboard.html
-> waitVisible '#dashboard'
+> wait-visible '#dashboard'
 > sleep 500ms
 
 # Baseline capture (0.038s)
@@ -103,7 +103,7 @@ func TestExtractPreamble(t *testing.T) {
 		},
 		{
 			name:   "no preamble",
-			source: "navigate /page\nwaitVisible '#app'\n",
+			source: "navigate /page\nwait-visible '#app'\n",
 			want:   "",
 		},
 		{
@@ -129,7 +129,7 @@ func TestRenderReport(t *testing.T) {
 			Timing:  "0.567s",
 			Commands: []reportCommand{
 				{Line: "navigate /blur-dashboard.html"},
-				{Line: "waitVisible '#dashboard'"},
+				{Line: "wait-visible '#dashboard'"},
 				{Line: "sleep 500ms"},
 			},
 		},
@@ -175,7 +175,7 @@ func TestRenderReport(t *testing.T) {
 func TestReportStreamer(t *testing.T) {
 	log := "# Navigate and wait (0.567s)\n" +
 		"> navigate /page\n" +
-		"> waitVisible '#app'\n" +
+		"> wait-visible '#app'\n" +
 		"\n" +
 		"# Capture screenshot (0.038s)\n" +
 		"> screenshot dashboard.png\n" +

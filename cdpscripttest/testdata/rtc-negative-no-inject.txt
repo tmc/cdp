@@ -1,0 +1,6 @@
+# Verify that rtc commands fail when rtc-inject was not called.
+navigate /webrtc-loopback.html
+wait-visible '#status'
+! rtc-state
+! rtc-peers
+! rtc-events

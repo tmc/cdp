@@ -1,0 +1,6 @@
+-- main.cdp --
+goto $FIXTURE_BASE_URL/interaction/pages/drag-drop.html
+wait '#status.pending'
+drag '#source' '#drop' 6
+wait '#status.done'
+assert text '#status' dropped

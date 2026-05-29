@@ -1,0 +1,10 @@
+-- main.cdp --
+goto $FIXTURE_BASE_URL/interaction/pages/dropdown.html
+wait '#status.none'
+assert text '#status' selected:none
+select '#plan' Pro
+wait '#status.pro'
+assert text '#status' selected:pro
+select '#plan' enterprise
+wait '#status.enterprise'
+assert text '#status' selected:enterprise

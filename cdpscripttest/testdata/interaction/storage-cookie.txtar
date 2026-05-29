@@ -1,0 +1,16 @@
+-- main.cdp --
+goto $FIXTURE_BASE_URL/interaction/pages/storage-cookie.html
+wait '#status.empty'
+assert text '#local' local:missing
+assert text '#session' session:missing
+assert text '#cookie' cookie:missing
+js localStorage.setItem("cdp-local", "local-value"); sessionStorage.setItem("cdp-session", "session-value"); document.cookie = "cdp_cookie=cookie-value; path=/"; window.renderState();
+wait '#status.ready'
+assert text '#local' local:local-value
+assert text '#session' session:session-value
+assert text '#cookie' cookie:cookie-value
+js localStorage.removeItem("cdp-local"); sessionStorage.removeItem("cdp-session"); document.cookie = "cdp_cookie=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/"; window.renderState();
+wait '#status.empty'
+assert text '#local' local:missing
+assert text '#session' session:missing
+assert text '#cookie' cookie:missing

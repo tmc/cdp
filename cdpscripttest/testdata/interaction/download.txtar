@@ -1,0 +1,6 @@
+-- main.cdp --
+goto $FIXTURE_BASE_URL/interaction/pages/download.html
+wait '#download'
+download-dir downloads
+click '#download'
+wait-download download-fixture.txt 5s

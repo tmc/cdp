@@ -1,0 +1,11 @@
+# Verify data channel tracking via the monitoring helper.
+# The loopback page creates a data channel "test-dc" on pc1.
+rtc-inject
+navigate /webrtc-loopback.html
+wait-visible '#status'
+rtc-wait connected 60s
+sleep 1s
+
+# Verify the data channel is tracked by the helper.
+eval '(function(){ var dcs = window.__cdpst_rtc_datachannels; if (!dcs) return "no datachannels map"; var result = []; for (var kv of dcs.entries()) { var id = kv[0]; var channels = kv[1]; for (var dc of channels.values()) { result.push(id + ":" + dc.label); } } return result.join(","); })()'
+stdout 'test-dc'

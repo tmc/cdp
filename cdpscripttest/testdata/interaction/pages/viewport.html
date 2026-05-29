@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Viewport Fixture</title>
+<style>
+body {
+	font-family: sans-serif;
+	margin: 2rem;
+}
+
+#mode {
+	padding: 0.75rem;
+	background: #eef6ee;
+	border: 1px solid #8fb38f;
+}
+</style>
+<script>
+window.addEventListener("DOMContentLoaded", function() {
+	const mode = document.getElementById("mode");
+
+	function update() {
+		const mobile = window.innerWidth < 600;
+		mode.textContent = mobile ? "mobile" : "desktop";
+		mode.className = mobile ? "mobile" : "desktop";
+	}
+
+	update();
+	window.addEventListener("resize", update);
+});
+</script>
+</head>
+<body>
+<main>
+	<h1>Viewport Fixture</h1>
+	<p id="mode" aria-live="polite"></p>
+</main>
+</body>
+</html>

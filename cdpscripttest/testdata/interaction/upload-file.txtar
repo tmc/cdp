@@ -1,0 +1,9 @@
+-- main.cdp --
+goto $FIXTURE_BASE_URL/interaction/pages/upload-form.html
+wait '#file'
+upload '#file' payload.txt
+wait '#result.ready'
+assert text '#result' payload.txt:text/plain:38
+
+-- payload.txt --
+hello from an embedded upload fixture

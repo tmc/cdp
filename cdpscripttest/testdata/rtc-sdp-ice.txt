@@ -1,0 +1,11 @@
+# Verify SDP and ICE candidate capture after connection.
+rtc-inject
+navigate /webrtc-loopback.html
+wait-visible '#status'
+rtc-wait connected 60s
+rtc-sdp
+stdout 'local:'
+stdout 'remote:'
+stdout 'a=rtpmap'
+rtc-ice
+stdout 'candidate:'

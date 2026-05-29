@@ -14,7 +14,7 @@ import (
 )
 
 // DefaultWaitTimeout is the default timeout for wait commands
-// (waitVisible, waitNotVisible) when no per-command or per-script
+// (wait-visible, wait-not-visible) when no per-command or per-script
 // override is specified.
 const DefaultWaitTimeout = 10 * time.Second
 
@@ -89,8 +89,8 @@ type State struct {
 	// blurred screenshot for side-by-side comparison.
 	emitUnblurred bool
 
-	// waitTimeout is the default timeout for wait commands (waitVisible,
-	// waitNotVisible). Set via the "timeout" script command or Go API.
+	// waitTimeout is the default timeout for wait commands (wait-visible,
+	// wait-not-visible). Set via the "timeout" script command or Go API.
 	// Zero means use DefaultWaitTimeout.
 	waitTimeout time.Duration
 

@@ -1,0 +1,8 @@
+# cdpscript HAR output fixture
+
+-- main.cdp --
+tag page-load
+goto $FIXTURE_BASE_URL/interaction/pages/network-har.html
+wait '#status.done'
+capture dom Loaded fixture DOM
+har session.har

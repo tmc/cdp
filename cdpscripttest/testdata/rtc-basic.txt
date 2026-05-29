@@ -1,0 +1,10 @@
+# Verify rtc-inject, rtc-peers, rtc-state, and rtc-wait work
+# with a local loopback WebRTC connection.
+rtc-inject
+navigate /webrtc-loopback.html
+wait-visible '#status'
+rtc-wait connected 60s
+rtc-peers
+stdout 'connected'
+rtc-state
+stdout 'connected'

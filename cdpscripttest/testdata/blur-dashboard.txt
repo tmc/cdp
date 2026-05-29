@@ -1,0 +1,21 @@
+# Dashboard screenshot comparison with blur on dynamic metrics.
+# The page has random user counts, RPS, latency, and event timestamps
+# that change on every load. Blur those elements so the stable layout
+# (headings, uptime, structure) drives the comparison.
+
+navigate /blur-dashboard.html
+wait-visible '#dashboard'
+sleep 500ms
+
+# Baseline capture: blur all dynamic values.
+screenshot-compare --threshold 15 --blur '#users' --blur '#rps' --blur '#latency' --blur '#evt1' --blur '#evt2' --blur '#evt3' '#dashboard' dashboard.png
+stdout 'baseline created'
+
+# Reload; all dynamic values change.
+navigate /blur-dashboard.html
+wait-visible '#dashboard'
+sleep 500ms
+
+# Second capture should be within threshold.
+screenshot-compare --threshold 15 --blur '#users' --blur '#rps' --blur '#latency' --blur '#evt1' --blur '#evt2' --blur '#evt3' '#dashboard' dashboard.png
+stdout 'diff:'

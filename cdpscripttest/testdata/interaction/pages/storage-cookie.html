@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Storage Fixture</title>
+<style>
+body {
+	font-family: sans-serif;
+	margin: 2rem;
+}
+
+.stack {
+	display: grid;
+	gap: 0.75rem;
+	max-width: 28rem;
+}
+
+.value {
+	padding: 0.75rem;
+	background: #eef6ee;
+	border: 1px solid #8fb38f;
+}
+</style>
+<script>
+window.addEventListener("DOMContentLoaded", function() {
+	window.renderState = function() {
+		const local = localStorage.getItem("cdp-local") || "missing";
+		const session = sessionStorage.getItem("cdp-session") || "missing";
+		const match = document.cookie.match(/(?:^|; )cdp_cookie=([^;]+)/);
+		const cookie = match ? decodeURIComponent(match[1]) : "missing";
+		const ready = local !== "missing" && session !== "missing" && cookie !== "missing";
+
+		document.getElementById("local").textContent = "local:" + local;
+		document.getElementById("session").textContent = "session:" + session;
+		document.getElementById("cookie").textContent = "cookie:" + cookie;
+		document.getElementById("status").className = ready ? "ready" : "empty";
+		document.getElementById("status").textContent = ready ? "ready" : "empty";
+	};
+
+	window.renderState();
+});
+</script>
+</head>
+<body>
+<main class="stack">
+	<h1>Storage Fixture</h1>
+	<p id="status" class="value" aria-live="polite"></p>
+	<p id="local" class="value"></p>
+	<p id="session" class="value"></p>
+	<p id="cookie" class="value"></p>
+</main>
+</body>
+</html>

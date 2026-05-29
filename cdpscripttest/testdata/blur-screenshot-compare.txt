@@ -1,0 +1,20 @@
+# Verify that --blur masks dynamic content for stable screenshot comparison.
+# The page has a random session ID and timestamp that change on every load.
+# Without blur, consecutive screenshots would differ. With blur applied to
+# the dynamic elements, the comparison passes.
+
+# First load: capture becomes the baseline.
+navigate /blur-dynamic.html
+wait-visible '#card'
+sleep 500ms
+screenshot-compare --blur '#session-id' --blur '#timestamp' '#card' blur-card.png
+stdout 'baseline created'
+
+# Reload the page; session ID and timestamp change.
+navigate /blur-dynamic.html
+wait-visible '#card'
+sleep 500ms
+
+# Second capture should stay within tolerance because dynamic content is blurred.
+screenshot-compare --threshold 25 --blur '#session-id' --blur '#timestamp' '#card' blur-card.png
+stdout 'diff:'

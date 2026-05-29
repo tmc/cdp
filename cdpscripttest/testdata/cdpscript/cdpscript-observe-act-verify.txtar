@@ -1,0 +1,14 @@
+# Purpose: demonstrate the screenshot-first observe-act-verify loop.
+# Usage: FIXTURE_BASE_URL=http://127.0.0.1:PORT cdpscript cdpscript-observe-act-verify.txtar
+# Inputs: FIXTURE_BASE_URL from the local cdpscripttest server.
+# Verification: local fixture; writes before.png and after.png, then asserts page text.
+
+-- main.cdp --
+goto $FIXTURE_BASE_URL/interaction/pages/observe-act-verify.html
+wait '#target'
+screenshot before.png
+click coord:100,80
+wait '#result'
+screenshot after.png
+assert visible '#result'
+assert text '#result' Coordinate click verified

@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Dialogs Fixture</title>
+<style>
+body {
+	font-family: sans-serif;
+	margin: 2rem;
+}
+
+.stack {
+	display: grid;
+	gap: 0.75rem;
+	max-width: 28rem;
+}
+
+#result {
+	padding: 0.75rem;
+	background: #eef6ee;
+	border: 1px solid #8fb38f;
+}
+</style>
+<script>
+window.addEventListener("DOMContentLoaded", function() {
+	const result = document.getElementById("result");
+
+	function setResult(kind, value) {
+		result.textContent = value;
+		result.className = kind;
+	}
+
+	document.getElementById("alert").addEventListener("click", function() {
+		alert("fixture alert");
+		setResult("alert", "alert closed");
+	});
+
+	document.getElementById("confirm").addEventListener("click", function() {
+		const ok = confirm("fixture confirm");
+		setResult(ok ? "confirm-accepted" : "confirm-dismissed", "confirm:" + ok);
+	});
+
+	document.getElementById("prompt").addEventListener("click", function() {
+		const answer = prompt("fixture prompt", "default");
+		setResult("prompt", "prompt:" + answer);
+	});
+});
+</script>
+</head>
+<body>
+<main class="stack">
+	<h1>Dialogs Fixture</h1>
+	<button id="alert" type="button">Alert</button>
+	<button id="confirm" type="button">Confirm</button>
+	<button id="prompt" type="button">Prompt</button>
+	<p id="result" class="empty" aria-live="polite">empty</p>
+</main>
+</body>
+</html>

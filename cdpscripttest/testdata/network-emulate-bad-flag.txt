@@ -1,0 +1,2 @@
+# Verify network-emulate rejects unknown flags.
+! network-emulate --bogus-flag 42

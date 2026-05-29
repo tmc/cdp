@@ -1,0 +1,14 @@
+# Purpose: demonstrate running a script against an already-running CDP tab.
+# Usage: cdpscript --tab <target-id> --port <devtools-port> cdpscript-attach-observe-act-verify.txtar
+# Inputs: FIXTURE_BASE_URL and an attachable browser tab from cdp attach or /json/list.
+# Verification: local remote-browser fixture; writes before.png and after.png, then asserts page text.
+
+-- main.cdp --
+goto $FIXTURE_BASE_URL/interaction/pages/observe-act-verify.html
+wait '#target'
+screenshot before.png
+click coord:100,80
+wait '#result'
+screenshot after.png
+assert visible '#result'
+assert text '#result' Coordinate click verified

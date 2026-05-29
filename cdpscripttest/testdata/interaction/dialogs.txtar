@@ -1,0 +1,15 @@
+-- main.cdp --
+goto $FIXTURE_BASE_URL/interaction/pages/dialogs.html
+wait '#result.empty'
+dialog accept
+click '#alert'
+wait '#result.alert'
+assert text '#result' alert closed
+dialog dismiss
+click '#confirm'
+wait '#result.confirm-dismissed'
+assert text '#result' confirm:false
+dialog accept Codex Agent
+click '#prompt'
+wait '#result.prompt'
+assert text '#result' prompt:Codex Agent
