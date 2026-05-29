@@ -11,7 +11,7 @@ import (
 	"github.com/BurntSushi/toml"
 )
 
-//go:generate sh -c "curl -sL https://raw.githubusercontent.com/gitleaks/gitleaks/master/config/gitleaks.toml > gitleaks.toml"
+//go:generate sh -c "curl -sL https://raw.githubusercontent.com/gitleaks/gitleaks/145400593c178304246371bc45290588bc72f43e/config/gitleaks.toml > gitleaks.toml"
 
 //go:embed gitleaks.toml
 var gitleaksConfig string
