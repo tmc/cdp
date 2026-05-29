@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -34,7 +35,14 @@ func TestMain(m *testing.M) {
 // TestServer provides a test HTTP server with various endpoints
 type TestServer struct {
 	*httptest.Server
+	mu           sync.Mutex
 	requestCount map[string]int
+}
+
+func (ts *TestServer) increment(path string) {
+	ts.mu.Lock()
+	defer ts.mu.Unlock()
+	ts.requestCount[path]++
 }
 
 func newTestServer() *TestServer {
@@ -46,7 +54,7 @@ func newTestServer() *TestServer {
 
 	// Basic HTML page
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		ts.requestCount[r.URL.Path]++
+		ts.increment(r.URL.Path)
 		w.Header().Set("Content-Type", "text/html")
 		fmt.Fprintf(w, `<!DOCTYPE html>
 <html>
@@ -70,7 +78,7 @@ func newTestServer() *TestServer {
 
 	// Page with delayed content
 	mux.HandleFunc("/delayed", func(w http.ResponseWriter, r *http.Request) {
-		ts.requestCount[r.URL.Path]++
+		ts.increment(r.URL.Path)
 		w.Header().Set("Content-Type", "text/html")
 		fmt.Fprintf(w, `<!DOCTYPE html>
 <html>
@@ -89,14 +97,14 @@ func newTestServer() *TestServer {
 
 	// JSON API endpoint
 	mux.HandleFunc("/api/data", func(w http.ResponseWriter, r *http.Request) {
-		ts.requestCount[r.URL.Path]++
+		ts.increment(r.URL.Path)
 		w.Header().Set("Content-Type", "application/json")
 		fmt.Fprintf(w, `{"status":"ok","data":{"value":42}}`)
 	})
 
 	// Page with network requests
 	mux.HandleFunc("/network-test", func(w http.ResponseWriter, r *http.Request) {
-		ts.requestCount[r.URL.Path]++
+		ts.increment(r.URL.Path)
 		w.Header().Set("Content-Type", "text/html")
 		fmt.Fprintf(w, `<!DOCTYPE html>
 <html>
@@ -116,7 +124,7 @@ func newTestServer() *TestServer {
 
 	// Page with forms
 	mux.HandleFunc("/form", func(w http.ResponseWriter, r *http.Request) {
-		ts.requestCount[r.URL.Path]++
+		ts.increment(r.URL.Path)
 		if r.Method == "POST" {
 			r.ParseForm()
 			w.Header().Set("Content-Type", "text/html")
@@ -141,7 +149,7 @@ func newTestServer() *TestServer {
 
 	// Page that sets cookies
 	mux.HandleFunc("/cookies", func(w http.ResponseWriter, r *http.Request) {
-		ts.requestCount[r.URL.Path]++
+		ts.increment(r.URL.Path)
 		http.SetCookie(w, &http.Cookie{
 			Name:  "test-cookie",
 			Value: "test-value",
@@ -153,13 +161,13 @@ func newTestServer() *TestServer {
 
 	// Redirect page
 	mux.HandleFunc("/redirect", func(w http.ResponseWriter, r *http.Request) {
-		ts.requestCount[r.URL.Path]++
+		ts.increment(r.URL.Path)
 		http.Redirect(w, r, "/", http.StatusFound)
 	})
 
 	// Basic auth protected page
 	mux.HandleFunc("/auth", func(w http.ResponseWriter, r *http.Request) {
-		ts.requestCount[r.URL.Path]++
+		ts.increment(r.URL.Path)
 		user, pass, ok := r.BasicAuth()
 		if !ok || user != "testuser" || pass != "testpass" {
 			w.Header().Set("WWW-Authenticate", `Basic realm="Test"`)
@@ -173,7 +181,7 @@ func newTestServer() *TestServer {
 
 	// POST endpoint for testing
 	mux.HandleFunc("/api/post", func(w http.ResponseWriter, r *http.Request) {
-		ts.requestCount[r.URL.Path]++
+		ts.increment(r.URL.Path)
 		if r.Method != "POST" {
 			w.WriteHeader(http.StatusMethodNotAllowed)
 			fmt.Fprintf(w, "Method not allowed")
@@ -199,7 +207,7 @@ func newTestServer() *TestServer {
 
 	// PUT endpoint for testing
 	mux.HandleFunc("/api/put", func(w http.ResponseWriter, r *http.Request) {
-		ts.requestCount[r.URL.Path]++
+		ts.increment(r.URL.Path)
 		if r.Method != "PUT" {
 			w.WriteHeader(http.StatusMethodNotAllowed)
 			fmt.Fprintf(w, "Method not allowed")
@@ -225,7 +233,7 @@ func newTestServer() *TestServer {
 
 	// Generic endpoint that echoes request info
 	mux.HandleFunc("/api/echo", func(w http.ResponseWriter, r *http.Request) {
-		ts.requestCount[r.URL.Path]++
+		ts.increment(r.URL.Path)
 
 		var body string
 		if r.Body != nil {

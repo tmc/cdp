@@ -47,6 +47,11 @@ func (b *Browser) NewPage() (*Page, error) {
 		cancel()
 		return nil, fmt.Errorf("initializing page: %w", err)
 	}
+	p.networkManager = NewNetworkManager(p)
+	if err := p.networkManager.Monitor(); err != nil {
+		cancel()
+		return nil, err
+	}
 
 	return p, nil
 }
@@ -58,7 +63,7 @@ func (b *Browser) AttachToTarget(targetID string) (*Page, error) {
 	}
 
 	// Get target info
-	targets, err := target.GetTargets().Do(b.ctx)
+	targets, err := b.targets()
 	if err != nil {
 		return nil, fmt.Errorf("getting targets: %w", err)
 	}
@@ -84,6 +89,11 @@ func (b *Browser) AttachToTarget(targetID string) (*Page, error) {
 		targetID: target.ID(targetID),
 		browser:  b,
 	}
+	p.networkManager = NewNetworkManager(p)
+	if err := p.networkManager.Monitor(); err != nil {
+		cancel()
+		return nil, err
+	}
 
 	return p, nil
 }
@@ -94,7 +104,7 @@ func (b *Browser) Pages() ([]*Page, error) {
 		return nil, errors.New("browser not launched")
 	}
 
-	targets, err := target.GetTargets().Do(b.ctx)
+	targets, err := b.targets()
 	if err != nil {
 		return nil, fmt.Errorf("getting targets: %w", err)
 	}
@@ -111,6 +121,19 @@ func (b *Browser) Pages() ([]*Page, error) {
 	}
 
 	return pages, nil
+}
+
+func (b *Browser) targets() ([]*target.Info, error) {
+	var targets []*target.Info
+	if err := chromedp.Run(b.ctx, chromedp.ActionFunc(func(ctx context.Context) error {
+		c := chromedp.FromContext(ctx)
+		var err error
+		targets, err = target.GetTargets().Do(cdp.WithExecutor(ctx, c.Browser))
+		return err
+	})); err != nil {
+		return nil, err
+	}
+	return targets, nil
 }
 
 // Context returns the page's context
@@ -140,7 +163,7 @@ func (p *Page) Navigate(url string, opts ...NavigateOption) error {
 	ctx, cancel := context.WithTimeout(p.ctx, options.Timeout)
 	defer cancel()
 
-	if err := chromedp.Run(ctx, chromedp.Navigate(url)); err != nil {
+	if err := chromedp.Run(ctx, chromedp.Navigate(normalizeNavigateURL(url))); err != nil {
 		return fmt.Errorf("navigating: %w", err)
 	}
 
@@ -309,7 +332,11 @@ func (p *Page) Screenshot(opts ...ScreenshotOption) ([]byte, error) {
 	var action chromedp.Action
 
 	if options.FullPage {
-		action = chromedp.FullScreenshot(&buf, int(options.Quality))
+		quality := options.Quality
+		if options.Type == "png" {
+			quality = 100
+		}
+		action = chromedp.FullScreenshot(&buf, int(quality))
 	} else if options.Selector != "" {
 		action = chromedp.Screenshot(options.Selector, &buf, chromedp.NodeVisible)
 	} else {
@@ -364,8 +391,8 @@ func (p *Page) PDF(opts ...PDFOption) ([]byte, error) {
 func (p *Page) GetText(selector string) (string, error) {
 	var text string
 	if err := chromedp.Run(p.ctx,
-		chromedp.WaitVisible(selector),
-		chromedp.Text(selector, &text),
+		chromedp.WaitVisible(selector, chromedp.ByQuery),
+		chromedp.Text(selector, &text, chromedp.ByQuery),
 	); err != nil {
 		return "", fmt.Errorf(fmt.Sprintf("getting text from %s", selector)+": %w", err)
 	}
@@ -375,10 +402,14 @@ func (p *Page) GetText(selector string) (string, error) {
 // GetAttribute gets an attribute value
 func (p *Page) GetAttribute(selector, attribute string) (string, error) {
 	var value string
-	if err := chromedp.Run(p.ctx,
-		chromedp.WaitReady(selector),
-		chromedp.AttributeValue(selector, attribute, &value, nil),
-	); err != nil {
+	expr := fmt.Sprintf(`(() => {
+		const el = document.querySelector(%s);
+		if (!el) throw new Error("element not found: " + %s);
+		const name = %s;
+		if (name === "value" && "value" in el) return el.value;
+		return el.getAttribute(name) || "";
+	})()`, jsString(selector), jsString(selector), jsString(attribute))
+	if err := chromedp.Run(p.ctx, chromedp.WaitReady(selector), chromedp.Evaluate(expr, &value)); err != nil {
 		return "", fmt.Errorf(fmt.Sprintf("getting attribute %s from %s", attribute, selector)+": %w", err)
 	}
 	return value, nil

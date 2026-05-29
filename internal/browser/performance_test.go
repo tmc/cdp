@@ -306,10 +306,11 @@ func TestPerformanceNetworkLoad(t *testing.T) {
 
 	// Create page that makes many network requests
 	requestCount := 50
-	html := `<!DOCTYPE html><html><body><div id="status">Loading...</div><script>
+	script := `
+		document.body.innerHTML = '<div id="status">Loading...</div>';
 		let loaded = 0;
 		const total = ` + fmt.Sprintf("%d", requestCount) + `;
-		
+
 		for (let i = 0; i < total; i++) {
 			fetch('/api/data?n=' + i)
 				.then(() => {
@@ -317,12 +318,16 @@ func TestPerformanceNetworkLoad(t *testing.T) {
 					if (loaded === total) {
 						document.getElementById('status').textContent = 'All loaded';
 					}
-				});
+					});
 		}
-	</script></body></html>`
+	`
 
 	start := time.Now()
-	err = page.Navigate("data:text/html," + html)
+	err = page.Navigate(ts.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = page.Evaluate(script, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

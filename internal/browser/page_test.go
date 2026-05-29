@@ -57,6 +57,14 @@ func TestPageBasicOperations(t *testing.T) {
 	if !strings.Contains(content, "Test Page") {
 		t.Error("Content does not contain expected text")
 	}
+
+	text, err := page.GetText("h1")
+	if err != nil {
+		t.Errorf("Failed to get h1 text: %v", err)
+	}
+	if text != "Test Page" {
+		t.Errorf("Unexpected h1 text: got %q, want %q", text, "Test Page")
+	}
 }
 
 // TestPageInteractions tests page interaction methods

@@ -26,7 +26,7 @@ type Request struct {
 	PostData string
 
 	page        *Page
-	requestID   network.RequestID
+	requestID   fetch.RequestID
 	intercepted bool
 	mu          sync.Mutex
 }
@@ -54,6 +54,7 @@ type NetworkManager struct {
 	page    *Page
 	routes  []Route
 	enabled bool
+	monitor bool
 	mu      sync.RWMutex
 
 	// Request tracking
@@ -94,18 +95,37 @@ func (nm *NetworkManager) Enable() error {
 		return nil
 	}
 
-	// Enable network domain
-	if err := chromedp.Run(nm.page.ctx,
-		network.Enable(),
-		fetch.Enable(),
-	); err != nil {
+	actions := []chromedp.Action{fetch.Enable()}
+	if !nm.monitor {
+		actions = append([]chromedp.Action{network.Enable()}, actions...)
+	}
+	if err := chromedp.Run(nm.page.ctx, actions...); err != nil {
 		return fmt.Errorf("enabling network interception: %w", err)
 	}
 
-	// Set up event handlers
-	chromedp.ListenTarget(nm.page.ctx, nm.handleNetworkEvent)
+	if !nm.monitor {
+		chromedp.ListenTarget(nm.page.ctx, nm.handleNetworkEvent)
+		nm.monitor = true
+	}
 
 	nm.enabled = true
+	return nil
+}
+
+// Monitor enables passive network event tracking.
+func (nm *NetworkManager) Monitor() error {
+	nm.mu.Lock()
+	defer nm.mu.Unlock()
+
+	if nm.monitor {
+		return nil
+	}
+
+	if err := chromedp.Run(nm.page.ctx, network.Enable()); err != nil {
+		return fmt.Errorf("enabling network monitor: %w", err)
+	}
+	chromedp.ListenTarget(nm.page.ctx, nm.handleNetworkEvent)
+	nm.monitor = true
 	return nil
 }
 
@@ -118,10 +138,7 @@ func (nm *NetworkManager) Disable() error {
 		return nil
 	}
 
-	if err := chromedp.Run(nm.page.ctx,
-		network.Disable(),
-		fetch.Disable(),
-	); err != nil {
+	if err := chromedp.Run(nm.page.ctx, fetch.Disable()); err != nil {
 		return fmt.Errorf("disabling network interception: %w", err)
 	}
 
@@ -157,12 +174,38 @@ func (p *Page) Route(pattern string, handler RouteHandler) error {
 func (nm *NetworkManager) handleNetworkEvent(ev interface{}) {
 	switch ev := ev.(type) {
 	case *fetch.EventRequestPaused:
-		nm.handleRequestPaused(ev)
+		go nm.handleRequestPaused(ev)
 	case *network.EventRequestWillBeSent:
-		// TODO: Implement handleRequestWillBeSent
+		nm.handleRequestWillBeSent(ev)
 	case *network.EventResponseReceived:
-		// TODO: Implement handleResponseReceived
+		nm.handleResponseReceived(ev)
 	}
+}
+
+func (nm *NetworkManager) handleRequestWillBeSent(ev *network.EventRequestWillBeSent) {
+	req := &Request{
+		ID:      string(ev.RequestID),
+		URL:     ev.Request.URL,
+		Method:  ev.Request.Method,
+		Headers: headerMap(ev.Request.Headers),
+		page:    nm.page,
+	}
+	nm.mu.Lock()
+	nm.requests[ev.RequestID] = req
+	nm.mu.Unlock()
+}
+
+func (nm *NetworkManager) handleResponseReceived(ev *network.EventResponseReceived) {
+	resp := &Response{
+		URL:        ev.Response.URL,
+		Status:     int(ev.Response.Status),
+		StatusText: ev.Response.StatusText,
+		Headers:    headerMap(ev.Response.Headers),
+	}
+
+	nm.mu.Lock()
+	nm.responses[ev.RequestID] = resp
+	nm.mu.Unlock()
 }
 
 // handleRequestPaused handles intercepted requests
@@ -171,15 +214,10 @@ func (nm *NetworkManager) handleRequestPaused(ev *fetch.EventRequestPaused) {
 		ID:          string(ev.RequestID),
 		URL:         ev.Request.URL,
 		Method:      ev.Request.Method,
-		Headers:     make(map[string]string),
+		Headers:     headerMap(ev.Request.Headers),
 		page:        nm.page,
-		requestID:   network.RequestID(ev.RequestID),
+		requestID:   ev.RequestID,
 		intercepted: true,
-	}
-
-	// Copy headers
-	for name, value := range ev.Request.Headers {
-		req.Headers[name] = value.(string)
 	}
 
 	// Get post data if available
@@ -187,6 +225,11 @@ func (nm *NetworkManager) handleRequestPaused(ev *fetch.EventRequestPaused) {
 		// Concatenate post data entries
 		var postData strings.Builder
 		for _, entry := range ev.Request.PostDataEntries {
+			data, err := base64.StdEncoding.DecodeString(entry.Bytes)
+			if err == nil {
+				postData.Write(data)
+				continue
+			}
 			postData.WriteString(entry.Bytes)
 		}
 		req.PostData = postData.String()
@@ -194,7 +237,7 @@ func (nm *NetworkManager) handleRequestPaused(ev *fetch.EventRequestPaused) {
 
 	// Store request
 	nm.mu.Lock()
-	nm.requests[network.RequestID(ev.RequestID)] = req
+	nm.requests[pausedRequestKey(ev)] = req
 	nm.mu.Unlock()
 
 	// Check if the request should be blocked
@@ -209,7 +252,7 @@ func (nm *NetworkManager) handleRequestPaused(ev *fetch.EventRequestPaused) {
 
 	// Check if any route matches
 	nm.mu.RLock()
-	routes := nm.routes
+	routes := append([]Route(nil), nm.routes...)
 	nm.mu.RUnlock()
 
 	for _, route := range routes {
@@ -225,6 +268,21 @@ func (nm *NetworkManager) handleRequestPaused(ev *fetch.EventRequestPaused) {
 	req.Continue()
 }
 
+func pausedRequestKey(ev *fetch.EventRequestPaused) network.RequestID {
+	if ev.NetworkID != "" {
+		return network.RequestID(ev.NetworkID)
+	}
+	return network.RequestID(ev.RequestID)
+}
+
+func headerMap(headers map[string]interface{}) map[string]string {
+	m := make(map[string]string, len(headers))
+	for name, value := range headers {
+		m[name] = fmt.Sprint(value)
+	}
+	return m
+}
+
 // Continue continues the request
 func (r *Request) Continue(opts ...ContinueOption) error {
 	r.mu.Lock()
@@ -235,8 +293,6 @@ func (r *Request) Continue(opts ...ContinueOption) error {
 	}
 
 	options := &ContinueOptions{
-		Headers:  r.Headers,
-		Method:   r.Method,
 		PostData: r.PostData,
 	}
 
@@ -244,11 +300,26 @@ func (r *Request) Continue(opts ...ContinueOption) error {
 		opt(options)
 	}
 
-	// Continue request
-	return fetch.ContinueRequest(fetch.RequestID(r.requestID)).
-		WithMethod(options.Method).
-		WithPostData(options.PostData).
-		Do(r.page.ctx)
+	params := fetch.ContinueRequest(r.requestID)
+	if options.URL != "" {
+		params = params.WithURL(options.URL)
+	}
+	if options.Method != "" {
+		params = params.WithMethod(options.Method)
+	}
+	if options.PostData != "" {
+		params = params.WithPostData(options.PostData)
+	}
+	if len(options.Headers) > 0 {
+		params = params.WithHeaders(fetchHeaders(options.Headers))
+	}
+	if err := chromedp.Run(r.page.ctx, chromedp.ActionFunc(func(ctx context.Context) error {
+		return params.Do(ctx)
+	})); err != nil {
+		return err
+	}
+	r.intercepted = false
+	return nil
 }
 
 // Abort aborts the request
@@ -270,7 +341,13 @@ func (r *Request) Abort(reason string) error {
 		errorReason = network.ErrorReasonAccessDenied
 	}
 
-	return fetch.FailRequest(fetch.RequestID(r.requestID), errorReason).Do(r.page.ctx)
+	if err := chromedp.Run(r.page.ctx, chromedp.ActionFunc(func(ctx context.Context) error {
+		return fetch.FailRequest(r.requestID, errorReason).Do(ctx)
+	})); err != nil {
+		return err
+	}
+	r.intercepted = false
+	return nil
 }
 
 // Fulfill fulfills the request with a custom response
@@ -302,10 +379,24 @@ func (r *Request) Fulfill(opts ...FulfillOption) error {
 	}
 
 	// Fulfill request
-	return fetch.FulfillRequest(fetch.RequestID(r.requestID), int64(options.Status)).
-		WithResponseHeaders(responseHeaders).
-		WithBody(base64.StdEncoding.EncodeToString(options.Body)).
-		Do(r.page.ctx)
+	if err := chromedp.Run(r.page.ctx, chromedp.ActionFunc(func(ctx context.Context) error {
+		return fetch.FulfillRequest(r.requestID, int64(options.Status)).
+			WithResponseHeaders(responseHeaders).
+			WithBody(base64.StdEncoding.EncodeToString(options.Body)).
+			Do(ctx)
+	})); err != nil {
+		return err
+	}
+	r.intercepted = false
+	return nil
+}
+
+func fetchHeaders(headers map[string]string) []*fetch.HeaderEntry {
+	entries := make([]*fetch.HeaderEntry, 0, len(headers))
+	for name, value := range headers {
+		entries = append(entries, &fetch.HeaderEntry{Name: name, Value: value})
+	}
+	return entries
 }
 
 // ContinueOptions configures request continuation

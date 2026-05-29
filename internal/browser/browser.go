@@ -4,17 +4,19 @@ package browser
 import (
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
+	neturl "net/url"
 	"os"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/chromedp/cdproto/fetch"
 	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/cdproto/page"
+	"github.com/chromedp/cdproto/runtime"
 	"github.com/chromedp/chromedp"
 	"github.com/tmc/cdp/internal/blocking"
 	"github.com/tmc/cdp/internal/browserprofile"
@@ -31,32 +33,15 @@ func filteredErrorf(format string, args ...interface{}) {
 	log.Printf(format, args...)
 }
 
-// HTTPRequestData represents data for HTTP requests
-type HTTPRequestData struct {
-	Method      string
-	URL         string
-	Data        string
-	Headers     map[string]string
-	ContentType string
-}
-
-// requestInterceptor handles request interception and modification
-type requestInterceptor struct {
-	mu           sync.RWMutex
-	targetURL    string
-	requestData  *HTTPRequestData
-	intercepting bool
-}
-
 // Browser represents a managed Chrome browser instance
 type Browser struct {
 	ctx            context.Context
 	cancelFunc     context.CancelFunc
 	opts           *Options
 	profileMgr     browserprofile.ProfileManager
-	interceptor    *requestInterceptor
 	blockingEngine *blocking.BlockingEngine
 	attachedToTab  bool // True if connected to existing tab (don't close on cleanup)
+	lastHTML       string
 }
 
 // New creates a new Browser with the provided options
@@ -72,9 +57,8 @@ func New(ctx context.Context, profileMgr browserprofile.ProfileManager, opts ...
 	}
 
 	browser := &Browser{
-		opts:        options,
-		profileMgr:  profileMgr,
-		interceptor: &requestInterceptor{},
+		opts:       options,
+		profileMgr: profileMgr,
 	}
 
 	// Initialize blocking engine if blocking is enabled
@@ -212,9 +196,11 @@ func (b *Browser) Launch(ctx context.Context) error {
 		chromeLaunchOpts = append(chromeLaunchOpts, chromedp.ProxyServer(b.opts.ProxyServer))
 
 		// Add proxy bypass list if specified
-		if b.opts.ProxyBypassList != "" {
-			chromeLaunchOpts = append(chromeLaunchOpts, chromedp.Flag("proxy-bypass-list", b.opts.ProxyBypassList))
+		bypassList := b.opts.ProxyBypassList
+		if bypassList == "" {
+			bypassList = "<-loopback>"
 		}
+		chromeLaunchOpts = append(chromeLaunchOpts, chromedp.Flag("proxy-bypass-list", bypassList))
 	}
 
 	// Create the allocator context
@@ -243,6 +229,11 @@ func (b *Browser) Launch(ctx context.Context) error {
 		// Removed verbose logging to reduce noise in tests
 		browserCancel()
 		allocCancel()
+	}
+
+	if err := chromedp.Run(browserCtx); err != nil {
+		b.cancelFunc()
+		return fmt.Errorf("launching browser: %w", err)
 	}
 
 	// Add monitoring for context cancellation if verbose
@@ -296,6 +287,7 @@ func (b *Browser) Navigate(url string) error {
 	if b.ctx == nil {
 		return notLaunchedError()
 	}
+	b.lastHTML = ""
 
 	if b.opts.Verbose {
 		log.Printf("Navigating to: %s", url)
@@ -318,7 +310,7 @@ func (b *Browser) Navigate(url string) error {
 			if b.opts.Verbose {
 				log.Printf("network.Enable failed: %v", err)
 			}
-			return wrapError(ErrNetwork, "enable network events", err)
+			return networkError("enable network events", err)
 		}
 		if b.opts.Verbose {
 			log.Printf("Successfully enabled network events")
@@ -326,11 +318,11 @@ func (b *Browser) Navigate(url string) error {
 	}
 
 	// Navigate to the URL
-	if err := chromedp.Run(b.ctx, chromedp.Navigate(url)); err != nil {
+	if err := chromedp.Run(b.ctx, chromedp.Navigate(normalizeNavigateURL(url))); err != nil {
 		if b.opts.Verbose {
 			log.Printf("Navigation error: %v", err)
 		}
-		return wrapError(ErrNavigation, "navigate to URL", err)
+		return navigationError("navigate to URL", err)
 	}
 
 	// Execute pre-navigation scripts after basic navigation but before waiting for network idle
@@ -383,7 +375,7 @@ func (b *Browser) Navigate(url string) error {
 				}
 			}
 		})); err != nil {
-			return wrapError(ErrNetworkIdle, fmt.Sprintf("wait for network idle after navigating to %s", url), err)
+			return fmt.Errorf("%w: wait for network idle after navigating to %s: %w", ErrNetworkIdle, url, err)
 		}
 	}
 
@@ -450,7 +442,7 @@ func (b *Browser) Navigate(url string) error {
 		defer waitCancel()
 
 		if err := chromedp.Run(waitCtx, chromedp.WaitVisible(b.opts.WaitSelector, chromedp.ByQuery)); err != nil {
-			return wrapError(ErrTimeout, fmt.Sprintf("wait for selector %q", b.opts.WaitSelector), err)
+			return timeoutError(fmt.Sprintf("wait for selector %q", b.opts.WaitSelector), err)
 		}
 	}
 
@@ -470,10 +462,13 @@ func (b *Browser) GetHTML() (string, error) {
 	if b.ctx == nil {
 		return "", notLaunchedError()
 	}
+	if b.lastHTML != "" {
+		return b.lastHTML, nil
+	}
 
 	var html string
 	if err := chromedp.Run(b.ctx, chromedp.OuterHTML("html", &html)); err != nil {
-		return "", wrapError(ErrScript, "get page HTML", err)
+		return "", scriptError("get page HTML", err)
 	}
 
 	return html, nil
@@ -562,7 +557,7 @@ func (b *Browser) getStrictSecurityOptions() []chromedp.ExecAllocatorOption {
 
 		// Enable site isolation and process isolation
 		chromedp.Flag("site-per-process", true),
-		chromedp.Flag("enable-features", "SitePerProcess,NetworkServiceSandbox,StrictOriginIsolation"),
+		chromedp.Flag("enable-features", "SitePerProcess,NetworkServiceSandbox,StrictOriginIsolation,"+OptimizationGuideOnDeviceModelFeatures),
 
 		// Security-focused flags
 		chromedp.Flag("disable-web-security", false),                 // Keep web security enabled
@@ -623,7 +618,7 @@ func (b *Browser) getBalancedSecurityOptions() []chromedp.ExecAllocatorOption {
 
 		// Enable site isolation
 		chromedp.Flag("site-per-process", true),
-		chromedp.Flag("enable-features", "SitePerProcess,NetworkServiceSandbox"),
+		chromedp.Flag("enable-features", "SitePerProcess,NetworkServiceSandbox,"+OptimizationGuideOnDeviceModelFeatures),
 
 		// Essential security
 		chromedp.Flag("disable-web-security", false),
@@ -635,9 +630,9 @@ func (b *Browser) getBalancedSecurityOptions() []chromedp.ExecAllocatorOption {
 		chromedp.Flag("disable-plugins", true),
 
 		// Automation-friendly flags (prevent popups/prompts)
-		chromedp.Flag("disable-fre", true),                                                   // Disable First Run Experience
-		chromedp.Flag("auto-accept-browser-signin-for-tests", true),                          // Auto-accept sign-in prompts
-		chromedp.Flag("disable-features", "OfferMigrationToDiceUsers,OptGuideOnDeviceModel"), // Disable account migration and ML prompts
+		chromedp.Flag("disable-fre", true),                          // Disable First Run Experience
+		chromedp.Flag("auto-accept-browser-signin-for-tests", true), // Auto-accept sign-in prompts
+		chromedp.Flag("disable-features", "OfferMigrationToDiceUsers"),
 
 		// Stability flags
 		chromedp.Flag("disable-background-networking", true),
@@ -679,7 +674,7 @@ func (b *Browser) getPermissiveSecurityOptions() []chromedp.ExecAllocatorOption 
 	opts := []chromedp.ExecAllocatorOption{
 		// WARNING: These options reduce security and should only be used for testing
 		chromedp.Flag("disable-web-security", true),
-		chromedp.Flag("disable-features", "VizDisplayCompositor,OfferMigrationToDiceUsers,OptGuideOnDeviceModel"),
+		chromedp.Flag("disable-features", "VizDisplayCompositor,OfferMigrationToDiceUsers"),
 		chromedp.Flag("disable-client-side-phishing-detection", true),
 		chromedp.Flag("disable-popup-blocking", true),
 		chromedp.Flag("safebrowsing-disable-auto-update", true),
@@ -967,6 +962,37 @@ func detectContentType(data string, headers map[string]string) string {
 	return "text/plain"
 }
 
+func requestOrigin(rawurl string) (string, error) {
+	u, err := neturl.Parse(rawurl)
+	if err != nil {
+		return "", err
+	}
+	if u.Scheme == "" || u.Host == "" {
+		return "", fmt.Errorf("missing origin in URL %q", rawurl)
+	}
+	return u.Scheme + "://" + u.Host + "/", nil
+}
+
+func sameOrigin(rawurl, origin string) bool {
+	u, err := requestOrigin(rawurl)
+	return err == nil && u == origin
+}
+
+func requestHeaders(data string, headers map[string]string) map[string]string {
+	h := make(map[string]string, len(headers)+1)
+	hasContentType := false
+	for k, v := range headers {
+		h[k] = v
+		if strings.EqualFold(k, "content-type") {
+			hasContentType = true
+		}
+	}
+	if data != "" && !hasContentType {
+		h["Content-Type"] = detectContentType(data, headers)
+	}
+	return h
+}
+
 // HTTPRequest performs an HTTP request with the specified method and data
 func (b *Browser) HTTPRequest(method, url, data string, headers map[string]string) error {
 	if b.ctx == nil {
@@ -987,99 +1013,50 @@ func (b *Browser) HTTPRequest(method, url, data string, headers map[string]strin
 	if method == "GET" && data == "" {
 		return b.Navigate(url)
 	}
+	b.lastHTML = ""
 
-	// Set up request interception for POST/PUT requests
-	requestData := &HTTPRequestData{
-		Method:      method,
-		URL:         url,
-		Data:        data,
-		Headers:     headers,
-		ContentType: detectContentType(data, headers),
+	origin, err := requestOrigin(url)
+	if err != nil {
+		return withField(navigationError("failed to parse request URL", err), "method", method)
 	}
 
-	// Enable request interception
-	if err := b.enableRequestInterception(requestData); err != nil {
-		return withField(networkError("failed to enable request interception", err), "method", method)
-	}
-
-	// Execute pre-navigation scripts before making the request
-	if err := b.executeScriptsBefore(); err != nil {
-		if b.opts.Verbose {
-			log.Printf("Pre-navigation script error: %v", err)
+	currentURL, _ := b.GetURL()
+	if !sameOrigin(currentURL, origin) {
+		if err := chromedp.Run(b.ctx, chromedp.Navigate(origin)); err != nil {
+			return withField(navigationError("failed to initialize request origin", err), "method", method)
 		}
+	}
+
+	if err := b.executeScriptsBefore(); err != nil {
 		return fmt.Errorf("executing pre-navigation scripts: %w", err)
 	}
 
-	// Navigate to the URL (this will trigger our interceptor)
-	navTimeout := time.Duration(b.opts.Timeout) * time.Second
-	if navTimeout <= 0 {
-		navTimeout = 60 * time.Second // Default fallback
+	headerData, err := json.Marshal(requestHeaders(data, headers))
+	if err != nil {
+		return fmt.Errorf("encoding request headers: %w", err)
 	}
-	navCtx, navCancel := context.WithTimeout(b.ctx, navTimeout)
-	defer navCancel()
-
-	if err := chromedp.Run(navCtx, chromedp.Navigate(url)); err != nil {
-		return withField(navigationError("failed to navigate with custom method", err), "method", method)
+	body := "null"
+	if method != "GET" && method != "HEAD" {
+		body = jsString(data)
 	}
 
-	// Wait for network idle if requested (similar to Navigate method)
-	if b.opts.WaitNetworkIdle {
-		waitTimeout := time.Duration(b.opts.StableTimeout) * time.Second
-		waitCtx, waitCancel := context.WithTimeout(b.ctx, waitTimeout)
-		defer waitCancel()
+	expr := fmt.Sprintf(`(async () => {
+		const init = {method: %s, headers: %s};
+		const body = %s;
+		if (body !== null) init.body = body;
+		const response = await fetch(%s, init);
+		const text = await response.text();
+		document.body.innerHTML = text;
+		return text;
+	})()`, jsString(method), string(headerData), body, jsString(url))
 
-		if err := chromedp.Run(waitCtx, chromedp.ActionFunc(func(ctx context.Context) error {
-			// This will wait until there are no more than 2 network connections for at least 500ms
-			ch := make(chan struct{})
-			lctx, cancel := context.WithCancel(ctx)
-			chromedp.ListenTarget(lctx, func(ev interface{}) {
-				switch ev.(type) {
-				case *network.EventLoadingFinished, *network.EventLoadingFailed:
-					select {
-					case ch <- struct{}{}:
-					default:
-					}
-				}
-			})
-
-			// Wait for idle using a timer
-			idleTimer := time.NewTimer(500 * time.Millisecond)
-			defer cancel()
-
-			for {
-				select {
-				case <-waitCtx.Done():
-					return waitCtx.Err()
-				case <-idleTimer.C:
-					// We've been idle for 500ms
-					return nil
-				case <-ch:
-					// Reset the timer when any network event occurs
-					if !idleTimer.Stop() {
-						<-idleTimer.C
-					}
-					idleTimer.Reset(500 * time.Millisecond)
-				}
-			}
-		})); err != nil {
-			if b.opts.Verbose {
-				log.Printf("Warning: failed to wait for network idle: %v", err)
-			}
-		}
+	var responseHTML string
+	if err := chromedp.Run(b.ctx, chromedp.Evaluate(expr, &responseHTML, func(p *runtime.EvaluateParams) *runtime.EvaluateParams {
+		return p.WithAwaitPromise(true)
+	})); err != nil {
+		return withField(networkError("failed to execute browser request", err), "method", method)
 	}
-
-	// Wait for specific selector if requested
-	if b.opts.WaitSelector != "" {
-		selectorTimeout := time.Duration(b.opts.StableTimeout) * time.Second
-		waitCtx, waitCancel := context.WithTimeout(b.ctx, selectorTimeout)
-		defer waitCancel()
-
-		if err := chromedp.Run(waitCtx, chromedp.WaitVisible(b.opts.WaitSelector, chromedp.ByQuery)); err != nil {
-			if b.opts.Verbose {
-				log.Printf("Warning: failed to wait for selector: %v", err)
-			}
-		}
-	}
+	b.lastHTML = responseHTML
 
 	// Execute post-navigation scripts
 	if err := b.executeScriptsAfter(); err != nil {
@@ -1089,144 +1066,7 @@ func (b *Browser) HTTPRequest(method, url, data string, headers map[string]strin
 		return fmt.Errorf("executing post-navigation scripts: %w", err)
 	}
 
-	// Disable request interception after the request
-	if err := b.disableRequestInterception(); err != nil {
-		// Log the error but don't fail the request
-		if b.opts.Verbose {
-			log.Printf("Warning: failed to disable request interception: %v", err)
-		}
-	}
-
 	return nil
-}
-
-// enableRequestInterception sets up request interception for custom HTTP methods
-func (b *Browser) enableRequestInterception(requestData *HTTPRequestData) error {
-	b.interceptor.mu.Lock()
-	b.interceptor.targetURL = requestData.URL
-	b.interceptor.requestData = requestData
-	b.interceptor.intercepting = true
-	b.interceptor.mu.Unlock()
-
-	// Enable network events
-	if err := chromedp.Run(b.ctx, network.Enable()); err != nil {
-		return networkError("failed to enable network events", err)
-	}
-
-	// Enable fetch domain for request interception with patterns
-	if err := chromedp.Run(b.ctx,
-		fetch.Enable().WithPatterns([]*fetch.RequestPattern{{URLPattern: "*"}})); err != nil {
-		return networkError("failed to enable fetch domain", err)
-	}
-
-	// Set up the request interceptor
-	chromedp.ListenTarget(b.ctx, func(ev interface{}) {
-		switch e := ev.(type) {
-		case *fetch.EventRequestPaused:
-			go b.handleInterceptedRequest(e)
-		}
-	})
-
-	if b.opts.Verbose {
-		log.Printf("Request interception enabled for %s", requestData.URL)
-	}
-
-	return nil
-}
-
-// disableRequestInterception disables request interception
-func (b *Browser) disableRequestInterception() error {
-	b.interceptor.mu.Lock()
-	b.interceptor.intercepting = false
-	b.interceptor.targetURL = ""
-	b.interceptor.requestData = nil
-	b.interceptor.mu.Unlock()
-
-	// Disable fetch domain
-	if err := chromedp.Run(b.ctx, fetch.Disable()); err != nil {
-		return networkError("failed to disable fetch domain", err)
-	}
-
-	if b.opts.Verbose {
-		log.Printf("Request interception disabled")
-	}
-
-	return nil
-}
-
-// handleInterceptedRequest processes intercepted requests
-func (b *Browser) handleInterceptedRequest(ev *fetch.EventRequestPaused) {
-	b.interceptor.mu.RLock()
-	intercepting := b.interceptor.intercepting
-	targetURL := b.interceptor.targetURL
-	requestData := b.interceptor.requestData
-	b.interceptor.mu.RUnlock()
-
-	if !intercepting || requestData == nil {
-		// Continue the request as-is
-		if err := chromedp.Run(b.ctx, fetch.ContinueRequest(ev.RequestID)); err != nil && b.opts.Verbose {
-			log.Printf("Error continuing unmodified request: %v", err)
-		}
-		return
-	}
-
-	// Check if this is the request we want to modify
-	requestURL := ev.Request.URL
-	if !b.shouldInterceptRequest(requestURL, targetURL) {
-		// Continue the request as-is
-		if err := chromedp.Run(b.ctx, fetch.ContinueRequest(ev.RequestID)); err != nil && b.opts.Verbose {
-			log.Printf("Error continuing request: %v", err)
-		}
-		return
-	}
-
-	if b.opts.Verbose {
-		log.Printf("Intercepting request to %s, modifying to %s %s", requestURL, requestData.Method, requestData.URL)
-	}
-
-	// Build the modified request using fetch.ContinueRequest with minimal modifications
-	continueParams := fetch.ContinueRequest(ev.RequestID)
-
-	if b.opts.Verbose {
-		log.Printf("DEBUG: Original method: %s, Target method: %s", ev.Request.Method, requestData.Method)
-	}
-
-	// For now, only modify the method due to Brave compatibility issues with WithPostData
-	continueParams = continueParams.WithMethod(requestData.Method)
-
-	// TODO: WithPostData causes "Invalid parameters (-32602)" error in Brave browser
-	// This is a known compatibility issue that needs further investigation
-	if requestData.Data != "" && b.opts.Verbose {
-		log.Printf("WARNING: POST data not sent due to Brave compatibility issue with WithPostData")
-		log.Printf("POST data would be: %s", requestData.Data)
-	}
-
-	// Continue with the modified request
-	if err := chromedp.Run(b.ctx, continueParams); err != nil {
-		if b.opts.Verbose {
-			log.Printf("Error continuing modified request: %v", err)
-		}
-		// Fall back to continuing without modification
-		if fallbackErr := chromedp.Run(b.ctx, fetch.ContinueRequest(ev.RequestID)); fallbackErr != nil && b.opts.Verbose {
-			log.Printf("Error in fallback continue: %v", fallbackErr)
-		}
-	}
-}
-
-// shouldInterceptRequest determines if a request should be intercepted and modified
-func (b *Browser) shouldInterceptRequest(requestURL, targetURL string) bool {
-	// Simple URL matching - exact match or base URL match
-	if requestURL == targetURL {
-		return true
-	}
-
-	// Check if the request URL starts with the target URL (for redirects)
-	if strings.HasPrefix(requestURL, targetURL) {
-		return true
-	}
-
-	// For more sophisticated matching, we could add URL parsing here
-	return false
 }
 
 // setupProxyAuthentication configures proxy authentication using Fetch domain
@@ -1241,7 +1081,7 @@ func (b *Browser) setupProxyAuthentication() error {
 	}
 
 	// Enable fetch domain for handling authentication
-	if err := chromedp.Run(b.ctx, fetch.Enable()); err != nil {
+	if err := chromedp.Run(b.ctx, fetch.Enable().WithHandleAuthRequests(true)); err != nil {
 		return networkError("failed to enable fetch domain for proxy auth", err)
 	}
 
@@ -1250,6 +1090,12 @@ func (b *Browser) setupProxyAuthentication() error {
 		switch e := ev.(type) {
 		case *fetch.EventAuthRequired:
 			go b.handleProxyAuthChallenge(e)
+		case *fetch.EventRequestPaused:
+			go func() {
+				if err := chromedp.Run(b.ctx, fetch.ContinueRequest(e.RequestID)); err != nil && b.opts.Verbose {
+					log.Printf("Error continuing proxy request: %v", err)
+				}
+			}()
 		}
 	})
 

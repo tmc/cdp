@@ -135,17 +135,20 @@ func TestNetworkFulfill(t *testing.T) {
 		t.Errorf("Failed to set up route: %v", err)
 	}
 
-	// Navigate to page that fetches custom API
-	err = page.Navigate(`data:text/html,
-		<div id="result">Loading...</div>
-		<script>
-			fetch('/api/custom')
-				.then(r => r.json())
-				.then(data => {
-					document.getElementById('result').textContent = data.message;
-				});
-		</script>
-	`)
+	// Navigate to the test origin, then fetch the custom API.
+	customURL := ts.URL + "/api/custom"
+	err = page.Navigate(ts.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = page.Evaluate(`
+		document.body.innerHTML = '<div id="result">Loading...</div>';
+		fetch('`+customURL+`')
+			.then(r => r.json())
+			.then(data => {
+				document.getElementById('result').textContent = data.message;
+			});
+	`, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

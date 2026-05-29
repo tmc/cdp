@@ -19,13 +19,6 @@ func notLaunchedError() error {
 	return fmt.Errorf("%w: call Launch() first", ErrNotLaunched)
 }
 
-func wrapError(kind error, msg string, err error) error {
-	if err == nil {
-		return fmt.Errorf("%w: %s", kind, msg)
-	}
-	return fmt.Errorf("%w: %s: %w", kind, msg, err)
-}
-
 func withField(err error, key string, value any) error {
 	if err == nil {
 		return nil
@@ -34,17 +27,29 @@ func withField(err error, key string, value any) error {
 }
 
 func navigationError(msg string, err error) error {
-	return wrapError(ErrNavigation, msg, err)
+	if err == nil {
+		return fmt.Errorf("%w: %s", ErrNavigation, msg)
+	}
+	return fmt.Errorf("%w: %s: %w", ErrNavigation, msg, err)
 }
 
 func scriptError(msg string, err error) error {
-	return wrapError(ErrScript, msg, err)
+	if err == nil {
+		return fmt.Errorf("%w: %s", ErrScript, msg)
+	}
+	return fmt.Errorf("%w: %s: %w", ErrScript, msg, err)
 }
 
 func timeoutError(msg string, err error) error {
-	return wrapError(ErrTimeout, msg, err)
+	if err == nil {
+		return fmt.Errorf("%w: %s", ErrTimeout, msg)
+	}
+	return fmt.Errorf("%w: %s: %w", ErrTimeout, msg, err)
 }
 
 func networkError(msg string, err error) error {
-	return wrapError(ErrNetwork, msg, err)
+	if err == nil {
+		return fmt.Errorf("%w: %s", ErrNetwork, msg)
+	}
+	return fmt.Errorf("%w: %s: %w", ErrNetwork, msg, err)
 }

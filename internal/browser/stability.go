@@ -30,12 +30,12 @@ type StabilityDetector struct {
 // StabilityConfig configures stability detection behavior
 type StabilityConfig struct {
 	// Network idle configuration
-	NetworkIdleThreshold   int           // Number of concurrent network requests to consider idle (default: 0)
+	NetworkIdleThreshold   int           // Number of concurrent network requests to consider idle; negative disables the check (default: 0)
 	NetworkIdleTimeout     time.Duration // Time to wait with network at idle threshold (default: 500ms)
 	NetworkIdleWatchWindow time.Duration // Time window to monitor network activity (default: 5s)
 
 	// DOM stability configuration
-	DOMStableThreshold int           // Number of DOM mutations to consider stable (default: 0)
+	DOMStableThreshold int           // Number of DOM mutations to consider stable; negative disables the check (default: 0)
 	DOMStableTimeout   time.Duration // Time to wait with DOM at stable threshold (default: 500ms)
 	DOMWatchWindow     time.Duration // Time window to monitor DOM mutations (default: 3s)
 
@@ -166,6 +166,7 @@ func (sd *StabilityDetector) Stop() {
 
 	if sd.started {
 		close(sd.stopChan)
+		sd.stopChan = make(chan struct{})
 		sd.started = false
 	}
 }
@@ -268,6 +269,10 @@ func (sd *StabilityDetector) checkStability(ctx context.Context) error {
 
 // waitForNetworkIdle waits for network activity to settle
 func (sd *StabilityDetector) waitForNetworkIdle(ctx context.Context) error {
+	if sd.config.NetworkIdleThreshold < 0 {
+		return nil
+	}
+
 	watchCtx, cancel := context.WithTimeout(ctx, sd.config.NetworkIdleWatchWindow)
 	defer cancel()
 
@@ -305,6 +310,10 @@ func (sd *StabilityDetector) waitForNetworkIdle(ctx context.Context) error {
 
 // waitForDOMStability waits for DOM modifications to settle
 func (sd *StabilityDetector) waitForDOMStability(ctx context.Context) error {
+	if sd.config.DOMStableThreshold < 0 {
+		return nil
+	}
+
 	watchCtx, cancel := context.WithTimeout(ctx, sd.config.DOMWatchWindow)
 	defer cancel()
 

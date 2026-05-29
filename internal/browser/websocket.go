@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	neturl "net/url"
+	"strings"
 	"sync"
 	"time"
 
@@ -262,6 +264,10 @@ func (wsm *WebSocketMonitor) handleNetworkEvent(ev interface{}) {
 	switch ev := ev.(type) {
 	case *network.EventWebSocketCreated:
 		wsm.handleWebSocketCreated(ev)
+	case *network.EventWebSocketWillSendHandshakeRequest:
+		wsm.handleWebSocketHandshakeRequest(ev)
+	case *network.EventWebSocketHandshakeResponseReceived:
+		wsm.handleWebSocketHandshakeResponse(ev)
 	case *network.EventWebSocketFrameReceived:
 		wsm.handleWebSocketFrameReceived(ev)
 	case *network.EventWebSocketFrameSent:
@@ -273,6 +279,18 @@ func (wsm *WebSocketMonitor) handleNetworkEvent(ev interface{}) {
 	}
 }
 
+func canonicalWebSocketURL(raw string) string {
+	u, err := neturl.Parse(raw)
+	if err != nil {
+		return raw
+	}
+	if u.Path == "/" && u.RawQuery == "" && u.Fragment == "" {
+		u.Path = ""
+		return u.String()
+	}
+	return raw
+}
+
 // handleWebSocketCreated handles WebSocket connection creation
 func (wsm *WebSocketMonitor) handleWebSocketCreated(ev *network.EventWebSocketCreated) {
 	wsm.mu.Lock()
@@ -280,7 +298,7 @@ func (wsm *WebSocketMonitor) handleWebSocketCreated(ev *network.EventWebSocketCr
 
 	connection := &WebSocketConnection{
 		ID:          string(ev.RequestID),
-		URL:         ev.URL,
+		URL:         canonicalWebSocketURL(ev.URL),
 		State:       "connecting",
 		ConnectedAt: time.Now(),
 		Frames:      make([]WebSocketFrame, 0),
@@ -288,10 +306,51 @@ func (wsm *WebSocketMonitor) handleWebSocketCreated(ev *network.EventWebSocketCr
 	}
 
 	wsm.connections[connection.ID] = connection
+}
+
+func (wsm *WebSocketMonitor) handleWebSocketHandshakeRequest(ev *network.EventWebSocketWillSendHandshakeRequest) {
+	wsm.mu.RLock()
+	connection, exists := wsm.connections[string(ev.RequestID)]
+	wsm.mu.RUnlock()
+	if !exists {
+		return
+	}
+
+	connection.mu.Lock()
+	connection.Headers = headerMap(ev.Request.Headers)
+	connection.mu.Unlock()
+}
+
+func (wsm *WebSocketMonitor) handleWebSocketHandshakeResponse(ev *network.EventWebSocketHandshakeResponseReceived) {
+	wsm.mu.RLock()
+	connection, exists := wsm.connections[string(ev.RequestID)]
+	wsm.mu.RUnlock()
+	if !exists {
+		return
+	}
+
+	connection.mu.Lock()
+	connection.State = "open"
+	if protocol := headerValue(ev.Response.Headers, "Sec-WebSocket-Protocol"); protocol != "" {
+		connection.Protocol = protocol
+	}
+	if extensions := headerValue(ev.Response.Headers, "Sec-WebSocket-Extensions"); extensions != "" {
+		connection.Extensions = []string{extensions}
+	}
+	connection.mu.Unlock()
 
 	if wsm.onConnect != nil {
 		wsm.onConnect(connection)
 	}
+}
+
+func headerValue(headers map[string]interface{}, name string) string {
+	for k, v := range headers {
+		if strings.EqualFold(k, name) {
+			return fmt.Sprint(v)
+		}
+	}
+	return ""
 }
 
 // handleWebSocketFrameReceived handles received WebSocket frames

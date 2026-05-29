@@ -302,7 +302,7 @@ func TestStabilityDetector(t *testing.T) {
 
 		// Verify the custom check was actually satisfied
 		var statusClass string
-		if err := chromedp.Run(ctx, chromedp.AttributeValue("#status", "className", &statusClass, nil)); err != nil {
+		if err := chromedp.Run(ctx, chromedp.AttributeValue("#status", "class", &statusClass, nil)); err != nil {
 			t.Errorf("Failed to get status class: %v", err)
 		}
 
@@ -449,10 +449,21 @@ func TestStabilityConfigValidation(t *testing.T) {
 }
 
 func TestStabilityDetectorLifecycle(t *testing.T) {
-
 	testutil.SkipIfNoChrome(t)
-	// Create browser context
-	ctx, cancel := chromedp.NewContext(context.Background())
+
+	browserPath := testutil.FindChrome()
+	if browserPath == "" {
+		t.Skip("No Chrome-compatible browser found (Chrome, Chromium, Brave, etc.)")
+	}
+
+	opts := append(chromedp.DefaultExecAllocatorOptions[:],
+		chromedp.ExecPath(browserPath),
+		chromedp.Headless,
+	)
+	allocCtx, allocCancel := chromedp.NewExecAllocator(context.Background(), opts...)
+	defer allocCancel()
+
+	ctx, cancel := chromedp.NewContext(allocCtx)
 	defer cancel()
 
 	page := &Page{ctx: ctx}
