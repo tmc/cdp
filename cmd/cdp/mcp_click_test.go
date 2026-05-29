@@ -2,9 +2,13 @@ package main
 
 import (
 	"context"
+	"net/url"
 	"reflect"
 	"testing"
 	"time"
+
+	"github.com/chromedp/chromedp"
+	"github.com/tmc/cdp/internal/testutil"
 )
 
 func TestParseCoordSelector(t *testing.T) {
@@ -179,5 +183,54 @@ func TestIsRawCDPCommandName(t *testing.T) {
 				t.Fatalf("isRawCDPCommandName(%q) = %v, want %v", tt.in, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestRunRawCDPLiveTargetAndBrowser(t *testing.T) {
+	chromePath := testutil.FindChrome()
+	if chromePath == "" {
+		t.Skip("no Chrome-compatible browser found")
+	}
+	opts := append(chromedp.DefaultExecAllocatorOptions[:],
+		chromedp.ExecPath(chromePath),
+		chromedp.Headless,
+		chromedp.DisableGPU,
+		chromedp.NoFirstRun,
+		chromedp.NoDefaultBrowserCheck,
+	)
+	allocCtx, cancel := chromedp.NewExecAllocator(t.Context(), opts...)
+	t.Cleanup(cancel)
+
+	ctx, cancel := chromedp.NewContext(allocCtx)
+	t.Cleanup(cancel)
+	ctx, cancel = context.WithTimeout(ctx, 20*time.Second)
+	t.Cleanup(cancel)
+
+	page := "data:text/html," + url.PathEscape("<!doctype html><title>raw cdp smoke</title><h1>raw</h1>")
+	if err := chromedp.Run(ctx, chromedp.Navigate(page)); err != nil {
+		t.Fatalf("navigate: %v", err)
+	}
+
+	result, err := runRawCDP(ctx, "Runtime.evaluate", map[string]any{
+		"expression":    "document.title",
+		"returnByValue": true,
+	}, "target")
+	if err != nil {
+		t.Fatalf("runRawCDP Runtime.evaluate: %v", err)
+	}
+	remoteObject, ok := result["result"].(map[string]any)
+	if !ok {
+		t.Fatalf("Runtime.evaluate result = %#v, want result object", result)
+	}
+	if got := remoteObject["value"]; got != "raw cdp smoke" {
+		t.Fatalf("document.title = %#v, want %q", got, "raw cdp smoke")
+	}
+
+	result, err = runRawCDP(ctx, "Browser.getVersion", nil, "browser")
+	if err != nil {
+		t.Fatalf("runRawCDP Browser.getVersion: %v", err)
+	}
+	if product, ok := result["product"].(string); !ok || product == "" {
+		t.Fatalf("Browser.getVersion result = %#v, want product", result)
 	}
 }
