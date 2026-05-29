@@ -86,6 +86,7 @@ func (c *scriptCmd) run(args []string) error {
 		cdpscript.WithVerbose(c.verbose),
 		cdpscript.WithHeadless(c.headless),
 		cdpscript.WithTimeout(c.timeout),
+		cdpscript.WithEnv(scriptEnvironment()...),
 	}
 	if c.output != "" {
 		opts = append(opts, cdpscript.WithOutputDir(c.output))
@@ -100,6 +101,10 @@ func (c *scriptCmd) run(args []string) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	return engine.ExecuteTxtar(ctx, scriptPath, scriptArgs)
+}
+
+func scriptEnvironment() []string {
+	return os.Environ()
 }
 
 func scriptHelpWanted(args []string) bool {

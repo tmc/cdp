@@ -13,13 +13,13 @@ import (
 	"github.com/tmc/cdp/cdpscript"
 )
 
-func TestScriptCmdHelpAfterScriptPath(t *testing.T) {
+func TestRunCmdHelpAfterScriptPath(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "demo.cdpscript")
 	data := `#!/usr/bin/env cdpscript
 # demo
 #
-# Demonstrate script help.
+# Demonstrate cdp run script help.
 #
 # usage: demo.cdpscript TARGET
 
@@ -46,7 +46,7 @@ log demo
 	for _, want := range []string{
 		"demo.cdpscript",
 		"demo",
-		"Demonstrate script help.",
+		"Demonstrate cdp run script help.",
 		"Usage: demo.cdpscript TARGET",
 	} {
 		if !strings.Contains(stdout.String(), want) {
@@ -55,19 +55,34 @@ log demo
 	}
 }
 
-func TestScriptEnvironmentIncludesProcessEnv(t *testing.T) {
-	t.Setenv("CDPSCRIPT_ENV_TEST", "present")
+func TestRunCmdUsageError(t *testing.T) {
+	cmd := newScriptCmd()
+	var stderr bytes.Buffer
+	cmd.stderr = &stderr
+	cmd.fs.SetOutput(cmd.stderr)
+
+	err := cmd.run(nil)
+	if !errors.Is(err, cdpscript.ErrUsage) {
+		t.Fatalf("run error = %v, want ErrUsage", err)
+	}
+	if got := scriptExitCode(err); got != 2 {
+		t.Fatalf("scriptExitCode(%v) = %d, want 2", err, got)
+	}
+}
+
+func TestRunCmdScriptEnvironmentIncludesProcessEnv(t *testing.T) {
+	t.Setenv("CDP_RUN_ENV_TEST", "present")
 
 	got := scriptEnvironment()
 	for _, kv := range got {
-		if kv == "CDPSCRIPT_ENV_TEST=present" {
+		if kv == "CDP_RUN_ENV_TEST=present" {
 			return
 		}
 	}
 	t.Fatalf("scriptEnvironment missing process environment variable")
 }
 
-func TestScriptExitCode(t *testing.T) {
+func TestRunCmdScriptExitCode(t *testing.T) {
 	tests := []struct {
 		name string
 		err  error
