@@ -12,6 +12,7 @@ Use this skill when the task is primarily about running or explaining the `cdp` 
 - Build with `go build -o cdp ./cmd/cdp`
 - Use interactive mode for exploration and ad hoc debugging
 - Use `cdp run` when the task should be reproducible as a script
+- Use `cdp attach` before targeting an already-running browser; it prints the exact `--remote-host`, `--remote-port`, and `--tab` command for each page target
 
 ## Use this skill for
 

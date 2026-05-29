@@ -19,4 +19,10 @@ If `distance` is omitted, the default is `500` pixels.
 
 ## `cdpscript` note
 
-[The script format reference](../../writing-cdp-scripts/references/script-format.md) does not define a `scroll` command. In txtar scripts, use `js window.scrollTo(...)` or `js document.querySelector(...).scrollIntoView(...)` when that is sufficient.
+[The script format reference](../../writing-cdp-scripts/references/script-format.md) defines a `scroll` command for txtar scripts:
+
+- `scroll down 500`
+- `scroll up 250`
+- `scroll '#target'`
+
+Use `js window.scrollTo(...)` or `js document.querySelector(...).scrollIntoView(...)` only when a script needs behavior beyond directional scrolling or selector-based scroll-into-view.

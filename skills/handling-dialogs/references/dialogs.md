@@ -22,4 +22,4 @@ Use these MCP tools when a page opens a native JavaScript dialog:
 
 ## `cdpscript` note
 
-[The script format reference](../../writing-cdp-scripts/references/script-format.md) does not define `get_dialogs` or `handle_dialog`. Use the MCP tools for real dialog handling; page-side `js` cannot reliably dismiss a native dialog after it opens.
+[The script format reference](../../writing-cdp-scripts/references/script-format.md) defines `dialog accept` and `dialog dismiss` for handling the next JavaScript dialog in a script. Put the `dialog` command before the action that opens the dialog. Use MCP `get_dialogs` and `handle_dialog` when you need to inspect a pending dialog interactively.

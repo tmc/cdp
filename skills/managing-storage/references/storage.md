@@ -26,4 +26,4 @@ The MCP storage and state tools are:
 
 ## `cdpscript` note
 
-[The script format reference](../../writing-cdp-scripts/references/script-format.md) does not define storage or cookie commands. In txtar scripts, `js` or `jsfile` can read and write `localStorage` or `sessionStorage` in the current page context, but cookie management and `save_state`/`load_state` are MCP-only today.
+[The script format reference](../../writing-cdp-scripts/references/script-format.md) defines `cookie get|set|clear` but no storage commands. In txtar scripts, `js` or `jsfile` can read and write `localStorage` and `sessionStorage` in the current page context. Use MCP tools for `save_state`/`load_state`.

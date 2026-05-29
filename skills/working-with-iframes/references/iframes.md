@@ -28,3 +28,5 @@ The MCP frame tools are:
 ## `cdpscript` note
 
 [The script format reference](../../writing-cdp-scripts/references/script-format.md) does not define frame-listing or frame-switching commands. If script automation must stay in txtar form, use `js` only for narrow same-origin iframe work; there is no general `switch_frame` script command today.
+
+For visible iframe controls, `click coord:x,y` uses viewport coordinates and lets Chrome perform compositor hit testing into the frame. Prefer that for simple visual interactions that do not need frame-local DOM inspection.

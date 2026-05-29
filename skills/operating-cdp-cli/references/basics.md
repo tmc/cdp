@@ -19,7 +19,7 @@ Launch the interactive shell to type CDP commands directly:
 cdp
 
 # Connect to an already-running Chrome with remote debugging
-cdp --port 9222
+cdp --remote-host localhost --remote-port 9222 --shell
 
 # Verbose output for debugging
 cdp -v
@@ -41,10 +41,55 @@ cdp run --tab <tab-id> --port 9222 script.txtar
 
 The cdp tool can:
 - **Launch a new browser**: Default behavior, launches headless Chrome/Brave/Chromium.
-- **Connect to existing Chrome**: Use `--port` to connect to Chrome started with `--remote-debugging-port`.
+- **Connect to existing Chrome**: Use `--remote-host` and `--remote-port` to connect to Chrome started with `--remote-debugging-port`.
 - **Connect to a specific tab**: Use `--tab <id>` with the tab ID from `http://localhost:9222/json/list`.
 
 Browser discovery order: Brave > Chrome Canary > Chrome > Chrome Beta > Chromium > Edge.
+
+## Existing Browser Attach
+
+Use `cdp attach` before guessing at tab IDs. It probes DevTools endpoints and prints exact commands for attachable page targets:
+
+```bash
+cdp attach
+cdp attach -port 9222
+cdp attach -host localhost -port 9222 -format json
+```
+
+The text output includes commands shaped like:
+
+```bash
+cdp --remote-host localhost --remote-port 9222 --tab <target-id> --shell
+```
+
+For one-shot inspection against a known tab, use the same host, port, and tab ID:
+
+```bash
+cdp --remote-host localhost --remote-port 9222 --tab <target-id> --await --format json --js 'document.title'
+```
+
+For txtar automation against an existing tab, use the script command's `--tab` and `--port` flags:
+
+```bash
+cdp run --tab <target-id> --port 9222 script.txtar
+cdpscript --tab <target-id> --port 9222 script.txtar
+```
+
+`--remote-tab <id-or-url>` selects a tab by ID or URL and takes effect only with `--remote-host`; `--tab` wins when both are set. For agent workflows, prefer `cdp attach` output or the explicit `--remote-host --remote-port --tab` form so the target is visible and reproducible.
+
+## Profiles And Auth State
+
+There are two supported ways to work with logged-in browser state:
+
+```bash
+cdp --list-profiles
+cdp --use-profile "Default" --url https://example.com --shell
+cdp --use-profile "Default" --cookie-domains example.com --har /tmp/session.har --url https://example.com
+```
+
+`--use-profile` copies the named browser profile into a temporary working directory and launches Chrome/Brave against that copy. It is useful for reusing cookies without mutating the original profile, and `--cookie-domains` narrows copied cookies when that is enough.
+
+`--use-profile` does not attach to an already-running browser using that profile. When the task depends on the exact live logged-in browser state, use `cdp attach` and the `--remote-host --remote-port --tab` command it prints.
 
 ## Core Commands (Interactive & Script)
 

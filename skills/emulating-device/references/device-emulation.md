@@ -45,4 +45,4 @@ It also accepts custom download, upload, latency, and CPU slowdown values.
 
 ## `cdpscript` note
 
-[The script format reference](../../writing-cdp-scripts/references/script-format.md) does not define device or network emulation commands. Use MCP tools for real viewport, touch, user-agent, geolocation, offline, and throttling changes; page-side `js` is not an equivalent substitute for these browser-level overrides.
+[The script format reference](../../writing-cdp-scripts/references/script-format.md) defines `viewport <width> <height>` for script-level responsive layout checks. Use MCP tools for device presets, touch, user-agent, geolocation, offline mode, and throttling; page-side `js` is not an equivalent substitute for those browser-level overrides.
