@@ -54,6 +54,7 @@ type Recorder struct {
 	template    string
 	ctx         context.Context // Store context for async body fetching
 	outputDir   string
+	outputFile  string
 
 	// Fetch domain interception
 	fetchBodies map[network.RequestID][]byte // Bodies captured via Fetch domain
@@ -124,6 +125,14 @@ func WithTemplate(template string) Option {
 func WithOutputDir(dir string) Option {
 	return func(r *Recorder) error {
 		r.outputDir = dir
+		return nil
+	}
+}
+
+// WithOutputFile writes streamed HARL entries to a single JSONL file.
+func WithOutputFile(file string) Option {
+	return func(r *Recorder) error {
+		r.outputFile = file
 		return nil
 	}
 }
@@ -618,8 +627,25 @@ func (r *Recorder) streamEntry(entry *har.Entry) {
 		}
 		return
 	}
+	if r.outputFile != "" {
+		if err := appendJSONL(r.outputFile, jsonBytes); err != nil && r.verbose {
+			log.Printf("Error writing to stream file: %v", err)
+		}
+		return
+	}
 
 	fmt.Println(string(jsonBytes))
+}
+
+func appendJSONL(file string, data []byte) error {
+	f, err := os.OpenFile(file, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	_, err = fmt.Fprintln(f, string(data))
+	return err
 }
 
 // writeToDomainFile streams entry to a domain-specific file via the writer
@@ -756,7 +782,8 @@ func (r *Recorder) WriteHAR(filename string) error {
 			lastRange.EndTime = time.Now()
 		}
 	}
-	tagRanges := r.tagRanges
+	annotations := append([]*Annotation(nil), r.annotations...)
+	tagRanges := append([]*TagRange(nil), r.tagRanges...)
 	r.Unlock()
 
 	// Create a wrapper that includes annotations and tag ranges
@@ -774,7 +801,7 @@ func (r *Recorder) WriteHAR(filename string) error {
 			TagRanges   []*TagRange   `json:"_tagRanges,omitempty"`
 		}{
 			Log:         h.Log,
-			Annotations: r.annotations,
+			Annotations: annotations,
 			TagRanges:   tagRanges,
 		},
 	}
@@ -789,8 +816,8 @@ func (r *Recorder) WriteHAR(filename string) error {
 	}
 
 	if r.verbose {
-		if len(r.annotations) > 0 {
-			log.Printf("Included %d annotations in HAR file", len(r.annotations))
+		if len(annotations) > 0 {
+			log.Printf("Included %d annotations in HAR file", len(annotations))
 		}
 		if len(tagRanges) > 0 {
 			log.Printf("Included %d tag ranges in HAR file", len(tagRanges))
@@ -919,9 +946,6 @@ func (r *Recorder) applyTemplate(entry *har.Entry) (*har.Entry, error) {
 
 // AddNote adds a text annotation to the recording
 func (r *Recorder) AddNote(ctx context.Context, description string) error {
-	r.Lock()
-	defer r.Unlock()
-
 	// Get current URL with a short timeout
 	var currentURL string
 	urlCtx, urlCancel := context.WithTimeout(ctx, 2*time.Second)
@@ -939,7 +963,9 @@ func (r *Recorder) AddNote(ctx context.Context, description string) error {
 		URL:         currentURL,
 	}
 
+	r.Lock()
 	r.annotations = append(r.annotations, annotation)
+	r.Unlock()
 
 	if r.verbose {
 		log.Printf("Added note: %s (URL: %s)", description, currentURL)
@@ -950,9 +976,6 @@ func (r *Recorder) AddNote(ctx context.Context, description string) error {
 
 // AddScreenshot captures a screenshot with description
 func (r *Recorder) AddScreenshot(ctx context.Context, description string) error {
-	r.Lock()
-	defer r.Unlock()
-
 	// Get current URL with a short timeout
 	var currentURL string
 	urlCtx, urlCancel := context.WithTimeout(ctx, 2*time.Second)
@@ -967,7 +990,7 @@ func (r *Recorder) AddScreenshot(ctx context.Context, description string) error 
 	var buf []byte
 	screenshotCtx, screenshotCancel := context.WithTimeout(ctx, 10*time.Second)
 	defer screenshotCancel()
-	if err := chromedp.Run(screenshotCtx, chromedp.FullScreenshot(&buf, 90)); err != nil {
+	if err := chromedp.Run(screenshotCtx, chromedp.FullScreenshot(&buf, 100)); err != nil {
 		return fmt.Errorf("capturing screenshot: %w", err)
 	}
 
@@ -980,7 +1003,9 @@ func (r *Recorder) AddScreenshot(ctx context.Context, description string) error 
 		URL:         currentURL,
 	}
 
+	r.Lock()
 	r.annotations = append(r.annotations, annotation)
+	r.Unlock()
 
 	if r.verbose {
 		log.Printf("Added screenshot: %s (%d bytes, URL: %s)", description, len(buf), currentURL)
@@ -991,9 +1016,6 @@ func (r *Recorder) AddScreenshot(ctx context.Context, description string) error 
 
 // AddDOMSnapshot captures the current DOM state
 func (r *Recorder) AddDOMSnapshot(ctx context.Context, description string) error {
-	r.Lock()
-	defer r.Unlock()
-
 	// Get current URL with a short timeout
 	var currentURL string
 	urlCtx, urlCancel := context.WithTimeout(ctx, 2*time.Second)
@@ -1028,7 +1050,9 @@ func (r *Recorder) AddDOMSnapshot(ctx context.Context, description string) error
 		URL:         currentURL,
 	}
 
+	r.Lock()
 	r.annotations = append(r.annotations, annotation)
+	r.Unlock()
 
 	if r.verbose {
 		log.Printf("Added DOM snapshot: %s (%d bytes, URL: %s)", description, len(domHTML), currentURL)

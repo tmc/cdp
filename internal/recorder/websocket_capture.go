@@ -258,6 +258,12 @@ func (r *Recorder) streamWSEntry(c *wsConn) {
 		}
 		return
 	}
+	if r.outputFile != "" {
+		if err := appendJSONL(r.outputFile, jsonBytes); err != nil && r.verbose {
+			log.Printf("Error writing WS entry to stream file: %v", err)
+		}
+		return
+	}
 
 	fmt.Println(string(jsonBytes))
 }

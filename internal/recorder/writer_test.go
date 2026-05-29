@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/chromedp/cdproto/har"
 	"github.com/chromedp/cdproto/network"
 )
 
@@ -71,6 +72,33 @@ func TestWriterDoesNotBlockOnRecorderLock(t *testing.T) {
 		if !bytes.Contains(got, want) {
 			t.Errorf("missing entry %q in:\n%s", want, got)
 		}
+	}
+}
+
+func TestStreamingWritesOutputFile(t *testing.T) {
+	t.Parallel()
+	file := filepath.Join(t.TempDir(), "out.har.jsonl")
+
+	r, err := New(WithStreaming(true), WithOutputFile(file))
+	if err != nil {
+		t.Fatalf("new: %v", err)
+	}
+	defer r.Close()
+
+	r.streamEntry(&har.Entry{
+		Request: &har.Request{
+			Method: "GET",
+			URL:    "https://example.com/",
+		},
+		Response: &har.Response{Status: 200},
+	})
+
+	got, err := os.ReadFile(file)
+	if err != nil {
+		t.Fatalf("read jsonl: %v", err)
+	}
+	if !bytes.Contains(got, []byte(`"url":"https://example.com/"`)) {
+		t.Fatalf("output file missing URL:\n%s", got)
 	}
 }
 
