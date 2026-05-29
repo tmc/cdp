@@ -64,7 +64,11 @@ Common flags:
 - `-url`: starting URL
 - `-js`: JavaScript to evaluate
 - `-har`: write HAR output
-- `-screenshot`: capture a screenshot
+- `-harl`: stream HAR entries as JSONL to `output.har.jsonl` by default
+- `-harl-file`: set the HARL JSONL output path; use `-harl-file -` only when
+  stdout streaming is intended
+- `-screenshot`: capture a screenshot; use `full <file>` to write a full-page
+  PNG to a specific path
 - `-extract`: extract text or HTML from a selector
 - `-interactive` or `-shell`: keep the browser open for manual or REPL-driven work
 - `-headless`: run Chrome headless
@@ -82,7 +86,13 @@ cdp --headless --url https://example.com --js 'document.title'
 # Capture HAR and screenshot in one run
 cdp --url https://example.com \
   --har capture.har \
-  --screenshot full
+  --screenshot 'full capture.png'
+
+# Interactively record HARL JSONL to a file
+cdp --harl --harl-file session.har.jsonl
+
+# Stream HARL JSONL to stdout explicitly
+cdp --harl --harl-file -
 
 # Render page content
 cdp --url https://example.com --render body

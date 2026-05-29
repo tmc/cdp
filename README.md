@@ -2,7 +2,13 @@
 
 [![Go Reference](https://pkg.go.dev/badge/github.com/tmc/cdp.svg)](https://pkg.go.dev/github.com/tmc/cdp)
 
-`cdp` is a Go module for Chrome DevTools Protocol automation. It includes shared internal packages plus several command-line tools for browser control, traffic capture, script execution, and Node/V8 debugging.
+`cdp` is a Go module for Chrome DevTools Protocol automation. It includes a live browser CLI, a txtar script runner, and a Go test harness for repeatable browser workflows.
+
+The browser-automation stack has three primary layers:
+
+- `cmd/cdp`: live CDP operation, MCP tools, browser attach, screenshots, HAR, raw CDP, and page artifacts.
+- `cdpscript`: executable txtar scripts that turn browser interactions into Unix-style tools.
+- `cdpscripttest`: `rsc.io/script`-style browser fixtures for Go tests, including a bridge that runs real `cdpscript` archives.
 
 ## Commands
 
@@ -37,6 +43,38 @@ go install github.com/tmc/cdp/cmd/cdpscripttest@latest
 ```
 
 ## Quick Start
+
+Attach to a browser the user is already using:
+
+```bash
+cdp attach --port 9222
+cdp --remote-host localhost --remote-port 9222 --tab <target-id> --shell
+cdp --remote-host localhost --remote-port 9222 --tab <target-id> --await --format json --js 'document.title'
+```
+
+Run a repeatable browser script:
+
+```bash
+cdpscript script.txtar
+cdpscript --tab <target-id> --port 9222 script.txtar
+cdp run --tab <target-id> --port 9222 script.txtar
+```
+
+Test browser behavior from Go:
+
+```go
+e := cdpscripttest.NewEngine()
+cdpscripttest.Test(t, e, allocCtx, "http://localhost:8080", "testdata/*.txt", nil)
+```
+
+For `cdpscript`-format txtars, use `cdpscripttest.RunCDPScript` so tests run the same runtime used by `cdpscript` and `cdp run`.
+
+```go
+err := cdpscripttest.RunCDPScript(ctx, "testdata/login.txtar", cdpscripttest.CDPScriptRunOptions{
+	Headless: true,
+	Env:      []string{"BASE_URL=http://localhost:8080"},
+})
+```
 
 Capture network activity with `chrome-to-har`:
 
@@ -75,12 +113,6 @@ Attach to a Node inspector target:
 ndp node attach 9229
 ```
 
-Run a CDP script:
-
-```bash
-cdpscript script.txtar
-```
-
 ## Common Tasks
 
 Capture authenticated browser traffic with an existing profile:
@@ -101,7 +133,7 @@ churl --output-format=text --wait-for ".loaded" https://example.com
 Take a screenshot or extract content from a page:
 
 ```bash
-cdp --url https://example.com --screenshot full
+cdp --url https://example.com --screenshot 'full page.png'
 cdp --url https://example.com --extract 'h1'
 cdp --url https://example.com --render body
 ```
@@ -110,7 +142,7 @@ Connect to an existing Chrome instance:
 
 ```bash
 cdp attach --port 9222
-cdp --remote-port 9222 --tab <tab-id> --js 'document.title'
+cdp --remote-host localhost --remote-port 9222 --tab <tab-id> --js 'document.title'
 ```
 
 Connect to a remote browser:
@@ -144,7 +176,8 @@ The main `cdp` command is the broader general-purpose entry point. It goes beyon
 
 - connect to Chrome or Chromium locally or remotely
 - navigate, evaluate JavaScript, and extract page state
-- record HAR output and stream capture data
+- record HAR output and stream HARL JSONL capture data to a file, or to
+  stdout when `--harl-file -` is explicit
 - inject extra capture logic for traffic CDP does not expose directly, including gRPC-Web streams and WebRTC data channel events
 - run in interactive and MCP-oriented modes
 
@@ -161,7 +194,15 @@ The main `cdp` command is the broader general-purpose entry point. It goes beyon
 
 `ndp` focuses on Node/V8 debugging flows. `chdb` focuses on Chrome-oriented debugging flows. Both are still evolving, but they are intended to expose debugger-oriented workflows rather than generic browser automation.
 
-`cdpscript` and `cdpscripttest` handle repeatable browser scripts and script-driven test runs.
+## Automation Stack
+
+`cdp` is the live operator surface. Use it when you need to attach to an existing browser, inspect tabs, observe with screenshots, act with coordinates or element refs, capture HAR/PDF/screenshots, or fall back to raw CDP.
+
+`cdpscript` is the durable automation surface. Scripts are txtar archives with `main.cdp`, optional embedded helper files, argv via `ARG1..ARGN`/`ARGC`, environment variables, output artifacts, and distinct exit codes for usage and assertion failures.
+
+`cdpscripttest` is the Go testing surface. It runs local browser fixtures, screenshot comparisons, network/WebRTC tests, and real `cdpscript` archives under `go test`. Fixtures should avoid third-party network dependencies; authenticated site workflows should live as explicitly live-only examples.
+
+See [docs/planning/cdp-best-in-class-checklist.md](docs/planning/cdp-best-in-class-checklist.md) for the current implementation checklist and verification gates.
 
 ## Documentation
 
@@ -170,6 +211,8 @@ The main `cdp` command is the broader general-purpose entry point. It goes beyon
 - [docs/churl.md](docs/churl.md)
 - [docs/langmodel.md](docs/langmodel.md)
 - [docs/differential-capture.md](docs/differential-capture.md)
+- [docs/planning/cdp-best-in-class-checklist.md](docs/planning/cdp-best-in-class-checklist.md)
+- [docs/planning/cdp-feature-surface-roadmap.md](docs/planning/cdp-feature-surface-roadmap.md)
 
 For command-level help, use:
 
