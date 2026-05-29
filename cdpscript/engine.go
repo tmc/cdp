@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/chromedp/cdproto/network"
@@ -54,6 +55,13 @@ type Engine struct {
 
 	// HAR recorder for capturing network activity with tags
 	recorder *recorder.Recorder
+
+	dialogMu        sync.Mutex
+	dialogListening bool
+	dialogAction    *dialogAction
+
+	downloadMu  sync.Mutex
+	downloadDir string
 }
 
 // New creates a new CDP script engine.
@@ -379,11 +387,21 @@ func (e *Engine) commands() map[string]script.Cmd {
 		"wait": e.cmdWait(),
 
 		// Interaction
-		"click": e.cmdClick(),
-		"fill":  e.cmdFill(),
-		"type":  e.cmdType(),
-		"hover": e.cmdHover(),
-		"press": e.cmdPress(),
+		"click":  e.cmdClick(),
+		"fill":   e.cmdFill(),
+		"type":   e.cmdType(),
+		"drag":   e.cmdDrag(),
+		"hover":  e.cmdHover(),
+		"press":  e.cmdPress(),
+		"scroll": e.cmdScroll(),
+		"select": e.cmdSelect(),
+		"upload": e.cmdUpload(),
+
+		// Dialogs
+		"dialog": e.cmdDialog(),
+
+		// Emulation
+		"viewport": e.cmdViewport(),
 
 		// JavaScript
 		"js":     e.cmdJS(),
@@ -399,9 +417,11 @@ func (e *Engine) commands() map[string]script.Cmd {
 		"assert": e.cmdAssert(),
 
 		// Output
-		"screenshot": e.cmdScreenshot(),
-		"pdf":        e.cmdPDF(),
-		"log":        e.cmdLog(),
+		"screenshot":    e.cmdScreenshot(),
+		"pdf":           e.cmdPDF(),
+		"log":           e.cmdLog(),
+		"download-dir":  e.cmdDownloadDir(),
+		"wait-download": e.cmdWaitDownload(),
 
 		// Network
 		"block": e.cmdBlock(),
@@ -568,7 +588,7 @@ func (e *Engine) cmdScreenshot() script.Cmd {
 		}
 
 		var data []byte
-		if err := chromedp.Run(e.browser.Context(), chromedp.FullScreenshot(&data, 90)); err != nil {
+		if err := chromedp.Run(e.browser.Context(), chromedp.FullScreenshot(&data, screenshotQuality(filename))); err != nil {
 			return fmt.Errorf("failed to take screenshot: %w", err)
 		}
 		if err := os.WriteFile(filename, data, 0644); err != nil {
@@ -577,6 +597,15 @@ func (e *Engine) cmdScreenshot() script.Cmd {
 		fmt.Fprintf(os.Stderr, "Saved screenshot to %s (%d bytes)\n", filename, len(data))
 		return nil
 	})
+}
+
+func screenshotQuality(filename string) int {
+	switch strings.ToLower(filepath.Ext(filename)) {
+	case ".jpg", ".jpeg":
+		return 90
+	default:
+		return 100
+	}
 }
 
 func (e *Engine) cmdJS() script.Cmd {

@@ -19,7 +19,31 @@ cdp run -v script.txtar                          # Verbose logging
 cdp run -o /tmp/output script.txtar              # Output dir for artifacts
 cdpscript --headless --timeout 45s script.txtar  # Browser/selector timeout
 cdpscript --tab <id> --port 9222 script.txtar    # Connect to existing tab
+cdpscript script.txtar --help                    # Script-scoped help
 ```
+
+## Unix Tool Contract
+
+`cdpscript` and `cdp run` are normal command-line programs:
+
+- arguments after the script path are exposed as `${ARG1}` through `${ARGN}`;
+  `${ARGC}` is the count.
+- environment variables are available as `${NAME}`.
+- `--help` after the script path prints the txtar header and usage for that
+  script, not the Go flag help.
+- relative artifact paths are written under the output directory when `-o` or
+  `--output` is set.
+- `--tab <target-id> --port <port>` attaches to an existing DevTools tab.
+
+Exit codes:
+
+| Code | Meaning |
+|---|---|
+| 0 | Script ran to completion; all assertions passed |
+| 1 | Runtime error |
+| 2 | Usage error |
+| 3 | Assertion failed |
+| 130 | Interrupted |
 
 ## Script Structure
 
@@ -89,8 +113,35 @@ click coord:100,200           # Click viewport coordinates
 fill <selector> <text>        # Fill input field
 fill @e5 Hello World          # Fill by accessibility ref
 type <selector> <text>        # Alias for fill
+drag <source> <target> [n]    # Drag between selectors or coord:x,y points
+select <selector> <option>    # Select option by value or text
+upload <selector> <file>...   # Set file input files
 hover <selector>              # Hover over element
 press Enter                   # Press key (Enter, Tab, Escape, ArrowDown, etc.)
+scroll down 500               # Scroll page by pixels; directions: up/down/left/right
+scroll <selector>             # Scroll an element into view
+```
+
+`upload` accepts absolute paths, files embedded in the txtar archive, and
+relative paths from the process working directory. Use absolute paths for
+caller-supplied files passed through `${ARG1}`.
+
+`click coord:x,y` uses viewport coordinates. It is the right fallback for
+visible controls inside iframes or shadow DOM when selectors or accessibility
+refs are not the best fit.
+
+### Dialogs
+```
+dialog accept                 # Accept the next JavaScript dialog
+dialog dismiss                # Dismiss the next JavaScript dialog
+dialog accept response text   # Accept next prompt with text
+```
+
+Place `dialog` before the action that opens `alert`, `confirm`, or `prompt`.
+
+### Emulation
+```
+viewport 390 640              # Set browser viewport size
 ```
 
 ### JavaScript
@@ -120,6 +171,8 @@ assert visible <selector>                 # Element is visible
 ```
 screenshot output.png         # Full-page screenshot (saved to output dir)
 pdf output.pdf                # Save page as PDF
+download-dir downloads        # Allow downloads into output dir/downloads
+wait-download report.csv 10s  # Wait until a downloaded file exists
 log Hello World               # Print message to stdout
 ```
 
@@ -183,6 +236,14 @@ Commands like `extract`, `title`, and `url` set environment variables
 (`${EXTRACTED}`, `${TITLE}`, `${URL}`) that subsequent commands can reference.
 Top-level script arguments are available as `${ARG1}`, `${ARG2}`, and
 `${ARGC}`.
+
+Example:
+
+```text
+-- main.cdp --
+goto ${BASE_URL}/users/${ARG1}
+log Running user flow ${ARG1} of ${ARGC}
+```
 
 ## Conditions
 
