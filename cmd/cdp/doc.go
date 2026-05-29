@@ -77,7 +77,8 @@ Capture Flags:
 	-har-mode <mode>
 	    HAR capture mode: enhanced (complete headers/bodies) or simple. (default: "enhanced")
 	-harl
-	    Stream HAR entries as NDJSON.
+	    Stream HAR entries as NDJSON. By default entries are written to
+	    output.har.jsonl; use -harl-file - to stream to stdout.
 	-harl-file <file>
 	    File to stream NDJSON to (use '-' for stdout). (default: "output.har.jsonl")
 	-output-dir <dir>
@@ -101,8 +102,10 @@ Execution Flags:
 	    Await Promise return values from -js scripts.
 	-timeout <seconds>
 	    Max seconds to wait for commands. 0 for no timeout. (default: 60)
-	-screenshot <selector>
-	    Take a screenshot and exit (CSS selector or 'full' for full page).
+	-screenshot <spec>
+	    Take a screenshot and exit. Use 'full' for a full-page screenshot,
+	    '<selector>' for an element, 'full <file>' for a full-page screenshot
+	    saved to a path, or '<selector> <file>' for an element screenshot.
 
 Display Flags:
 

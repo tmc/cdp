@@ -98,6 +98,7 @@ func TestCDP_ShowHelp(t *testing.T) {
 				"-url string",
 				"-headless",
 				"-list-browsers",
+				"'full <file>'",
 			},
 		},
 		{
@@ -193,6 +194,77 @@ func TestCLIRunModeHARCaptureNeedsTarget(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestWarnHARLStdout(t *testing.T) {
+	got := captureStderr(t, func() {
+		warnHARLStdout("", "-")
+	})
+	if !strings.Contains(got, "--harl-file - streams HARL NDJSON to stdout") {
+		t.Fatalf("warning missing stdout explanation:\n%s", got)
+	}
+	if !strings.Contains(got, "use --harl-file output.har.jsonl") {
+		t.Fatalf("warning missing file suggestion:\n%s", got)
+	}
+
+	got = captureStderr(t, func() {
+		warnHARLStdout("", "output.har.jsonl")
+	})
+	if got != "" {
+		t.Fatalf("warnHARLStdout for file wrote %q, want empty", got)
+	}
+
+	got = captureStderr(t, func() {
+		warnHARLStdout("harl-out", "-")
+	})
+	if got != "" {
+		t.Fatalf("warnHARLStdout for output dir wrote %q, want empty", got)
+	}
+}
+
+func TestAppendChromeWrapperEnv(t *testing.T) {
+	t.Setenv("CHROME_CANARY_NO_UPDATE_PROFILE", "")
+
+	opts := appendChromeWrapperEnv(nil, "/usr/local/bin/chrome-canary-no-update", "/tmp/cdp-profile")
+	if len(opts) != 1 {
+		t.Fatalf("appendChromeWrapperEnv added %d opts, want 1", len(opts))
+	}
+
+	opts = appendChromeWrapperEnv(nil, "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", "/tmp/cdp-profile")
+	if len(opts) != 0 {
+		t.Fatalf("appendChromeWrapperEnv added opts for normal Chrome, want none")
+	}
+
+	t.Setenv("CHROME_CANARY_NO_UPDATE_PROFILE", "/tmp/existing")
+	opts = appendChromeWrapperEnv(nil, "/usr/local/bin/chrome-canary-no-update", "/tmp/cdp-profile")
+	if len(opts) != 0 {
+		t.Fatalf("appendChromeWrapperEnv overrode existing env, want none")
+	}
+}
+
+func captureStderr(t *testing.T, fn func()) string {
+	t.Helper()
+
+	old := os.Stderr
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("pipe: %v", err)
+	}
+	os.Stderr = w
+	defer func() {
+		os.Stderr = old
+	}()
+
+	fn()
+
+	if err := w.Close(); err != nil {
+		t.Fatalf("close writer: %v", err)
+	}
+	var buf bytes.Buffer
+	if _, err := buf.ReadFrom(r); err != nil {
+		t.Fatalf("read stderr: %v", err)
+	}
+	return buf.String()
 }
 
 func TestCDP_ListBrowsers(t *testing.T) {

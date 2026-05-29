@@ -114,6 +114,36 @@ func (m cliRunMode) harCaptureNeedsTarget() bool {
 		m.monitorURLPattern == ""
 }
 
+func appendHARLOutputOptions(opts []harrecorder.Option, outputDir, harlFile string) []harrecorder.Option {
+	if outputDir == "" && harlFile != "-" {
+		opts = append(opts, harrecorder.WithOutputFile(harlFile))
+	}
+	return opts
+}
+
+func warnHARLStdout(outputDir, harlFile string) {
+	if outputDir == "" && harlFile == "-" {
+		fmt.Fprintln(os.Stderr, "cdp: warning: --harl-file - streams HARL NDJSON to stdout; use --harl-file output.har.jsonl to write a file")
+	}
+}
+
+func appendChromeWrapperEnv(opts []chromedp.ExecAllocatorOption, chromePath, userDataDir string) []chromedp.ExecAllocatorOption {
+	if chromePath == "" || userDataDir == "" {
+		return opts
+	}
+	if !usesChromeCanaryNoUpdateWrapper(chromePath) {
+		return opts
+	}
+	if os.Getenv("CHROME_CANARY_NO_UPDATE_PROFILE") != "" {
+		return opts
+	}
+	return append(opts, chromedp.Env("CHROME_CANARY_NO_UPDATE_PROFILE="+userDataDir))
+}
+
+func usesChromeCanaryNoUpdateWrapper(chromePath string) bool {
+	return filepath.Base(chromePath) == "chrome-canary-no-update"
+}
+
 // Exit codes following Unix conventions
 const (
 	ExitSuccess         = 0 // Success
@@ -1280,7 +1310,7 @@ func main() {
 	flag.BoolVar(&consoleStacks, "console-stacks", false, "Show full stack traces for console errors and exceptions (compact single-line by default)")
 	flag.BoolVar(&waitReady, "wait-ready", false, "Wait for page load and network idle before executing -js scripts")
 	flag.BoolVar(&awaitPromise, "await", false, "Await Promise return values from -js scripts")
-	flag.StringVar(&screenshotSelector, "screenshot", "", "Take a screenshot and exit (CSS selector for element, or 'full' for full page)")
+	flag.StringVar(&screenshotSelector, "screenshot", "", "Take a screenshot and exit: 'full', '<selector>', or 'full <file>' / '<selector> <file>'")
 
 	// Window control flags
 	flag.BoolVar(&shell, "shell", false, "Start in interactive shell mode (auto if no --url or --js)")
@@ -1851,6 +1881,7 @@ func main() {
 			// Set up HAR recording if requested
 			var harlWriter *os.File
 			if harlStream {
+				warnHARLStdout(outputDir, harlFile)
 				if harlFile == "-" {
 					harlWriter = os.Stdout
 				} else {
@@ -1874,6 +1905,7 @@ func main() {
 							harrecorder.WithStreaming(harlStream),
 							harrecorder.WithOutputDir(outputDir),
 						}
+						recOpts = appendHARLOutputOptions(recOpts, outputDir, harlFile)
 						if !noScrub {
 							recOpts = append(recOpts, harrecorder.WithScrubber(scrub.New()))
 						}
@@ -2539,6 +2571,7 @@ func main() {
 			opts := []chromedp.ExecAllocatorOption{
 				chromedp.NoFirstRun,
 				chromedp.NoDefaultBrowserCheck,
+				browser.EnableOptimizationGuideOnDeviceModel(),
 
 				// Add stability flags
 				chromedp.Flag("disable-background-networking", true),
@@ -2565,22 +2598,36 @@ func main() {
 
 			// Add profile directory if using a profile
 			if profileManager != nil {
-				opts = append(opts, chromedp.UserDataDir(profileManager.WorkDir()))
+				userDataDir := profileManager.WorkDir()
+				opts = append(opts, chromedp.UserDataDir(userDataDir))
+				opts = appendChromeWrapperEnv(opts, chromePath, userDataDir)
 				if verbose {
-					log.Printf("Using profile data from: %s", profileManager.WorkDir())
+					log.Printf("Using profile data from: %s", userDataDir)
 				}
 			} else if profileDir != "" {
 				opts = append(opts, chromedp.UserDataDir(profileDir))
+				opts = appendChromeWrapperEnv(opts, chromePath, profileDir)
 				if verbose {
 					log.Printf("Using custom profile directory: %s", profileDir)
 				}
 			} else {
 				// Use default profile directory at ~/.cdp/profiles/default
-				homeDir, err := os.UserHomeDir()
-				if err == nil {
+				if usesChromeCanaryNoUpdateWrapper(chromePath) && os.Getenv("CHROME_CANARY_NO_UPDATE_PROFILE") == "" {
+					defaultProfileDir, err := os.MkdirTemp("", "cdp-chrome-canary-*")
+					if err != nil {
+						exitWithError(ExitGeneralError, ErrorTypeGeneral, "Failed to create temporary Chrome profile: %v", err)
+					}
+					defer os.RemoveAll(defaultProfileDir)
+					opts = append(opts, chromedp.UserDataDir(defaultProfileDir))
+					opts = appendChromeWrapperEnv(opts, chromePath, defaultProfileDir)
+					if verbose {
+						log.Printf("Using temporary profile directory: %s", defaultProfileDir)
+					}
+				} else if homeDir, err := os.UserHomeDir(); err == nil {
 					defaultProfileDir := filepath.Join(homeDir, ".cdp", "profiles", "default")
 					if err := os.MkdirAll(defaultProfileDir, 0755); err == nil {
 						opts = append(opts, chromedp.UserDataDir(defaultProfileDir))
+						opts = appendChromeWrapperEnv(opts, chromePath, defaultProfileDir)
 						if verbose {
 							log.Printf("Using default profile directory: %s", defaultProfileDir)
 						}
@@ -2710,6 +2757,7 @@ func main() {
 			// Set up HAR recording if requested (for new Chrome instances)
 			var harlWriter *os.File
 			if harlStream {
+				warnHARLStdout(outputDir, harlFile)
 				if harlFile == "-" {
 					harlWriter = os.Stdout
 				} else {
@@ -2731,6 +2779,7 @@ func main() {
 						harrecorder.WithStreaming(harlStream),
 						harrecorder.WithOutputDir(outputDir),
 					}
+					recOpts = appendHARLOutputOptions(recOpts, outputDir, harlFile)
 					if !noScrub {
 						recOpts = append(recOpts, harrecorder.WithScrubber(scrub.New()))
 					}
@@ -4230,11 +4279,13 @@ func handleEnhancedMode(command string, interactive bool, cfg fullCaptureConfig)
 			// Set up HARL streaming (network recording) if requested.
 			var enhancedRec *harrecorder.Recorder
 			if cfg.HarlStream {
+				warnHARLStdout(cfg.OutputDir, cfg.HarlFile)
 				recOpts := []harrecorder.Option{
 					harrecorder.WithVerbose(cfg.Verbose),
 					harrecorder.WithStreaming(true),
 					harrecorder.WithOutputDir(cfg.OutputDir),
 				}
+				recOpts = appendHARLOutputOptions(recOpts, cfg.OutputDir, cfg.HarlFile)
 				if !cfg.NoScrub {
 					recOpts = append(recOpts, harrecorder.WithScrubber(scrub.New()))
 				}
@@ -4321,6 +4372,28 @@ func handleEnhancedMode(command string, interactive bool, cfg fullCaptureConfig)
 
 	cmdName := parts[0]
 	args := parts[1:]
+
+	if isRawCDPCommandName(cmdName) && cfg.RemoteHost != "" && cfg.RemotePort > 0 && cfg.TabID != "" {
+		method, params, err := parseRawCDPCommand(command)
+		if err != nil {
+			exitWithError(ExitGeneralError, ErrorTypeGeneral, "Command failed: %v", err)
+		}
+		wsURL := fmt.Sprintf("ws://%s:%d/devtools/page/%s", cfg.RemoteHost, cfg.RemotePort, cfg.TabID)
+		if cfg.Verbose {
+			log.Printf("Executing raw CDP command against %s", wsURL)
+		}
+		fmt.Fprintf(os.Stderr, "Attached to running browser at %s:%d (target: %s)\n", cfg.RemoteHost, cfg.RemotePort, cfg.TabID)
+		result, err := runRawCDPWebSocket(context.Background(), wsURL, method, params)
+		if err != nil {
+			exitWithError(ExitGeneralError, ErrorTypeGeneral, "Command failed: %v", err)
+		}
+		data, err := json.MarshalIndent(result, "", "  ")
+		if err != nil {
+			exitWithError(ExitGeneralError, ErrorTypeGeneral, "Command failed: marshal CDP result: %v", err)
+		}
+		fmt.Println(string(data))
+		return
+	}
 
 	// Check if this is a non-browser command (help, list, search)
 	if isNonBrowserCommand(cmdName) {
@@ -4520,9 +4593,14 @@ func setupChromeForEnhanced(ctx context.Context, cfg fullCaptureConfig) (context
 		allocCtx, allocCancel := chromedp.NewRemoteAllocator(ctx, remoteURL)
 
 		if cfg.TabID != "" {
+			allocCancel()
+			remoteURL = fmt.Sprintf("ws://%s:%d/devtools/page/%s", remoteHost, remotePort, cfg.TabID)
+			if verbose {
+				log.Printf("Connecting directly to target at %s", remoteURL)
+			}
+			allocCtx, allocCancel = chromedp.NewRemoteAllocator(ctx, remoteURL)
 			browserCtx, browserCancel := chromedp.NewContext(allocCtx,
 				chromedp.WithErrorf(filteredErrorf),
-				chromedp.WithTargetID(target.ID(cfg.TabID)),
 			)
 			if err := chromedp.Run(browserCtx, chromedp.Evaluate("1", nil)); err != nil {
 				browserCancel()
@@ -4658,6 +4736,7 @@ func setupChromeForEnhanced(ctx context.Context, cfg fullCaptureConfig) (context
 		chromedp.NoFirstRun,
 		chromedp.NoDefaultBrowserCheck,
 		chromedp.Flag("remote-debugging-port", fmt.Sprintf("%d", debugPort)),
+		browser.EnableOptimizationGuideOnDeviceModel(),
 		// Keep a few stability flags that don't affect detection.
 		chromedp.Flag("disable-background-networking", true),
 		chromedp.Flag("disable-breakpad", true),
