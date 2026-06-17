@@ -1,6 +1,10 @@
 // Package cdpscripttest brings rsc.io/script txtar-script ergonomics to
 // Chrome DevTools Protocol (CDP) browser testing.
 //
+// Browser-backed fixture tests use the cdp build tag:
+//
+//	go test -tags cdp -p 1 ./cdpscripttest
+//
 // Scripts are plain-text txtar archives: the archive comment section is the
 // script body, and any -- filename -- sections are files extracted to the
 // test's working directory before the script runs.
@@ -58,6 +62,21 @@
 // command table, so runtime behavior stays aligned. Set
 // CDPScriptRunOptions.TabID and Port to run a fixture against an already
 // running DevTools tab.
+// Checked-in fixtures live under testdata/, testdata/interaction/, and
+// testdata/cdpscript/.
+//
+// RunCDPScript uses the cdpscript runtime command surface:
+//
+//	goto, back, forward, reload, wait
+//	click, fill, type, drag, hover, press, scroll, select, upload
+//	dialog, viewport
+//	js, jsfile
+//	extract, title, url, render, snapshot
+//	assert
+//	screenshot, pdf, log, download-dir, wait-download
+//	block, cookie
+//	source
+//	tag, har, note, capture
 //
 // # Commands
 //
@@ -99,11 +118,20 @@
 //	screenshot [--blur <sel>]... [filename]                    full-page PNG
 //	screenshot-sel [--padding N] [--blur <sel>]... <sel> [fn]  element PNG
 //	screenshot-compare [opts] [--blur <sel>]... <sel> [fn]     diff vs baseline
+//	screenrecord start [filename.gif]                          begin tab recording
+//	screenrecord stop                                          write animated GIF
+//	screen-record start [filename.gif]                         alias for screenrecord
+//	video start [filename.gif]                                 alias for screenrecord
 //
 // All screenshot commands support --blur <selector> to mask dynamic content
 // before capture. Blurred elements have their text replaced with a fixed
 // placeholder and a mild CSS blur applied, producing identical pixels across
 // runs while still showing that content was present. Repeatable.
+//
+// screenrecord captures Chrome screencast frames from the active tab and writes
+// an animated GIF to the artifact directory. If a script fails while recording,
+// cdpscripttest stops the recording during cleanup and leaves the GIF path in
+// the command log for reports.
 //
 // screenshot-compare options:
 //
@@ -248,8 +276,9 @@
 //	-emit-artifacts         save to <script-dir>/artifacts/<script-name>/
 //	-update-golden          update golden baselines instead of comparing
 //
-// -emit-artifacts derives the output path from the script file location,
-// so testdata/cdp/fleet-view.txt produces testdata/cdp/artifacts/fleet-view/*.png.
+// -emit-artifacts derives the output path from the script file location. For
+// example, testdata/interaction/viewport.txtar produces
+// testdata/interaction/artifacts/viewport/*.png.
 // No path argument needed.
 //
 // All screenshot commands (screenshot, screenshot-sel, screenshot-compare)

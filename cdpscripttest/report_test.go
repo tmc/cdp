@@ -61,6 +61,24 @@ matched: baseline created
 	}
 }
 
+func TestParseLogClassifiesGIF(t *testing.T) {
+	log := `
+# Record flow (0.100s)
+> screenrecord stop
+[stdout]
+/tmp/artifacts/flow.gif
+frames: 3
+`
+	sections := ParseLog(log)
+	if len(sections) != 1 {
+		t.Fatalf("sections = %d, want 1", len(sections))
+	}
+	got := sections[0].Commands[0].Screenshots
+	if len(got) != 1 || got[0].Path != "/tmp/artifacts/flow.gif" {
+		t.Fatalf("screenshots = %#v, want flow.gif", got)
+	}
+}
+
 func TestParseLogMergesConsecutiveComments(t *testing.T) {
 	log := `
 # Line one of preamble.

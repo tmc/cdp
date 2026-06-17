@@ -52,6 +52,7 @@ func TestWebRTC(t *testing.T) {
 		}
 	}
 	if len(matched) == 0 {
+		t.Log("run browser fixtures with: go test -tags cdp -p 1 ./cdpscripttest")
 		t.Skip("no webrtc or network fixtures found")
 	}
 

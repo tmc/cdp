@@ -86,6 +86,10 @@ func DefaultCmds() map[string]script.Cmd {
 	cmds["screenshot"] = Screenshot()
 	cmds["screenshot-sel"] = ScreenshotSel()
 	cmds["screenshot-compare"] = ScreenshotCompare()
+	sr := Screenrecord()
+	cmds["screenrecord"] = sr
+	cmds["screen-record"] = sr
+	cmds["video"] = sr
 
 	sl := Sleep()
 	cmds["sleep"] = sl
@@ -118,6 +122,59 @@ func DefaultCmds() map[string]script.Cmd {
 	}
 
 	return cmds
+}
+
+// Screenrecord returns a command that records the current tab to an animated
+// GIF artifact using the Chrome DevTools screencast stream.
+//
+// Usage: screenrecord start [filename.gif]
+// Usage: screenrecord stop
+func Screenrecord() script.Cmd {
+	return script.Command(
+		script.CmdUsage{
+			Summary: "start or stop recording the current tab to an animated GIF",
+			Args:    "start [filename.gif] | stop",
+		},
+		func(s *script.State, args ...string) (script.WaitFunc, error) {
+			if len(args) < 1 {
+				return nil, script.ErrUsage
+			}
+			cs, err := cdpState(s)
+			if err != nil {
+				return nil, err
+			}
+			switch args[0] {
+			case "start":
+				if len(args) > 2 {
+					return nil, script.ErrUsage
+				}
+				filename := ""
+				if len(args) == 2 {
+					filename = args[1]
+				}
+				return func(s *script.State) (stdout, stderr string, err error) {
+					path, err := cs.StartScreenRecording(filename)
+					if err != nil {
+						return "", "", err
+					}
+					return path + "\n", "", nil
+				}, nil
+			case "stop":
+				if len(args) != 1 {
+					return nil, script.ErrUsage
+				}
+				return func(s *script.State) (stdout, stderr string, err error) {
+					path, frames, err := cs.StopScreenRecording()
+					if err != nil {
+						return "", "", err
+					}
+					return fmt.Sprintf("%s\nframes: %d\n", path, frames), "", nil
+				}, nil
+			default:
+				return nil, script.ErrUsage
+			}
+		},
+	)
 }
 
 // Navigate returns a command that navigates to baseURL+path and waits for body.

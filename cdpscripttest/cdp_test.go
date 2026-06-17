@@ -14,6 +14,7 @@ func TestCDP(t *testing.T) {
 	patterns := []string{
 		"testdata/hyphenated-*.txt",
 		"testdata/blur-*.txt",
+		"testdata/screenrecord-*.txt",
 	}
 
 	var matched []string
@@ -24,6 +25,7 @@ func TestCDP(t *testing.T) {
 		}
 	}
 	if len(matched) == 0 {
+		t.Log("run browser fixtures with: go test -tags cdp -p 1 ./cdpscripttest")
 		t.Skip("no cdp fixtures found")
 	}
 

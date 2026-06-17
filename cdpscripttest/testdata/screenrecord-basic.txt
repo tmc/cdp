@@ -1,0 +1,10 @@
+# Record an animated page section as a GIF artifact.
+
+set-base-url ${BASE_URL}
+navigate /screenrecord-basic.html
+wait-visible '#box'
+screenrecord start recording.gif
+sleep 500ms
+screenrecord stop
+stdout 'recording.gif'
+stdout 'frames:'

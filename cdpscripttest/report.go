@@ -160,11 +160,11 @@ func ParseLog(log string) []reportSection {
 	return sections
 }
 
-// classifyScreenshots inspects stdout lines for .png paths and probes disk
+// classifyScreenshots inspects stdout lines for image paths and probes disk
 // for -unblurred and .fail.png companions. It also extracts compare results.
 func classifyScreenshots(cmd *reportCommand) {
 	for _, line := range cmd.Stdout {
-		if strings.HasSuffix(line, ".png") {
+		if strings.HasSuffix(line, ".png") || strings.HasSuffix(line, ".gif") {
 			ref := screenshotRef{Path: line}
 			// Probe for -unblurred companion.
 			ext := filepath.Ext(line)

@@ -37,8 +37,8 @@ var flagUpdateGolden = flag.Bool("update-golden", false, "update golden baseline
 var flagArtifacts = flag.String("cdp-artifacts", "", "artifact root directory (bypasses t.ArtifactDir)")
 
 // flagEmitArtifacts places screenshots alongside the script files.
-// When set, testdata/cdp/fleet-view.txt produces screenshots in
-// testdata/cdp/artifacts/fleet-view/. No path argument needed.
+// When set, testdata/interaction/viewport.txtar produces screenshots in
+// testdata/interaction/artifacts/viewport/. No path argument needed.
 //
 // Usage: go test -emit-artifacts -tags cdp ./...
 var flagEmitArtifacts = flag.Bool("emit-artifacts", false, "save screenshots to <script-dir>/artifacts/<script-name>/")
@@ -179,6 +179,14 @@ func runCapture(t testing.TB, e *Engine, s *State, filename string, r io.Reader,
 		}
 		defer func() {
 			t.Helper()
+			if path, frames, stopErr := s.stopScreenRecordingIfActive(); stopErr != nil {
+				s.Logf("screenrecord stop: %v\n", stopErr)
+				if err == nil {
+					err = stopErr
+				}
+			} else if path != "" {
+				s.Logf("%s\nframes: %d\n", path, frames)
+			}
 			if closeErr := s.CloseAndWait(logBuf); err == nil {
 				err = closeErr
 			}
@@ -266,7 +274,7 @@ func Test(t *testing.T, e *Engine, allocCtx context.Context, baseURL, pattern st
 	}
 	if emitArtifacts && artRoot == "" {
 		// Derive artRoot from the script directory so the combined report
-		// has a location (e.g. testdata/cdp/artifacts/).
+		// has a location (e.g. testdata/interaction/artifacts/).
 		artRoot = filepath.Join(filepath.Dir(files[0]), "artifacts")
 	}
 
@@ -317,7 +325,7 @@ func Test(t *testing.T, e *Engine, allocCtx context.Context, baseURL, pattern st
 			workdir := t.TempDir()
 			var artDir string
 			if emitArtifacts {
-				// Derive from script location: testdata/cdp/x.txt → testdata/cdp/artifacts/x/
+				// Derive from script location: testdata/interaction/x.txtar -> testdata/interaction/artifacts/x/
 				artDir = filepath.Join(filepath.Dir(file), "artifacts", name)
 			} else {
 				artDir = filepath.Join(artRoot, name)

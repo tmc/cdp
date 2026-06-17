@@ -127,6 +127,14 @@ func runFile(allocCtx context.Context, e *Engine, file string, opts RunOptions) 
 			return err
 		}
 		defer func() {
+			if path, frames, stopErr := s.stopScreenRecordingIfActive(); stopErr != nil {
+				logBuf.WriteString(fmt.Sprintf("screenrecord stop: %v\n", stopErr))
+				if err == nil {
+					err = stopErr
+				}
+			} else if path != "" {
+				logBuf.WriteString(fmt.Sprintf("%s\nframes: %d\n", path, frames))
+			}
 			if closeErr := s.CloseAndWait(logBuf); err == nil {
 				err = closeErr
 			}

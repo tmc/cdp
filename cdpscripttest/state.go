@@ -100,6 +100,9 @@ type State struct {
 	// rtcSelectedPeer is the stable ID of the currently selected peer
 	// connection for rtc-* commands. Default 0.
 	rtcSelectedPeer int
+
+	// recorder is the active screen recorder, if screenrecord start has run.
+	recorder *screenRecorder
 }
 
 // NewState creates a State for a single script run.
