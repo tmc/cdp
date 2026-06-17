@@ -2,7 +2,9 @@ package recorder
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
@@ -15,6 +17,60 @@ import (
 func timeToMonotonicTime(t time.Time) *cdp.MonotonicTime {
 	mt := cdp.MonotonicTime(t)
 	return &mt
+}
+
+func TestBuildStreamEntryEncodesBinaryBody(t *testing.T) {
+	t.Parallel()
+
+	r, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Close()
+
+	body := []byte{0x00, 0xff, 0x10, 0x80}
+	captured := r.captureBody(body)
+	entry := r.buildStreamEntry("1", &network.Response{
+		URL:      "https://example.com/image",
+		Status:   200,
+		MimeType: "image/png",
+	}, &captured)
+
+	content := entry.Response.Content
+	if content.Encoding != "base64" {
+		t.Fatalf("encoding = %q, want base64", content.Encoding)
+	}
+	decoded, err := base64.StdEncoding.DecodeString(content.Text)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(decoded) != string(body) {
+		t.Fatalf("decoded body = %v, want %v", decoded, body)
+	}
+}
+
+func TestMaxBodyBytesTruncatesWithMetadata(t *testing.T) {
+	t.Parallel()
+
+	r, err := New(WithMaxBodyBytes(4))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Close()
+
+	captured := r.captureBody([]byte("abcdef"))
+	content := &har.Content{MimeType: "text/plain"}
+	setContentBody(content, "text/plain", captured)
+
+	if content.Text != "abcd" {
+		t.Fatalf("text = %q, want truncated body", content.Text)
+	}
+	if content.Size != 6 {
+		t.Fatalf("size = %d, want original size", content.Size)
+	}
+	if !strings.Contains(content.Comment, "captured 4 of 6") {
+		t.Fatalf("comment missing truncation metadata: %q", content.Comment)
+	}
 }
 
 func TestRecorderStreaming(t *testing.T) {

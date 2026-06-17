@@ -39,25 +39,35 @@ type TagRange struct {
 	EndTime   time.Time `json:"endTime,omitempty"`
 }
 
+type capturedBody struct {
+	Data         []byte
+	OriginalSize int
+}
+
+func (b capturedBody) truncated() bool {
+	return b.OriginalSize > len(b.Data)
+}
+
 type Recorder struct {
 	sync.Mutex
-	requests    map[network.RequestID]*network.Request
-	responses   map[network.RequestID]*network.Response
-	bodies      map[network.RequestID][]byte
-	postData    map[network.RequestID]string
-	timings     map[network.RequestID]*network.EventLoadingFinished
-	requestTags map[network.RequestID]string // Tag for each request
-	annotations []*Annotation                // Manual annotations from shell commands
-	verbose     bool
-	streaming   bool
-	filter      *FilterOption
-	template    string
-	ctx         context.Context // Store context for async body fetching
-	outputDir   string
-	outputFile  string
+	requests     map[network.RequestID]*network.Request
+	responses    map[network.RequestID]*network.Response
+	bodies       map[network.RequestID]capturedBody
+	postData     map[network.RequestID]string
+	timings      map[network.RequestID]*network.EventLoadingFinished
+	requestTags  map[network.RequestID]string // Tag for each request
+	annotations  []*Annotation                // Manual annotations from shell commands
+	verbose      bool
+	streaming    bool
+	filter       *FilterOption
+	template     string
+	ctx          context.Context // Store context for async body fetching
+	outputDir    string
+	outputFile   string
+	maxBodyBytes int64
 
 	// Fetch domain interception
-	fetchBodies map[network.RequestID][]byte // Bodies captured via Fetch domain
+	fetchBodies map[network.RequestID]capturedBody // Bodies captured via Fetch domain
 
 	// Tag tracking
 	currentTag string      // Currently active tag
@@ -137,6 +147,18 @@ func WithOutputFile(file string) Option {
 	}
 }
 
+// WithMaxBodyBytes caps stored HTTP response bodies. A non-positive limit keeps
+// full bodies.
+func WithMaxBodyBytes(n int64) Option {
+	return func(r *Recorder) error {
+		if n < 0 {
+			return fmt.Errorf("max body bytes must be non-negative")
+		}
+		r.maxBodyBytes = n
+		return nil
+	}
+}
+
 func WithScrubber(s *scrub.Scrubber) Option {
 	return func(r *Recorder) error {
 		r.scrubber = s
@@ -172,12 +194,12 @@ func New(opts ...Option) (*Recorder, error) {
 	r := &Recorder{
 		requests:    make(map[network.RequestID]*network.Request),
 		responses:   make(map[network.RequestID]*network.Response),
-		bodies:      make(map[network.RequestID][]byte),
+		bodies:      make(map[network.RequestID]capturedBody),
 		postData:    make(map[network.RequestID]string),
 		timings:     make(map[network.RequestID]*network.EventLoadingFinished),
 		requestTags: make(map[network.RequestID]string),
 		annotations: make([]*Annotation, 0),
-		fetchBodies: make(map[network.RequestID][]byte),
+		fetchBodies: make(map[network.RequestID]capturedBody),
 		tagRanges:   make([]*TagRange, 0),
 		writes:      make(chan writerCmd, writeQueueSize),
 		writerDone:  make(chan struct{}),
@@ -192,6 +214,30 @@ func New(opts ...Option) (*Recorder, error) {
 	go r.writerLoop()
 
 	return r, nil
+}
+
+func (r *Recorder) captureBody(body []byte) capturedBody {
+	c := capturedBody{
+		Data:         body,
+		OriginalSize: len(body),
+	}
+	if r.maxBodyBytes > 0 && int64(len(body)) > r.maxBodyBytes {
+		c.Data = append([]byte(nil), body[:int(r.maxBodyBytes)]...)
+	}
+	return c
+}
+
+func setContentBody(content *har.Content, mimeType string, body capturedBody) {
+	content.Size = int64(body.OriginalSize)
+	if isBinaryContent(mimeType) {
+		content.Text = base64.StdEncoding.EncodeToString(body.Data)
+		content.Encoding = "base64"
+	} else {
+		content.Text = string(body.Data)
+	}
+	if body.truncated() {
+		content.Comment = fmt.Sprintf("body truncated: captured %d of %d bytes", len(body.Data), body.OriginalSize)
+	}
 }
 
 func (r *Recorder) HandleNetworkEvent(ctx context.Context) func(interface{}) {
@@ -330,7 +376,8 @@ func (r *Recorder) HandleNetworkEvent(ctx context.Context) func(interface{}) {
 				}
 
 				r.Lock()
-				r.bodies[reqID] = body
+				captured := r.captureBody(body)
+				r.bodies[reqID] = captured
 				if r.verbose {
 					log.Printf("Captured response body for request %s (%d bytes)", reqID, len(body))
 				}
@@ -343,7 +390,7 @@ func (r *Recorder) HandleNetworkEvent(ctx context.Context) func(interface{}) {
 						}
 						savedDir := r.outputDir
 						r.outputDir = snapDir
-						entry := r.buildStreamEntry(reqID, resp, body)
+						entry := r.buildStreamEntry(reqID, resp, &captured)
 						r.streamEntry(entry)
 						r.outputDir = savedDir
 					}
@@ -464,15 +511,18 @@ func (r *Recorder) HandleFetchEvent(ctx context.Context) func(interface{}) {
 				}
 			}
 
+			var captured *capturedBody
 			if body != nil {
-				r.bodies[netID] = body
-				r.fetchBodies[netID] = body
+				c := r.captureBody(body)
+				r.bodies[netID] = c
+				r.fetchBodies[netID] = c
+				captured = &c
 			}
 
 			if r.streaming {
 				resp := r.responses[netID]
 				if resp != nil {
-					entry := r.buildStreamEntry(netID, resp, body)
+					entry := r.buildStreamEntry(netID, resp, captured)
 					// Use the snapshotted outputDir so the entry goes to
 					// the correct push-context subdirectory.
 					savedDir := r.outputDir
@@ -492,7 +542,7 @@ func (r *Recorder) HandleFetchEvent(ctx context.Context) func(interface{}) {
 
 // buildStreamEntry creates a HAR entry from stored request/response data.
 // Caller must hold r.Lock.
-func (r *Recorder) buildStreamEntry(reqID network.RequestID, resp *network.Response, body []byte) *har.Entry {
+func (r *Recorder) buildStreamEntry(reqID network.RequestID, resp *network.Response, body *capturedBody) *har.Entry {
 	harReq := &har.Request{
 		Method: "GET",
 		URL:    resp.URL,
@@ -518,8 +568,7 @@ func (r *Recorder) buildStreamEntry(reqID network.RequestID, resp *network.Respo
 		Size:     int64(resp.EncodedDataLength),
 	}
 	if body != nil {
-		content.Size = int64(len(body))
-		content.Text = string(body)
+		setContentBody(content, resp.MimeType, *body)
 	}
 	entry := &har.Entry{
 		StartedDateTime: time.Now().Format(time.RFC3339),
@@ -734,14 +783,7 @@ func (r *Recorder) HAR() (*har.HAR, error) {
 
 		// Add response body if captured
 		if body, ok := r.bodies[reqID]; ok {
-			// Check if body is base64 encoded (binary content)
-			if isBinaryContent(resp.MimeType) {
-				harResponse.Content.Text = base64.StdEncoding.EncodeToString(body)
-				harResponse.Content.Encoding = "base64"
-			} else {
-				harResponse.Content.Text = string(body)
-			}
-			harResponse.Content.Size = int64(len(body))
+			setContentBody(harResponse.Content, resp.MimeType, body)
 		}
 
 		entry := &har.Entry{
