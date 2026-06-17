@@ -13,6 +13,7 @@ go build -o cdpscript ./cmd/cdpscript
 cdp run script.txtar
 cdpscript script.txtar
 cdpscript script.txtar one two
+cat script.txtar | cdpscript -
 
 # With options
 cdp run -v script.txtar                          # Verbose logging
@@ -34,6 +35,7 @@ cdpscript script.txtar --help                    # Script-scoped help
 - relative artifact paths are written under the output directory when `-o` or
   `--output` is set.
 - `--tab <target-id> --port <port>` attaches to an existing DevTools tab.
+- path `-` reads the txtar archive from stdin.
 
 Exit codes:
 

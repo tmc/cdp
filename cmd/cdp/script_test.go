@@ -34,7 +34,6 @@ log demo
 	var stdout, stderr bytes.Buffer
 	cmd.stdout = &stdout
 	cmd.stderr = &stderr
-	cmd.fs.SetOutput(cmd.stderr)
 
 	err := cmd.run([]string{path, "--help"})
 	if !errors.Is(err, flag.ErrHelp) {
@@ -59,7 +58,6 @@ func TestRunCmdUsageError(t *testing.T) {
 	cmd := newScriptCmd()
 	var stderr bytes.Buffer
 	cmd.stderr = &stderr
-	cmd.fs.SetOutput(cmd.stderr)
 
 	err := cmd.run(nil)
 	if !errors.Is(err, cdpscript.ErrUsage) {

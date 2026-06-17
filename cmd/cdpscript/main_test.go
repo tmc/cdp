@@ -34,7 +34,6 @@ log demo
 	var stdout, stderr bytes.Buffer
 	cmd.stdout = &stdout
 	cmd.stderr = &stderr
-	cmd.fs.SetOutput(cmd.stderr)
 
 	err := cmd.run([]string{path, "--help"})
 	if !errors.Is(err, flag.ErrHelp) {
@@ -65,6 +64,26 @@ func TestScriptEnvironmentIncludesProcessEnv(t *testing.T) {
 		}
 	}
 	t.Fatalf("scriptEnvironment missing process environment variable")
+}
+
+func TestScriptCmdReadsTxtarFromStdin(t *testing.T) {
+	cmd := newScriptCmd()
+	var stdout, stderr bytes.Buffer
+	cmd.stdin = strings.NewReader(`-- main.cdp --
+log stdin
+`)
+	cmd.stdout = &stdout
+	cmd.stderr = &stderr
+
+	if err := cmd.run([]string{"-"}); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := stdout.String(), "stdin\n"; got != want {
+		t.Fatalf("stdout = %q, want %q", got, want)
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("unexpected stderr:\n%s", stderr.String())
+	}
 }
 
 func TestScriptExitCode(t *testing.T) {
