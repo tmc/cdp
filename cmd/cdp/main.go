@@ -127,6 +127,26 @@ func warnHARLStdout(outputDir, harlFile string) {
 	}
 }
 
+func printTextJSResults(results []interface{}) {
+	for _, result := range results {
+		switch v := result.(type) {
+		case nil:
+			fmt.Fprintln(os.Stdout, "null")
+		case string:
+			fmt.Fprintln(os.Stdout, v)
+		case map[string]interface{}, []interface{}:
+			data, err := json.Marshal(v)
+			if err != nil {
+				fmt.Fprintln(os.Stdout, v)
+				continue
+			}
+			fmt.Fprintln(os.Stdout, string(data))
+		default:
+			fmt.Fprintln(os.Stdout, v)
+		}
+	}
+}
+
 func appendChromeWrapperEnv(opts []chromedp.ExecAllocatorOption, chromePath, userDataDir string) []chromedp.ExecAllocatorOption {
 	if chromePath == "" || userDataDir == "" {
 		return opts
@@ -2257,17 +2277,12 @@ func main() {
 						}
 						fmt.Println(string(jsonData))
 					} else {
-						// Default text format: one result per line
-						fmt.Printf("✓ Executed %d JavaScript script(s) in Chrome on port %d\n", len(jsScripts), remotePort)
+						// Default text format: stdout is only result values.
+						fmt.Fprintf(os.Stderr, "Executed %d JavaScript script(s) in Chrome on port %d\n", len(jsScripts), remotePort)
 						if targetTabID != "" {
-							fmt.Printf("Target tab ID: %s\n", targetTabID)
+							fmt.Fprintf(os.Stderr, "Target tab ID: %s\n", targetTabID)
 						}
-						for scriptIdx, result := range results {
-							if scriptIdx > 0 {
-								fmt.Println()
-							}
-							fmt.Printf("Script %d result: %v\n", scriptIdx+1, result)
-						}
+						printTextJSResults(results)
 					}
 
 					// Take screenshot after JS execution if both -js and -screenshot are used
@@ -3116,14 +3131,9 @@ func main() {
 						}
 						fmt.Println(string(jsonData))
 					} else {
-						// Default text format: one result per line
-						fmt.Printf("✓ Executed %d JavaScript script(s) in new Chrome instance\n", len(jsScripts))
-						for scriptIdx, result := range results {
-							if scriptIdx > 0 {
-								fmt.Println()
-							}
-							fmt.Printf("Script %d result: %v\n", scriptIdx+1, result)
-						}
+						// Default text format: stdout is only result values.
+						fmt.Fprintf(os.Stderr, "Executed %d JavaScript script(s) in new Chrome instance\n", len(jsScripts))
+						printTextJSResults(results)
 					}
 				}
 

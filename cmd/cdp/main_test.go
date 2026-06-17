@@ -225,6 +225,28 @@ func TestWarnHARLStdout(t *testing.T) {
 	}
 }
 
+func TestPrintTextJSResults(t *testing.T) {
+	old := os.Stdout
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.Stdout = w
+	defer func() { os.Stdout = old }()
+
+	printTextJSResults([]interface{}{"title", map[string]interface{}{"ok": true}, nil})
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+	var buf bytes.Buffer
+	if _, err := buf.ReadFrom(r); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := buf.String(), "title\n{\"ok\":true}\nnull\n"; got != want {
+		t.Fatalf("stdout = %q, want %q", got, want)
+	}
+}
+
 func TestAppendChromeWrapperEnv(t *testing.T) {
 	t.Setenv("CHROME_CANARY_NO_UPDATE_PROFILE", "")
 
@@ -469,21 +491,25 @@ func TestCDP_JavaScriptExecution(t *testing.T) {
 		name string
 		js   string
 		url  string
+		want string
 	}{
 		{
 			name: "simple_evaluation",
 			js:   "2 + 2",
 			url:  "about:blank",
+			want: "4\n",
 		},
 		{
 			name: "document_title",
 			js:   "document.title || 'No Title'",
 			url:  "about:blank",
+			want: "No Title\n",
 		},
 		{
 			name: "window_location",
 			js:   "window.location.href",
 			url:  "about:blank",
+			want: "about:blank\n",
 		},
 	}
 
@@ -520,11 +546,11 @@ func TestCDP_JavaScriptExecution(t *testing.T) {
 					err, stdout.String(), stderr.String())
 			}
 
-			output := stdout.String()
-
-			// Output format: "✓ Executed N JavaScript script(s) in new Chrome instance\nScript 1 result: ...\n"
-			if !strings.Contains(output, "Executed") && !strings.Contains(output, "Script") && !strings.Contains(output, "result") {
-				t.Errorf("Output missing execution confirmation.\nFull output:\n%s\nStderr: %s", output, stderr.String())
+			if got := stdout.String(); got != tt.want {
+				t.Errorf("stdout = %q, want %q\nStderr: %s", got, tt.want, stderr.String())
+			}
+			if strings.Contains(stdout.String(), "Executed") || strings.Contains(stdout.String(), "Script") {
+				t.Errorf("stdout contains status text:\n%s", stdout.String())
 			}
 		})
 	}
