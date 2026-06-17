@@ -1156,10 +1156,24 @@ func (m *AllTabsMonitor) Stop() {
 	}
 }
 
+func shouldStartMacgo(args []string) bool {
+	if os.Getenv("CDP_MACGO_PERMISSIONS") != "" {
+		return true
+	}
+	for _, arg := range args {
+		if arg == "-macos-permissions" || arg == "--macos-permissions" {
+			return true
+		}
+	}
+	return false
+}
+
 func main() {
-	macgo.Start(&macgo.Config{
-		Permissions: []macgo.Permission{macgo.Microphone, macgo.Camera},
-	})
+	if shouldStartMacgo(os.Args[1:]) {
+		macgo.Start(&macgo.Config{
+			Permissions: []macgo.Permission{macgo.Microphone, macgo.Camera},
+		})
+	}
 	// Handle subcommands before flag parsing
 	if len(os.Args) > 1 {
 		switch os.Args[1] {
@@ -1270,7 +1284,8 @@ func main() {
 		saveSources bool
 
 		// Secret scrubbing
-		noScrub bool
+		noScrub          bool
+		macosPermissions bool
 	)
 
 	flag.StringVar(&url, "url", "about:blank", "URL to navigate to on start")
@@ -1360,6 +1375,7 @@ func main() {
 	// Source capture
 	flag.BoolVar(&saveSources, "save-sources", false, "Capture all JS/CSS sources (including sourcemapped originals) and write to disk")
 	flag.BoolVar(&noScrub, "no-scrub", false, "Disable secret redaction in HAR and source output")
+	flag.BoolVar(&macosPermissions, "macos-permissions", false, "On macOS, relaunch through an app bundle to request camera and microphone permissions")
 
 	flag.Parse()
 

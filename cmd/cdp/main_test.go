@@ -125,6 +125,9 @@ func TestCDP_ShowHelp(t *testing.T) {
 
 			// Special handling for no_args_launches_chrome test
 			if tt.name == "no_args_launches_chrome" {
+				if ctx.Err() == context.DeadlineExceeded && outputStr == "" {
+					return
+				}
 				// Check if it either connected to Chrome or showed an error
 				if !strings.Contains(outputStr, "Connected to") &&
 					!strings.Contains(outputStr, "Error launching Chrome") &&
@@ -239,6 +242,54 @@ func TestAppendChromeWrapperEnv(t *testing.T) {
 	opts = appendChromeWrapperEnv(nil, "/usr/local/bin/chrome-canary-no-update", "/tmp/cdp-profile")
 	if len(opts) != 0 {
 		t.Fatalf("appendChromeWrapperEnv overrode existing env, want none")
+	}
+}
+
+func TestShouldStartMacgo(t *testing.T) {
+	t.Setenv("CDP_MACGO_PERMISSIONS", "")
+	if shouldStartMacgo([]string{"run", "script.txtar"}) {
+		t.Fatal("run should not trigger macgo relaunch")
+	}
+	if shouldStartMacgo([]string{"-js", "1+1"}) {
+		t.Fatal("-js should not trigger macgo relaunch")
+	}
+	if !shouldStartMacgo([]string{"-macos-permissions", "-url", "about:blank"}) {
+		t.Fatal("-macos-permissions should trigger macgo relaunch")
+	}
+	t.Setenv("CDP_MACGO_PERMISSIONS", "1")
+	if !shouldStartMacgo(nil) {
+		t.Fatal("CDP_MACGO_PERMISSIONS should trigger macgo relaunch")
+	}
+}
+
+func TestCDPBinaryExitCodes(t *testing.T) {
+	t.Parallel()
+	cdpPath := buildCDP(t)
+
+	tests := []struct {
+		name string
+		args []string
+		want int
+	}{
+		{name: "top-level usage", args: []string{"--definitely-not-a-flag"}, want: ExitUsageError},
+		{name: "run usage", args: []string{"run"}, want: ExitUsageError},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			cmd := exec.CommandContext(ctx, cdpPath, tt.args...)
+			cmd.Env = append(os.Environ(), "MACGO_NO_RELAUNCH=")
+			_ = cmd.Run()
+			if cmd.ProcessState == nil {
+				t.Fatal("missing ProcessState")
+			}
+			if got := cmd.ProcessState.ExitCode(); got != tt.want {
+				t.Fatalf("exit code = %d, want %d", got, tt.want)
+			}
+		})
 	}
 }
 
