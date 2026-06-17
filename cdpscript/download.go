@@ -16,6 +16,9 @@ func (e *Engine) cmdDownloadDir() script.Cmd {
 		if len(args) != 1 {
 			return fmt.Errorf("download-dir requires directory")
 		}
+		if err := e.ensureBrowser(s.Context()); err != nil {
+			return err
+		}
 		dir := e.artifactPath(args[0])
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			return fmt.Errorf("create download dir: %w", err)
@@ -25,7 +28,7 @@ func (e *Engine) cmdDownloadDir() script.Cmd {
 			return fmt.Errorf("download dir: %w", err)
 		}
 		if e.verbose {
-			fmt.Fprintf(os.Stderr, "[download-dir] %s\n", abs)
+			fmt.Fprintf(e.stderr, "[download-dir] %s\n", abs)
 		}
 		if err := chromedp.Run(e.browser.Context(),
 			cdpbrowser.SetDownloadBehavior(cdpbrowser.SetDownloadBehaviorBehaviorAllow).
@@ -64,7 +67,7 @@ func (e *Engine) cmdWaitDownload() script.Cmd {
 		}
 		s.Setenv("DOWNLOADED", path)
 		if e.verbose {
-			fmt.Fprintf(os.Stderr, "[wait-download] %s\n", path)
+			fmt.Fprintf(e.stderr, "[wait-download] %s\n", path)
 		}
 		return nil
 	})

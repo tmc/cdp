@@ -1,6 +1,7 @@
 package cdpscript
 
 import (
+	"bytes"
 	"context"
 	"os"
 	"path/filepath"
@@ -21,6 +22,40 @@ func TestAppendArgEnv(t *testing.T) {
 	}
 	if strings.Join(got, "\n") != strings.Join(want, "\n") {
 		t.Fatalf("appendArgEnv mismatch:\n got: %q\nwant: %q", got, want)
+	}
+}
+
+func TestExecuteReaderRunsPureScriptWithoutBrowser(t *testing.T) {
+	var stdout bytes.Buffer
+	engine := New(WithStdout(&stdout))
+	script := `-- main.cdp --
+log hello ${ARG1}
+`
+	if err := engine.ExecuteReader(context.Background(), "stdin", strings.NewReader(script), []string{"reader"}); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := stdout.String(), "hello reader\n"; got != want {
+		t.Fatalf("stdout = %q, want %q", got, want)
+	}
+}
+
+func TestValidateReaderRejectsUnknownCommand(t *testing.T) {
+	script := `-- main.cdp --
+not-a-command
+`
+	err := ValidateReader("bad.txtar", strings.NewReader(script))
+	if err == nil || !strings.Contains(err.Error(), "unknown command") {
+		t.Fatalf("ValidateReader error = %v, want unknown command", err)
+	}
+}
+
+func TestValidateReaderAcceptsSourceAsAlias(t *testing.T) {
+	script := `-- main.cdp --
+source -as helper ./helper.cdp
+helper
+`
+	if err := ValidateReader("source.txtar", strings.NewReader(script)); err != nil {
+		t.Fatal(err)
 	}
 }
 

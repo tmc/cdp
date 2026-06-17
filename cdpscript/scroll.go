@@ -3,7 +3,6 @@ package cdpscript
 import (
 	"context"
 	"fmt"
-	"os"
 	"strconv"
 	"strings"
 
@@ -24,10 +23,13 @@ func (e *Engine) cmdScroll() script.Cmd {
 		if err != nil {
 			return err
 		}
+		if err := e.ensureBrowser(s.Context()); err != nil {
+			return err
+		}
 		ctx := e.browser.Context()
 		if spec.selector != "" {
 			if e.verbose {
-				fmt.Fprintf(os.Stderr, "[scroll] %s\n", spec.selector)
+				fmt.Fprintf(e.stderr, "[scroll] %s\n", spec.selector)
 			}
 			var ok bool
 			if err := chromedp.Run(ctx, chromedp.Evaluate(scrollSelectorScript(spec.selector), &ok)); err != nil {
@@ -40,7 +42,7 @@ func (e *Engine) cmdScroll() script.Cmd {
 		}
 
 		if e.verbose {
-			fmt.Fprintf(os.Stderr, "[scroll] %s %d\n", spec.direction, spec.distance)
+			fmt.Fprintf(e.stderr, "[scroll] %s %d\n", spec.direction, spec.distance)
 		}
 		if err := e.scrollBy(ctx, spec.direction, spec.distance); err != nil {
 			return err

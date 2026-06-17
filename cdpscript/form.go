@@ -16,10 +16,13 @@ func (e *Engine) cmdSelect() script.Cmd {
 		if len(args) < 2 {
 			return fmt.Errorf("select requires selector and option")
 		}
+		if err := e.ensureBrowser(s.Context()); err != nil {
+			return err
+		}
 		selector := args[0]
 		choice := strings.Join(args[1:], " ")
 		if e.verbose {
-			fmt.Fprintf(os.Stderr, "[select] %s = %s\n", selector, choice)
+			fmt.Fprintf(e.stderr, "[select] %s = %s\n", selector, choice)
 		}
 
 		var selected string
@@ -55,13 +58,16 @@ func (e *Engine) cmdUpload() script.Cmd {
 		if len(args) < 2 {
 			return fmt.Errorf("upload requires selector and file path")
 		}
+		if err := e.ensureBrowser(s.Context()); err != nil {
+			return err
+		}
 		selector := args[0]
 		files, err := resolveUploadFiles(s, args[1:])
 		if err != nil {
 			return err
 		}
 		if e.verbose {
-			fmt.Fprintf(os.Stderr, "[upload] %s <- %s\n", selector, strings.Join(files, ", "))
+			fmt.Fprintf(e.stderr, "[upload] %s <- %s\n", selector, strings.Join(files, ", "))
 		}
 		if err := chromedp.Run(e.browser.Context(), chromedp.SetUploadFiles(selector, files, chromedp.ByQuery)); err != nil {
 			return fmt.Errorf("upload files: %w", err)
@@ -113,8 +119,11 @@ func (e *Engine) cmdViewport() script.Cmd {
 		if err != nil {
 			return err
 		}
+		if err := e.ensureBrowser(s.Context()); err != nil {
+			return err
+		}
 		if e.verbose {
-			fmt.Fprintf(os.Stderr, "[viewport] %dx%d\n", width, height)
+			fmt.Fprintf(e.stderr, "[viewport] %dx%d\n", width, height)
 		}
 		if err := chromedp.Run(e.browser.Context(), chromedp.EmulateViewport(int64(width), int64(height))); err != nil {
 			return fmt.Errorf("set viewport: %w", err)

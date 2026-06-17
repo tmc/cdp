@@ -25,7 +25,6 @@ func TestCanonicalScriptFormatDocDoesNotAdvertiseUnsupportedFeatures(t *testing.
 		"metadata.yaml",
 		"imports:",
 		"wait until",
-		"assert status",
 		"assert no errors",
 		"assert url contains",
 		"capture network to",

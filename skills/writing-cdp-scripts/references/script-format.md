@@ -165,6 +165,9 @@ render --term [selector]      # Render as terminal-formatted text
 assert exists <selector>                  # Element exists in DOM
 assert text <selector> <expected>         # Element text contains expected
 assert visible <selector>                 # Element is visible
+assert status <url-substr> <code>         # Last matching response has status
+assert response <url-substr> <text>       # Last matching response body contains text
+assert header <url-substr> <name> <text>  # Last matching response header contains text
 ```
 
 ### Output
@@ -179,6 +182,9 @@ log Hello World               # Print message to stdout
 ### Network
 ```
 block *ads*                   # Block URLs matching pattern
+cookie get [name]             # Print cookies as JSON, or one cookie value
+cookie set <name> <value> [domain] [path]
+cookie clear [name]           # Clear all cookies, or one cookie on current URL
 ```
 
 ### Accessibility Snapshots
@@ -252,6 +258,11 @@ Scripts support conditions based on engine state:
 ```
 [has-tab] log Connected to existing tab     # Only if connected to tab
 ```
+
+cdpscript intentionally keeps loops, retries, and polling policy in the caller:
+use the shell, Go tests, or an MCP agent loop to repeat a script. Inside a script,
+use rsc.io/script guards (`[cond]`), `!` for expected failure, and `?` for
+allowed failure.
 
 ## Complete Example
 

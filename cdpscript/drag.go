@@ -3,7 +3,6 @@ package cdpscript
 import (
 	"context"
 	"fmt"
-	"os"
 	"strconv"
 
 	"github.com/chromedp/cdproto/input"
@@ -24,6 +23,9 @@ func (e *Engine) cmdDrag() script.Cmd {
 		if err != nil {
 			return err
 		}
+		if err := e.ensureBrowser(s.Context()); err != nil {
+			return err
+		}
 		ctx := e.browser.Context()
 		src, err := dragPoint(ctx, spec.source)
 		if err != nil {
@@ -34,7 +36,7 @@ func (e *Engine) cmdDrag() script.Cmd {
 			return fmt.Errorf("drag target: %w", err)
 		}
 		if e.verbose {
-			fmt.Fprintf(os.Stderr, "[drag] %s -> %s (%d steps)\n", spec.source, spec.target, spec.steps)
+			fmt.Fprintf(e.stderr, "[drag] %s -> %s (%d steps)\n", spec.source, spec.target, spec.steps)
 		}
 		return chromedp.Run(ctx, chromedp.ActionFunc(func(ctx context.Context) error {
 			return dispatchDrag(ctx, src, dst, spec.steps)

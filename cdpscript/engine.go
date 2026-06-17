@@ -4,14 +4,18 @@ package cdpscript
 import (
 	"bufio"
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/chromedp/cdproto/har"
 	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/cdproto/page"
 	"github.com/chromedp/chromedp"
@@ -42,10 +46,13 @@ type Engine struct {
 	env       []string
 	headless  bool
 	timeout   time.Duration
+	stdout    io.Writer
+	stderr    io.Writer
 
 	// Remote tab connection
-	remoteTabID string
-	remotePort  int
+	remoteTabID     string
+	remotePort      int
+	externalBrowser bool
 
 	// Sourced commands (dynamically loaded from source command)
 	sourcedCmds map[string]script.Cmd
@@ -68,6 +75,8 @@ type Engine struct {
 func New(opts ...Option) *Engine {
 	e := &Engine{
 		sourcedCmds: make(map[string]script.Cmd),
+		stdout:      os.Stdout,
+		stderr:      os.Stderr,
 	}
 	for _, opt := range opts {
 		opt(e)
@@ -126,12 +135,50 @@ func WithRecorder(rec *recorder.Recorder) Option {
 	}
 }
 
+// WithBrowser executes against an existing browser context.
+// The engine does not close a browser supplied this way.
+func WithBrowser(br *browser.Browser) Option {
+	return func(e *Engine) {
+		e.browser = br
+		e.externalBrowser = true
+	}
+}
+
+// WithStdout sets the writer used by commands that produce stdout.
+func WithStdout(w io.Writer) Option {
+	return func(e *Engine) {
+		if w != nil {
+			e.stdout = w
+		}
+	}
+}
+
+// WithStderr sets the writer used by commands that produce diagnostics.
+func WithStderr(w io.Writer) Option {
+	return func(e *Engine) {
+		if w != nil {
+			e.stderr = w
+		}
+	}
+}
+
 func readArchive(path string) (*archiveData, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read script: %w", err)
 	}
+	return parseArchive(data)
+}
 
+func readArchiveReader(r io.Reader) (*archiveData, error) {
+	data, err := io.ReadAll(r)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read script: %w", err)
+	}
+	return parseArchive(data)
+}
+
+func parseArchive(data []byte) (*archiveData, error) {
 	archive := txtar.Parse(data)
 	out := &archiveData{
 		Comment: cleanArchiveComment(string(archive.Comment)),
@@ -231,13 +278,26 @@ func (e *Engine) ExecuteTxtar(ctx context.Context, path string, argv []string) e
 	if err != nil {
 		return err
 	}
+	return e.executeArchive(ctx, filepath.Base(path), archive, argv)
+}
 
-	// Initialize browser
-	if err := e.initBrowser(ctx); err != nil {
-		return fmt.Errorf("failed to init browser: %w", err)
+// ExecuteReader runs a script from a txtar archive read from r.
+func (e *Engine) ExecuteReader(ctx context.Context, name string, r io.Reader, argv []string) error {
+	archive, err := readArchiveReader(r)
+	if err != nil {
+		return err
 	}
-	defer e.cleanup()
+	return e.executeArchive(ctx, name, archive, argv)
+}
 
+// ExecuteScript runs a plain .cdp script body.
+func (e *Engine) ExecuteScript(ctx context.Context, name, body string, argv []string) error {
+	archive := &archiveData{Main: body}
+	return e.executeArchive(ctx, name, archive, argv)
+}
+
+func (e *Engine) executeArchive(ctx context.Context, name string, archive *archiveData, argv []string) error {
+	defer e.cleanup()
 	// Build initial environment
 	env := []string{}
 	env = append(env, e.env...)
@@ -263,7 +323,7 @@ func (e *Engine) ExecuteTxtar(ctx context.Context, path string, argv []string) e
 			return fmt.Errorf("failed to write embedded file %s: %w", f.Name, err)
 		}
 		if e.verbose {
-			fmt.Fprintf(os.Stderr, "[engine] Extracted embedded file: %s (%d bytes)\n", f.Name, len(f.Data))
+			fmt.Fprintf(e.stderr, "[engine] Extracted embedded file: %s (%d bytes)\n", f.Name, len(f.Data))
 		}
 	}
 
@@ -275,10 +335,23 @@ func (e *Engine) ExecuteTxtar(ctx context.Context, path string, argv []string) e
 	// Execute
 	var logWriter io.Writer = io.Discard
 	if e.verbose {
-		logWriter = os.Stderr
+		logWriter = e.stderr
 	}
 
-	return e.engine.Execute(state, "main.cdp", bufio.NewReader(strings.NewReader(archive.Main)), logWriter)
+	if name == "" {
+		name = "main.cdp"
+	}
+	return e.engine.Execute(state, name, bufio.NewReader(strings.NewReader(archive.Main)), logWriter)
+}
+
+func (e *Engine) ensureBrowser(ctx context.Context) error {
+	if e.browser != nil {
+		return nil
+	}
+	if err := e.initBrowser(ctx); err != nil {
+		return fmt.Errorf("failed to init browser: %w", err)
+	}
+	return nil
 }
 
 // initBrowser initializes the browser instance.
@@ -294,7 +367,7 @@ func (e *Engine) initBrowser(ctx context.Context) error {
 		return fmt.Errorf("no Chromium-based browser found")
 	}
 	if e.verbose {
-		fmt.Fprintf(os.Stderr, "[engine] Using browser: %s\n", chromePath)
+		fmt.Fprintf(e.stderr, "[engine] Using browser: %s\n", chromePath)
 	}
 
 	// Build browser options
@@ -329,7 +402,7 @@ func (e *Engine) connectToRemoteTab(ctx context.Context) error {
 	}
 
 	if e.verbose {
-		fmt.Fprintf(os.Stderr, "[engine] Connecting to remote tab %s on port %d\n", e.remoteTabID, port)
+		fmt.Fprintf(e.stderr, "[engine] Connecting to remote tab %s on port %d\n", e.remoteTabID, port)
 	}
 
 	// Create browser with remote options
@@ -366,8 +439,12 @@ func (e *Engine) scriptTimeout() time.Duration {
 }
 
 func (e *Engine) cleanup() {
+	if e.externalBrowser {
+		return
+	}
 	if e.browser != nil {
 		e.browser.Close()
+		e.browser = nil
 	}
 	if e.recorder != nil {
 		e.recorder.Close()
@@ -424,7 +501,8 @@ func (e *Engine) commands() map[string]script.Cmd {
 		"wait-download": e.cmdWaitDownload(),
 
 		// Network
-		"block": e.cmdBlock(),
+		"block":  e.cmdBlock(),
+		"cookie": e.cmdCookie(),
 
 		// Scripting
 		"source": e.cmdSource(),
@@ -455,6 +533,108 @@ func (e *Engine) conditions() map[string]script.Cond {
 	}
 }
 
+// CommandNames returns the canonical cdpscript command names.
+func CommandNames() []string {
+	cmds := New().commands()
+	names := make([]string, 0, len(cmds))
+	for name := range cmds {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
+}
+
+// ValidateReader checks that r contains a txtar cdpscript archive and that its
+// main.cdp uses known commands. It does not start a browser or execute actions.
+func ValidateReader(name string, r io.Reader) error {
+	archive, err := readArchiveReader(r)
+	if err != nil {
+		return err
+	}
+	return ValidateScript(name, archive.Main)
+}
+
+// ValidateScript checks a plain .cdp script body for known commands and basic
+// rsc.io/script syntax. It does not start a browser or execute actions.
+func ValidateScript(name, body string) error {
+	if name == "" {
+		name = "main.cdp"
+	}
+	e := New()
+	cmds := make(map[string]script.Cmd, len(e.engine.Cmds))
+	for name, cmd := range e.engine.Cmds {
+		usage := *cmd.Usage()
+		cmds[name] = script.Command(usage, func(s *script.State, args ...string) (script.WaitFunc, error) {
+			return nil, nil
+		})
+	}
+	for _, name := range sourcedAliases(body) {
+		cmds[name] = script.Command(script.CmdUsage{
+			Summary: "sourced command from script",
+			Args:    "[args...]",
+		}, func(s *script.State, args ...string) (script.WaitFunc, error) {
+			return nil, nil
+		})
+	}
+	ve := &script.Engine{Cmds: cmds, Conds: e.conditions()}
+	state, err := script.NewState(context.Background(), os.TempDir(), nil)
+	if err != nil {
+		return err
+	}
+	if err := validateCommands(name, body, cmds); err != nil {
+		return err
+	}
+	return ve.Execute(state, name, bufio.NewReader(strings.NewReader(body)), io.Discard)
+}
+
+func sourcedAliases(body string) []string {
+	var aliases []string
+	for _, line := range strings.Split(body, "\n") {
+		fields := commandFields(line)
+		if len(fields) == 0 || fields[0] != "source" {
+			continue
+		}
+		for i := 1; i < len(fields)-1; i++ {
+			if fields[i] == "-as" {
+				aliases = append(aliases, fields[i+1])
+				break
+			}
+		}
+	}
+	return aliases
+}
+
+func validateCommands(name, body string, cmds map[string]script.Cmd) error {
+	for i, line := range strings.Split(body, "\n") {
+		fields := commandFields(line)
+		if len(fields) == 0 {
+			continue
+		}
+		if _, ok := cmds[fields[0]]; !ok {
+			return fmt.Errorf("%s:%d: unknown command %q", name, i+1, fields[0])
+		}
+	}
+	return nil
+}
+
+func commandFields(line string) []string {
+	fields := strings.Fields(strings.TrimSpace(line))
+	for len(fields) > 0 {
+		word := fields[0]
+		switch {
+		case word == "!" || word == "?":
+			fields = fields[1:]
+		case strings.HasPrefix(word, "[") && strings.HasSuffix(word, "]"):
+			fields = fields[1:]
+		case strings.HasPrefix(word, "#"):
+			return nil
+		default:
+			return fields
+		}
+	}
+	return nil
+}
+
 // Helper to create a simple command
 func simpleCmd(summary, args string, run func(s *script.State, args []string) error) script.Cmd {
 	return script.Command(
@@ -470,9 +650,12 @@ func (e *Engine) cmdGoto() script.Cmd {
 		if len(args) < 1 {
 			return fmt.Errorf("goto requires a URL")
 		}
+		if err := e.ensureBrowser(s.Context()); err != nil {
+			return err
+		}
 		url := args[0]
 		if e.verbose {
-			fmt.Fprintf(os.Stderr, "[goto] %s\n", url)
+			fmt.Fprintf(e.stderr, "[goto] %s\n", url)
 		}
 		return e.browser.Navigate(url)
 	})
@@ -488,15 +671,18 @@ func (e *Engine) cmdWait() script.Cmd {
 		// Try parsing as duration first
 		if d, err := time.ParseDuration(arg); err == nil {
 			if e.verbose {
-				fmt.Fprintf(os.Stderr, "[wait] %v\n", d)
+				fmt.Fprintf(e.stderr, "[wait] %v\n", d)
 			}
 			time.Sleep(d)
 			return nil
 		}
 
+		if err := e.ensureBrowser(s.Context()); err != nil {
+			return err
+		}
 		// Otherwise treat as selector
 		if e.verbose {
-			fmt.Fprintf(os.Stderr, "[wait] for selector: %s\n", arg)
+			fmt.Fprintf(e.stderr, "[wait] for selector: %s\n", arg)
 		}
 		return e.browser.WaitForSelector(arg, e.scriptTimeout())
 	})
@@ -507,9 +693,12 @@ func (e *Engine) cmdClick() script.Cmd {
 		if len(args) < 1 {
 			return fmt.Errorf("click requires a selector or ref")
 		}
+		if err := e.ensureBrowser(s.Context()); err != nil {
+			return err
+		}
 		target := strings.Join(args, " ")
 		if e.verbose {
-			fmt.Fprintf(os.Stderr, "[click] %s\n", target)
+			fmt.Fprintf(e.stderr, "[click] %s\n", target)
 		}
 		page := e.browser.GetCurrentPage()
 		if page == nil {
@@ -528,7 +717,7 @@ func (e *Engine) cmdClick() script.Cmd {
 		// Check if target is a ref
 		if role, name, nth, isRef := e.resolveRef(target); isRef {
 			if e.verbose {
-				fmt.Fprintf(os.Stderr, "[click] resolved ref to role=%s name=%q nth=%d\n", role, name, nth)
+				fmt.Fprintf(e.stderr, "[click] resolved ref to role=%s name=%q nth=%d\n", role, name, nth)
 			}
 			return page.ClickByRole(role, name, nth)
 		}
@@ -542,10 +731,13 @@ func (e *Engine) cmdFill() script.Cmd {
 		if len(args) < 2 {
 			return fmt.Errorf("fill requires selector/ref and value")
 		}
+		if err := e.ensureBrowser(s.Context()); err != nil {
+			return err
+		}
 		target := args[0]
 		value := strings.Join(args[1:], " ")
 		if e.verbose {
-			fmt.Fprintf(os.Stderr, "[fill] %s = %s\n", target, value)
+			fmt.Fprintf(e.stderr, "[fill] %s = %s\n", target, value)
 		}
 		page := e.browser.GetCurrentPage()
 		if page == nil {
@@ -555,7 +747,7 @@ func (e *Engine) cmdFill() script.Cmd {
 		// Check if target is a ref
 		if role, name, nth, isRef := e.resolveRef(target); isRef {
 			if e.verbose {
-				fmt.Fprintf(os.Stderr, "[fill] resolved ref to role=%s name=%q nth=%d\n", role, name, nth)
+				fmt.Fprintf(e.stderr, "[fill] resolved ref to role=%s name=%q nth=%d\n", role, name, nth)
 			}
 			return page.TypeByRole(role, name, value, nth)
 		}
@@ -574,6 +766,9 @@ func (e *Engine) cmdScreenshot() script.Cmd {
 		if len(args) < 1 {
 			return fmt.Errorf("screenshot requires filename")
 		}
+		if err := e.ensureBrowser(s.Context()); err != nil {
+			return err
+		}
 		filename := args[0]
 		if e.outputDir != "" && !filepath.IsAbs(filename) {
 			filename = filepath.Join(e.outputDir, filename)
@@ -584,7 +779,7 @@ func (e *Engine) cmdScreenshot() script.Cmd {
 		}
 
 		if e.verbose {
-			fmt.Fprintf(os.Stderr, "[screenshot] %s\n", filename)
+			fmt.Fprintf(e.stderr, "[screenshot] %s\n", filename)
 		}
 
 		var data []byte
@@ -594,7 +789,7 @@ func (e *Engine) cmdScreenshot() script.Cmd {
 		if err := os.WriteFile(filename, data, 0644); err != nil {
 			return fmt.Errorf("failed to write screenshot: %w", err)
 		}
-		fmt.Fprintf(os.Stderr, "Saved screenshot to %s (%d bytes)\n", filename, len(data))
+		fmt.Fprintf(e.stderr, "Saved screenshot to %s (%d bytes)\n", filename, len(data))
 		return nil
 	})
 }
@@ -613,9 +808,12 @@ func (e *Engine) cmdJS() script.Cmd {
 		if len(args) < 1 {
 			return fmt.Errorf("js requires code")
 		}
+		if err := e.ensureBrowser(s.Context()); err != nil {
+			return err
+		}
 		code := strings.Join(args, " ")
 		if e.verbose {
-			fmt.Fprintf(os.Stderr, "[js] %s\n", code)
+			fmt.Fprintf(e.stderr, "[js] %s\n", code)
 		}
 		_, err := e.browser.ExecuteScript(code)
 		return err
@@ -626,6 +824,9 @@ func (e *Engine) cmdJSFile() script.Cmd {
 	return simpleCmd("execute JavaScript from file", "filename", func(s *script.State, args []string) error {
 		if len(args) < 1 {
 			return fmt.Errorf("jsfile requires filename")
+		}
+		if err := e.ensureBrowser(s.Context()); err != nil {
+			return err
 		}
 		filename := args[0]
 		// If path is relative, resolve it relative to the script's workdir
@@ -638,7 +839,7 @@ func (e *Engine) cmdJSFile() script.Cmd {
 		}
 		code := string(data)
 		if e.verbose {
-			fmt.Fprintf(os.Stderr, "[jsfile] %s (%d bytes)\n", filename, len(data))
+			fmt.Fprintf(e.stderr, "[jsfile] %s (%d bytes)\n", filename, len(data))
 		}
 		result, err := e.browser.ExecuteScript(code)
 		if err != nil {
@@ -646,7 +847,7 @@ func (e *Engine) cmdJSFile() script.Cmd {
 		}
 		// If the result is meaningful, print it
 		if result != nil {
-			fmt.Printf("%v\n", result)
+			fmt.Fprintf(e.stdout, "%v\n", result)
 		}
 		return nil
 	})
@@ -655,7 +856,7 @@ func (e *Engine) cmdJSFile() script.Cmd {
 func (e *Engine) cmdLog() script.Cmd {
 	return simpleCmd("log message", "message", func(s *script.State, args []string) error {
 		msg := strings.Join(args, " ")
-		fmt.Println(msg)
+		fmt.Fprintln(e.stdout, msg)
 		return nil
 	})
 }
@@ -664,6 +865,9 @@ func (e *Engine) cmdPDF() script.Cmd {
 	return simpleCmd("save page as PDF", "filename", func(s *script.State, args []string) error {
 		if len(args) < 1 {
 			return fmt.Errorf("pdf requires filename")
+		}
+		if err := e.ensureBrowser(s.Context()); err != nil {
+			return err
 		}
 		filename := args[0]
 		if e.outputDir != "" && !filepath.IsAbs(filename) {
@@ -675,7 +879,7 @@ func (e *Engine) cmdPDF() script.Cmd {
 		}
 
 		if e.verbose {
-			fmt.Fprintf(os.Stderr, "[pdf] %s\n", filename)
+			fmt.Fprintf(e.stderr, "[pdf] %s\n", filename)
 		}
 
 		var data []byte
@@ -696,6 +900,9 @@ func (e *Engine) cmdExtract() script.Cmd {
 		if len(args) < 1 {
 			return fmt.Errorf("extract requires selector")
 		}
+		if err := e.ensureBrowser(s.Context()); err != nil {
+			return err
+		}
 		selector := strings.Join(args, " ")
 		page := e.browser.GetCurrentPage()
 		if page == nil {
@@ -706,7 +913,7 @@ func (e *Engine) cmdExtract() script.Cmd {
 			return err
 		}
 		s.Setenv("EXTRACTED", text)
-		fmt.Println(text)
+		fmt.Fprintln(e.stdout, text)
 		return nil
 	})
 }
@@ -715,6 +922,9 @@ func (e *Engine) cmdHover() script.Cmd {
 	return simpleCmd("hover over element", "selector", func(s *script.State, args []string) error {
 		if len(args) < 1 {
 			return fmt.Errorf("hover requires selector")
+		}
+		if err := e.ensureBrowser(s.Context()); err != nil {
+			return err
 		}
 		selector := strings.Join(args, " ")
 		page := e.browser.GetCurrentPage()
@@ -730,6 +940,9 @@ func (e *Engine) cmdPress() script.Cmd {
 		if len(args) < 1 {
 			return fmt.Errorf("press requires key")
 		}
+		if err := e.ensureBrowser(s.Context()); err != nil {
+			return err
+		}
 		key := args[0]
 		page := e.browser.GetCurrentPage()
 		if page == nil {
@@ -741,18 +954,27 @@ func (e *Engine) cmdPress() script.Cmd {
 
 func (e *Engine) cmdBack() script.Cmd {
 	return simpleCmd("go back in history", "", func(s *script.State, args []string) error {
+		if err := e.ensureBrowser(s.Context()); err != nil {
+			return err
+		}
 		return e.navigateHistory(-1)
 	})
 }
 
 func (e *Engine) cmdForward() script.Cmd {
 	return simpleCmd("go forward in history", "", func(s *script.State, args []string) error {
+		if err := e.ensureBrowser(s.Context()); err != nil {
+			return err
+		}
 		return e.navigateHistory(1)
 	})
 }
 
 func (e *Engine) cmdReload() script.Cmd {
 	return simpleCmd("reload page", "", func(s *script.State, args []string) error {
+		if err := e.ensureBrowser(s.Context()); err != nil {
+			return err
+		}
 		return chromedp.Run(e.browser.Context(), chromedp.Reload())
 	})
 }
@@ -770,7 +992,7 @@ func (e *Engine) navigateHistory(offset int64) error {
 		}
 
 		if e.verbose {
-			fmt.Fprintf(os.Stderr, "[history] current=%d target=%d url=%s\n", current, target, entries[target].URL)
+			fmt.Fprintf(e.stderr, "[history] current=%d target=%d url=%s\n", current, target, entries[target].URL)
 		}
 		return page.NavigateToHistoryEntry(entries[target].ID).Do(ctx)
 	}))
@@ -827,7 +1049,7 @@ func (e *Engine) cmdSource() script.Cmd {
 			if asName != "" {
 				e.registerSourcedCommand(asName, scriptContent, trace)
 				if e.verbose {
-					fmt.Fprintf(os.Stderr, "[source] Registered command: %s\n", asName)
+					fmt.Fprintf(e.stderr, "[source] Registered command: %s\n", asName)
 				}
 				// Rebuild the engine commands to include the new one
 				e.engine.Cmds = e.commands()
@@ -861,24 +1083,30 @@ func (e *Engine) registerSourcedCommand(name, scriptContent string, trace bool) 
 
 func (e *Engine) cmdTitle() script.Cmd {
 	return simpleCmd("get page title", "", func(s *script.State, args []string) error {
+		if err := e.ensureBrowser(s.Context()); err != nil {
+			return err
+		}
 		var title string
 		if err := chromedp.Run(e.browser.Context(), chromedp.Title(&title)); err != nil {
 			return fmt.Errorf("failed to get title: %w", err)
 		}
 		s.Setenv("TITLE", title)
-		fmt.Println(title)
+		fmt.Fprintln(e.stdout, title)
 		return nil
 	})
 }
 
 func (e *Engine) cmdURL() script.Cmd {
 	return simpleCmd("get current URL", "", func(s *script.State, args []string) error {
+		if err := e.ensureBrowser(s.Context()); err != nil {
+			return err
+		}
 		var url string
 		if err := chromedp.Run(e.browser.Context(), chromedp.Location(&url)); err != nil {
 			return fmt.Errorf("failed to get URL: %w", err)
 		}
 		s.Setenv("URL", url)
-		fmt.Println(url)
+		fmt.Fprintln(e.stdout, url)
 		return nil
 	})
 }
@@ -910,8 +1138,11 @@ func (e *Engine) cmdRender() script.Cmd {
 				}
 			}
 
+			if err := e.ensureBrowser(s.Context()); err != nil {
+				return nil, err
+			}
 			if e.verbose {
-				fmt.Fprintf(os.Stderr, "[render] selector=%s term=%v\n", selector, termRender)
+				fmt.Fprintf(e.stderr, "[render] selector=%s term=%v\n", selector, termRender)
 			}
 
 			var html string
@@ -934,7 +1165,7 @@ func (e *Engine) cmdRender() script.Cmd {
 			}
 
 			s.Setenv("RENDERED", output)
-			fmt.Println(output)
+			fmt.Fprintln(e.stdout, output)
 			return nil, nil
 		},
 	)
@@ -944,12 +1175,15 @@ func (e *Engine) cmdAssert() script.Cmd {
 	return script.Command(
 		script.CmdUsage{
 			Summary: "assert condition on page",
-			Args:    "exists|text|visible selector [expected]",
+			Args:    "exists|text|visible|status|response|header args...",
 			Detail: []string{
 				"Assert conditions on the page:",
-				"  assert exists selector    - element exists in DOM",
-				"  assert text selector text - element contains text",
-				"  assert visible selector   - element is visible",
+				"  assert exists selector             - element exists in DOM",
+				"  assert text selector text          - element contains text",
+				"  assert visible selector            - element is visible",
+				"  assert status url-substr code      - last matching response has status",
+				"  assert response url-substr text    - last matching response body contains text",
+				"  assert header url-substr name text - last matching response header contains text",
 			},
 		},
 		func(s *script.State, args ...string) (script.WaitFunc, error) {
@@ -961,6 +1195,9 @@ func (e *Engine) cmdAssert() script.Cmd {
 
 			switch condition {
 			case "exists":
+				if err := e.ensureBrowser(s.Context()); err != nil {
+					return nil, err
+				}
 				var count int
 				err := chromedp.Run(e.browser.Context(),
 					chromedp.Evaluate(fmt.Sprintf(`document.querySelectorAll(%q).length`, selector), &count),
@@ -972,10 +1209,13 @@ func (e *Engine) cmdAssert() script.Cmd {
 					return nil, fmt.Errorf("%w: no elements found for selector %q", ErrAssertionFailed, selector)
 				}
 				if e.verbose {
-					fmt.Fprintf(os.Stderr, "[assert] exists %s: found %d elements\n", selector, count)
+					fmt.Fprintf(e.stderr, "[assert] exists %s: found %d elements\n", selector, count)
 				}
 
 			case "text":
+				if err := e.ensureBrowser(s.Context()); err != nil {
+					return nil, err
+				}
 				if len(args) < 3 {
 					return nil, fmt.Errorf("assert text requires expected text")
 				}
@@ -989,10 +1229,13 @@ func (e *Engine) cmdAssert() script.Cmd {
 					return nil, fmt.Errorf("%w: text %q does not contain %q", ErrAssertionFailed, text, expected)
 				}
 				if e.verbose {
-					fmt.Fprintf(os.Stderr, "[assert] text %s contains %q\n", selector, expected)
+					fmt.Fprintf(e.stderr, "[assert] text %s contains %q\n", selector, expected)
 				}
 
 			case "visible":
+				if err := e.ensureBrowser(s.Context()); err != nil {
+					return nil, err
+				}
 				var visible bool
 				err := chromedp.Run(e.browser.Context(),
 					chromedp.Evaluate(fmt.Sprintf(`
@@ -1011,11 +1254,29 @@ func (e *Engine) cmdAssert() script.Cmd {
 					return nil, fmt.Errorf("%w: element %q is not visible", ErrAssertionFailed, selector)
 				}
 				if e.verbose {
-					fmt.Fprintf(os.Stderr, "[assert] visible %s: true\n", selector)
+					fmt.Fprintf(e.stderr, "[assert] visible %s: true\n", selector)
 				}
 
+			case "status":
+				if len(args) != 3 {
+					return nil, fmt.Errorf("assert status requires url substring and status code")
+				}
+				return nil, e.assertStatus(args[1], args[2])
+
+			case "response":
+				if len(args) < 3 {
+					return nil, fmt.Errorf("assert response requires url substring and expected text")
+				}
+				return nil, e.assertResponseContains(args[1], strings.Join(args[2:], " "))
+
+			case "header":
+				if len(args) < 4 {
+					return nil, fmt.Errorf("assert header requires url substring, header name, and expected text")
+				}
+				return nil, e.assertHeaderContains(args[1], args[2], strings.Join(args[3:], " "))
+
 			default:
-				return nil, fmt.Errorf("unknown assertion type: %s (use exists, text, or visible)", condition)
+				return nil, fmt.Errorf("unknown assertion type: %s (use exists, text, visible, status, response, or header)", condition)
 			}
 
 			return nil, nil
@@ -1023,14 +1284,161 @@ func (e *Engine) cmdAssert() script.Cmd {
 	)
 }
 
+func (e *Engine) assertStatus(pattern, want string) error {
+	entry, err := e.findRecordedEntry(pattern)
+	if err != nil {
+		return err
+	}
+	got := fmt.Sprint(entry.Response.Status)
+	if got != want {
+		return fmt.Errorf("%w: response %q status = %s, want %s", ErrAssertionFailed, entry.Request.URL, got, want)
+	}
+	return nil
+}
+
+func (e *Engine) assertResponseContains(pattern, want string) error {
+	entry, err := e.findRecordedEntry(pattern)
+	if err != nil {
+		return err
+	}
+	text := entry.Response.Content.Text
+	if entry.Response.Content.Encoding == "base64" {
+		decoded, err := base64.StdEncoding.DecodeString(text)
+		if err == nil {
+			text = string(decoded)
+		}
+	}
+	if !strings.Contains(text, want) {
+		return fmt.Errorf("%w: response %q body does not contain %q", ErrAssertionFailed, entry.Request.URL, want)
+	}
+	return nil
+}
+
+func (e *Engine) assertHeaderContains(pattern, name, want string) error {
+	entry, err := e.findRecordedEntry(pattern)
+	if err != nil {
+		return err
+	}
+	for _, h := range entry.Response.Headers {
+		if strings.EqualFold(h.Name, name) {
+			if strings.Contains(h.Value, want) {
+				return nil
+			}
+			return fmt.Errorf("%w: response %q header %s = %q, want it to contain %q", ErrAssertionFailed, entry.Request.URL, h.Name, h.Value, want)
+		}
+	}
+	return fmt.Errorf("%w: response %q missing header %q", ErrAssertionFailed, entry.Request.URL, name)
+}
+
+func (e *Engine) findRecordedEntry(pattern string) (*har.Entry, error) {
+	if e.recorder == nil {
+		return nil, fmt.Errorf("no HAR recording active (use 'tag' command first)")
+	}
+	h, err := e.recorder.HAR()
+	if err != nil {
+		return nil, err
+	}
+	for i := len(h.Log.Entries) - 1; i >= 0; i-- {
+		entry := h.Log.Entries[i]
+		if entry.Request != nil && strings.Contains(entry.Request.URL, pattern) {
+			return entry, nil
+		}
+	}
+	return nil, fmt.Errorf("%w: no recorded response matches %q", ErrAssertionFailed, pattern)
+}
+
+func (e *Engine) cmdCookie() script.Cmd {
+	return script.Command(
+		script.CmdUsage{
+			Summary: "get, set, or clear browser cookies",
+			Args:    "get [name] | set name value [domain] [path] | clear [name]",
+		},
+		func(s *script.State, args ...string) (script.WaitFunc, error) {
+			if len(args) < 1 {
+				return nil, fmt.Errorf("cookie requires get, set, or clear")
+			}
+			if err := e.ensureBrowser(s.Context()); err != nil {
+				return nil, err
+			}
+			switch args[0] {
+			case "get":
+				return nil, e.cookieGet(args[1:])
+			case "set":
+				return nil, e.cookieSet(args[1:])
+			case "clear":
+				return nil, e.cookieClear(args[1:])
+			default:
+				return nil, fmt.Errorf("cookie: unknown action %q", args[0])
+			}
+		},
+	)
+}
+
+func (e *Engine) cookieGet(args []string) error {
+	cookies, err := network.GetCookies().Do(e.browser.Context())
+	if err != nil {
+		return fmt.Errorf("cookie get: %w", err)
+	}
+	if len(args) == 0 {
+		data, err := json.MarshalIndent(cookies, "", "  ")
+		if err != nil {
+			return err
+		}
+		fmt.Fprintln(e.stdout, string(data))
+		return nil
+	}
+	for _, c := range cookies {
+		if c.Name == args[0] {
+			fmt.Fprintln(e.stdout, c.Value)
+			return nil
+		}
+	}
+	return fmt.Errorf("%w: cookie %q not found", ErrAssertionFailed, args[0])
+}
+
+func (e *Engine) cookieSet(args []string) error {
+	if len(args) < 2 || len(args) > 4 {
+		return fmt.Errorf("cookie set requires name value [domain] [path]")
+	}
+	var loc string
+	_ = chromedp.Run(e.browser.Context(), chromedp.Location(&loc))
+	cmd := network.SetCookie(args[0], args[1]).WithURL(loc)
+	if len(args) >= 3 {
+		cmd = cmd.WithDomain(args[2])
+	}
+	if len(args) == 4 {
+		cmd = cmd.WithPath(args[3])
+	}
+	if err := cmd.Do(e.browser.Context()); err != nil {
+		return fmt.Errorf("cookie set: %w", err)
+	}
+	return nil
+}
+
+func (e *Engine) cookieClear(args []string) error {
+	switch len(args) {
+	case 0:
+		return network.ClearBrowserCookies().Do(e.browser.Context())
+	case 1:
+		var loc string
+		_ = chromedp.Run(e.browser.Context(), chromedp.Location(&loc))
+		return network.DeleteCookies(args[0]).WithURL(loc).Do(e.browser.Context())
+	default:
+		return fmt.Errorf("cookie clear accepts at most one cookie name")
+	}
+}
+
 func (e *Engine) cmdBlock() script.Cmd {
 	return simpleCmd("block URLs matching pattern", "pattern", func(s *script.State, args []string) error {
 		if len(args) < 1 {
 			return fmt.Errorf("block requires a URL pattern")
 		}
+		if err := e.ensureBrowser(s.Context()); err != nil {
+			return err
+		}
 		pattern := args[0]
 		if e.verbose {
-			fmt.Fprintf(os.Stderr, "[block] %s\n", pattern)
+			fmt.Fprintf(e.stderr, "[block] %s\n", pattern)
 		}
 		// Use the browser's blocking mechanism
 		return e.browser.BlockURLPattern(pattern)
@@ -1055,7 +1463,7 @@ func (e *Engine) executeSourcedScript(s *script.State, content string, trace boo
 
 		// Trace output if enabled
 		if trace {
-			fmt.Fprintf(os.Stderr, "+ %s\n", line)
+			fmt.Fprintf(e.stderr, "+ %s\n", line)
 		}
 
 		// Parse the line into command and args
@@ -1109,6 +1517,9 @@ func (e *Engine) cmdSnapshot() script.Cmd {
 			},
 		},
 		func(s *script.State, args ...string) (script.WaitFunc, error) {
+			if err := e.ensureBrowser(s.Context()); err != nil {
+				return nil, err
+			}
 			opts := browser.SnapshotOptions{}
 
 			// Parse flags
@@ -1153,12 +1564,12 @@ func (e *Engine) cmdSnapshot() script.Cmd {
 			e.refMap = snapshot.Refs
 
 			// Print the tree
-			fmt.Println(snapshot.Tree)
+			fmt.Fprintln(e.stdout, snapshot.Tree)
 
 			// Print stats if verbose
 			if e.verbose {
 				stats := browser.GetSnapshotStats(snapshot.Tree, snapshot.Refs)
-				fmt.Fprintf(os.Stderr, "[snapshot] %d refs, %d interactive, %d lines\n",
+				fmt.Fprintf(e.stderr, "[snapshot] %d refs, %d interactive, %d lines\n",
 					stats["refs"], stats["interactive"], stats["lines"])
 			}
 
@@ -1206,6 +1617,9 @@ func (e *Engine) cmdTag() script.Cmd {
 			},
 		},
 		func(s *script.State, args ...string) (script.WaitFunc, error) {
+			if err := e.ensureBrowser(s.Context()); err != nil {
+				return nil, err
+			}
 			if e.recorder == nil {
 				// Create a recorder if one doesn't exist
 				rec, err := recorder.New(recorder.WithVerbose(e.verbose))
@@ -1222,7 +1636,7 @@ func (e *Engine) cmdTag() script.Cmd {
 				// Start recording network events
 				chromedp.ListenTarget(e.browser.Context(), e.recorder.HandleNetworkEvent(e.browser.Context()))
 				if e.verbose {
-					fmt.Fprintf(os.Stderr, "[tag] Started HAR recording\n")
+					fmt.Fprintf(e.stderr, "[tag] Started HAR recording\n")
 				}
 			}
 
@@ -1236,9 +1650,9 @@ func (e *Engine) cmdTag() script.Cmd {
 
 			if e.verbose {
 				if tag != "" {
-					fmt.Fprintf(os.Stderr, "[tag] Set to: %s\n", tag)
+					fmt.Fprintf(e.stderr, "[tag] Set to: %s\n", tag)
 				} else {
-					fmt.Fprintf(os.Stderr, "[tag] Cleared\n")
+					fmt.Fprintf(e.stderr, "[tag] Cleared\n")
 				}
 			}
 
@@ -1283,9 +1697,9 @@ func (e *Engine) cmdHAR() script.Cmd {
 			}
 
 			if e.verbose {
-				fmt.Fprintf(os.Stderr, "[har] Written to %s\n", filename)
+				fmt.Fprintf(e.stderr, "[har] Written to %s\n", filename)
 			}
-			fmt.Printf("HAR saved to %s\n", filename)
+			fmt.Fprintf(e.stderr, "HAR saved to %s\n", filename)
 
 			return nil, nil
 		},
@@ -1296,6 +1710,9 @@ func (e *Engine) cmdNote() script.Cmd {
 	return simpleCmd("add note to HAR", "description", func(s *script.State, args []string) error {
 		if len(args) < 1 {
 			return fmt.Errorf("note requires description")
+		}
+		if err := e.ensureBrowser(s.Context()); err != nil {
+			return err
 		}
 
 		if e.recorder == nil {
@@ -1308,7 +1725,7 @@ func (e *Engine) cmdNote() script.Cmd {
 		}
 
 		if e.verbose {
-			fmt.Fprintf(os.Stderr, "[note] Added: %s\n", description)
+			fmt.Fprintf(e.stderr, "[note] Added: %s\n", description)
 		}
 
 		return nil
@@ -1332,6 +1749,9 @@ func (e *Engine) cmdCapture() script.Cmd {
 			if len(args) < 1 {
 				return nil, fmt.Errorf("capture requires type (screenshot or dom)")
 			}
+			if err := e.ensureBrowser(s.Context()); err != nil {
+				return nil, err
+			}
 
 			if e.recorder == nil {
 				return nil, fmt.Errorf("no HAR recording active (use 'tag' command first)")
@@ -1349,7 +1769,7 @@ func (e *Engine) cmdCapture() script.Cmd {
 					return nil, fmt.Errorf("capturing screenshot: %w", err)
 				}
 				if e.verbose {
-					fmt.Fprintf(os.Stderr, "[capture] Screenshot: %s\n", description)
+					fmt.Fprintf(e.stderr, "[capture] Screenshot: %s\n", description)
 				}
 
 			case "dom":
@@ -1357,7 +1777,7 @@ func (e *Engine) cmdCapture() script.Cmd {
 					return nil, fmt.Errorf("capturing DOM: %w", err)
 				}
 				if e.verbose {
-					fmt.Fprintf(os.Stderr, "[capture] DOM: %s\n", description)
+					fmt.Fprintf(e.stderr, "[capture] DOM: %s\n", description)
 				}
 
 			default:

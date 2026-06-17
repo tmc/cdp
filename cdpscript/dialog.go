@@ -3,7 +3,6 @@ package cdpscript
 import (
 	"context"
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/chromedp/cdproto/page"
@@ -22,6 +21,9 @@ func (e *Engine) cmdDialog() script.Cmd {
 		if err != nil {
 			return err
 		}
+		if err := e.ensureBrowser(s.Context()); err != nil {
+			return err
+		}
 		if err := e.armDialog(action); err != nil {
 			return err
 		}
@@ -30,7 +32,7 @@ func (e *Engine) cmdDialog() script.Cmd {
 			if action.accept {
 				name = "accept"
 			}
-			fmt.Fprintf(os.Stderr, "[dialog] armed %s\n", name)
+			fmt.Fprintf(e.stderr, "[dialog] armed %s\n", name)
 		}
 		return nil
 	})
@@ -100,7 +102,7 @@ func (e *Engine) handleDialogEvent(ctx context.Context, ev any) {
 			cmd = cmd.WithPromptText(action.promptText)
 		}
 		if err := chromedp.Run(ctx, cmd); err != nil && e.verbose {
-			fmt.Fprintf(os.Stderr, "[dialog] handle: %v\n", err)
+			fmt.Fprintf(e.stderr, "[dialog] handle: %v\n", err)
 		}
 	}()
 }
