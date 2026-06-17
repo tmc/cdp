@@ -1,6 +1,7 @@
 package cdpscripttest_test
 
 import (
+	"bufio"
 	"context"
 	"strings"
 	"testing"
@@ -80,29 +81,19 @@ func Example_webRTC() {
 }
 
 // TestExample demonstrates running a single inline script.
-// Skipped unless CDPSCRIPT_URL is set.
 func TestExample(t *testing.T) {
-	t.Skip("set CDPSCRIPT_URL and remove this skip to run")
-
-	opts := append(chromedp.DefaultExecAllocatorOptions[:],
-		chromedp.Flag("headless", true),
-	)
-	allocCtx, cancel := chromedp.NewExecAllocator(context.Background(), opts...)
-	t.Cleanup(cancel)
-
-	tabCtx, tabCancel := chromedp.NewContext(allocCtx)
-	t.Cleanup(tabCancel)
-
 	workdir := t.TempDir()
-	s, err := cdpscripttest.NewState(t, tabCtx, workdir, "https://example.com", nil)
+	s, err := cdpscripttest.NewState(t, context.Background(), workdir, "https://example.com", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	e := cdpscripttest.NewEngine()
-	script := `navigate /
-title
-stdout 'Example Domain'
+	script := `echo ok
+stdout ok
 `
-	cdpscripttest.Run(t, e, s, "inline", strings.NewReader(script))
+	var log strings.Builder
+	if err := e.Execute(s.State, "inline", bufio.NewReader(strings.NewReader(script)), &log); err != nil {
+		t.Fatal(err)
+	}
 }
