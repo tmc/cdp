@@ -1,7 +1,8 @@
-# Verification: exploratory live-only; external site flow, not a curated CI fixture.
+# Purpose: demonstrate basic navigation, waiting, and screenshots against Google.
+# Usage: cdp run examples/basic-nav.txtar
+# Inputs: network access to www.google.com.
+# Verification: live-only; external site flow, not a CI fixture.
 
-# Basic Navigation Test
-# Tests goto, wait, and screenshot commands
 -- main.cdp --
 # Navigate to a simple page
 goto https://www.google.com

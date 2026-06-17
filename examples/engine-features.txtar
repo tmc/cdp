@@ -1,4 +1,7 @@
-# Verification: exploratory live-only; external site flow, not a curated CI fixture.
+# Purpose: exercise core cdpscript commands against example.com.
+# Usage: cdpscript examples/engine-features.txtar
+# Inputs: network access to example.com.
+# Verification: live-only; external site flow, not a CI fixture.
 
 -- main.cdp --
 # Test blocking

@@ -37,4 +37,6 @@ tmp/
 test_output_dir/
 *.heapsnapshot
 unminified/
+# Exploratory example drafts, kept local
+examples/scratch/
 $ARG1

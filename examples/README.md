@@ -3,6 +3,8 @@
 This directory contains runnable browser scripts and small supporting assets.
 Examples are not a second skill catalog; they are executable knowledge that can
 be inspected, run, and turned into tests when the workflow becomes stable.
+Exploratory drafts live under `scratch/` and are excluded from the reusable
+top-level example index.
 
 ## Example types
 
@@ -60,6 +62,7 @@ Use the command printed by `cdp attach`; do not guess tab IDs.
   key if one is visible to the signed-in profile.
 - `gdoc-to-markdown.txtar`: opens the Google Doc named by `GDOC_URL` and prints
   visible content as Markdown.
+- `simple.txtar`: demonstrates positional script arguments with `${ARG1}`.
 
 These examples are guarded by `example_contract_test.go`. The test verifies the
 header contract, `main.cdp`, and embedded `jsfile` references. It does not claim

@@ -1,4 +1,9 @@
-# Test source command-- main.cdp --
+# Purpose: exercise source -x and source -as helper command loading.
+# Usage: cdpscript examples/test-source.txtar
+# Inputs: examples/lib/wait-for-load.cdp and examples/lib/screenshot.cdp.
+# Verification: local mechanics only; writes /tmp/source-test.png.
+
+-- main.cdp --
 log === Testing has-tab condition ===
 [has-tab] log Has existing tab - skipping navigation
 [!has-tab] log No existing tab - would navigate here

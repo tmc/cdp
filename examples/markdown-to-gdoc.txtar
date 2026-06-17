@@ -1,9 +1,7 @@
-# Verification: exploratory live-only; authenticated Google Docs write flow, not a curated CI fixture.
-
-# Markdown to Google Doc
-#
-# Usage:
-#   GDOC_URL="https://docs.google.com/document/d/YOUR_DOC_ID/edit" MARKDOWN_CONTENT="$(cat doc.md)" cdpscript examples/markdown-to-gdoc.txtar
+# Purpose: insert Markdown content into an editable Google Doc.
+# Usage: GDOC_URL="https://docs.google.com/document/d/YOUR_DOC_ID/edit" MARKDOWN_CONTENT="$(cat doc.md)" cdpscript examples/markdown-to-gdoc.txtar
+# Inputs: GDOC_URL, MARKDOWN_CONTENT, and a browser profile with edit access.
+# Verification: live-only; authenticated Google Docs write flow, not a CI fixture.
 
 -- main.cdp --
 # Markdown to Google Doc Converter

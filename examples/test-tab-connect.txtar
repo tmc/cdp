@@ -1,4 +1,9 @@
-# Simple test for --tab flag-- main.cdp --
+# Purpose: smoke-test running against an existing tab.
+# Usage: cdpscript --tab <target-id> --port 9222 examples/test-tab-connect.txtar
+# Inputs: an existing Chrome DevTools tab ID.
+# Verification: local browser only; writes /tmp/tab-test-1.png.
+
+-- main.cdp --
 log Testing tab connection...
 screenshot /tmp/tab-test-1.png
 log Screenshot saved

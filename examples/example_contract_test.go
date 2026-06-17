@@ -44,6 +44,52 @@ func TestLiveDomainExamplesHaveRunnableContract(t *testing.T) {
 	}
 }
 
+func TestTopLevelExamplesHaveHeaderContract(t *testing.T) {
+	paths, err := filepath.Glob("*.txtar")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range paths {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		header := string(txtar.Parse(data).Comment)
+		for _, want := range []string{"Purpose:", "Usage:", "Inputs:", "Verification:"} {
+			if !strings.Contains(header, want) {
+				t.Errorf("%s header missing %q", path, want)
+			}
+		}
+	}
+}
+
+func TestAistudioFunctionCallingHasOneCanonicalExample(t *testing.T) {
+	paths, err := filepath.Glob("aistudio-fc*.txtar")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(paths) != 1 || paths[0] != "aistudio-fc.txtar" {
+		t.Fatalf("canonical AI Studio FC examples = %v, want [aistudio-fc.txtar]", paths)
+	}
+}
+
+func TestExamplesIncludeParameterizedScript(t *testing.T) {
+	paths, err := filepath.Glob("*.txtar")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range paths {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(string(data), "${ARG1}") || strings.Contains(string(data), "$ARG1") {
+			return
+		}
+	}
+	t.Fatal("no top-level example uses ARG1")
+}
+
 func TestSensitiveExamplesDeclareLiveOnlyBoundary(t *testing.T) {
 	paths, err := filepath.Glob("*.txtar")
 	if err != nil {

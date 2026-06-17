@@ -1,13 +1,11 @@
-# Verification: exploratory live-only; external site flow, not a curated CI fixture.
-
-# Simple CDP Script Example
-#
-# Usage:
-#   BASE_URL=https://example.com cdpscript examples/simple.txtar
+# Purpose: demonstrate a parameterized navigation and extraction flow.
+# Usage: cdpscript examples/simple.txtar https://example.com
+# Inputs: ARG1 is the URL to visit.
+# Verification: live-only; external site flow, not a CI fixture.
 
 -- main.cdp --
 # Navigate to the site
-goto ${BASE_URL}
+goto ${ARG1}
 
 # Wait for page to load
 wait h1

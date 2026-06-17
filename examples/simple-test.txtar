@@ -1,7 +1,8 @@
-# Verification: exploratory live-only; external site flow, not a curated CI fixture.
+# Purpose: smoke-test navigation and screenshots against example.com.
+# Usage: cdp run examples/simple-test.txtar
+# Inputs: network access to example.com.
+# Verification: live-only; external site flow, not a CI fixture.
 
-# Simple Test Script
-# Usage: cdp run simple-test.txtar
 -- main.cdp --
 # Navigate to example.com
 goto https://example.com

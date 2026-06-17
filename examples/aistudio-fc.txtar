@@ -1,4 +1,7 @@
-# Verification: exploratory live-only; external site flow, not a curated CI fixture.
+# Purpose: monitor an attached Google AI Studio tab for function calls and auto-fill responses.
+# Usage: cdp run --tab <TAB_ID> examples/aistudio-fc.txtar
+# Inputs: an AI Studio tab with function calling configured and a signed-in Google profile.
+# Verification: live-only; external AI Studio UI flow, not a CI fixture.
 
 -- main.cdp --
 # AI Studio Function Call Auto-Handler

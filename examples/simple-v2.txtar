@@ -1,6 +1,9 @@
-# Verification: exploratory live-only; external site flow, not a curated CI fixture.
+# Purpose: minimal rsc.io/script-style navigation example.
+# Usage: cdpscript examples/simple-v2.txtar
+# Inputs: network access to example.com.
+# Verification: live-only; external site flow, not a CI fixture.
 
-# Simple test for rsc.io/script engine-- main.cdp --
+-- main.cdp --
 # Navigate to example.com
 goto https://example.com
 
