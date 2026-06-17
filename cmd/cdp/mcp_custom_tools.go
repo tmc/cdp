@@ -8,11 +8,9 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
-	"github.com/chromedp/cdproto/input"
-	"github.com/chromedp/chromedp"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/tmc/cdp/cdpscript"
 	"github.com/tmc/cdp/internal/tooldef"
 )
 
@@ -47,7 +45,8 @@ var builtinToolNames = map[string]bool{
 	"save_sources": true, "list_sources": true, "read_source": true, "search_source": true,
 	"start_coverage": true, "stop_coverage": true, "get_coverage": true,
 	"get_coverage_delta": true, "compare_coverage": true, "list_snapshots": true,
-	"define_tool": true,
+	"define_tool":   true,
+	"run_cdpscript": true, "validate_script": true, "list_examples": true,
 }
 
 // loadAndRegisterCustomTools scans toolsDir for .cdp files and registers each
@@ -58,6 +57,10 @@ func loadAndRegisterCustomTools(server *mcp.Server, session *mcpSession, toolsDi
 		return fmt.Errorf("load tools dir: %w", err)
 	}
 	for _, def := range defs {
+		if err := cdpscript.ValidateScript(def.SourcePath, def.Script); err != nil {
+			log.Printf("warning: custom tool %q skipped: %v", def.SourcePath, err)
+			continue
+		}
 		if builtinToolNames[def.Name] {
 			log.Printf("warning: custom tool %q collides with built-in, registering as custom_%s", def.Name, def.Name)
 			def.Name = "custom_" + def.Name
@@ -120,330 +123,17 @@ func parseArguments(raw json.RawMessage) (map[string]string, error) {
 }
 
 // executeToolScript runs a cdpscript body against the MCP session's browser.
-// Variable references ($name) in the script are expanded from env.
 func executeToolScript(session *mcpSession, scriptBody string, env map[string]string) (string, error) {
-	expanded := expandVars(scriptBody, env)
+	session.mu.Lock()
+	ctx := session.ctx
+	outputDir := session.contextOutputDir()
+	session.mu.Unlock()
 
-	var stdout strings.Builder
-	for _, line := range strings.Split(expanded, "\n") {
-		line = strings.TrimSpace(line)
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-		result, err := execScriptCommand(session, line)
-		if err != nil {
-			return stdout.String(), fmt.Errorf("line %q: %w", line, err)
-		}
-		if result != "" {
-			stdout.WriteString(result)
-			stdout.WriteString("\n")
-		}
+	stdout, stderr, err := runCDPScriptBody(ctx, scriptBody, env, outputDir)
+	if err != nil && stderr != "" {
+		return stdout, fmt.Errorf("%w\n%s", err, strings.TrimSpace(stderr))
 	}
-	return strings.TrimSpace(stdout.String()), nil
-}
-
-// expandVars replaces $name references with values from env.
-func expandVars(s string, env map[string]string) string {
-	return os.Expand(s, func(key string) string {
-		if v, ok := env[key]; ok {
-			return v
-		}
-		return ""
-	})
-}
-
-// scriptCommandHandler handles a single cdpscript command.
-type scriptCommandHandler func(ctx context.Context, args string) (string, error)
-
-// builtinScriptCommands returns the map of built-in cdpscript commands.
-func builtinScriptCommands(session *mcpSession) map[string]scriptCommandHandler {
-	return map[string]scriptCommandHandler{
-		"goto": func(ctx context.Context, args string) (string, error) {
-			if args == "" {
-				return "", fmt.Errorf("goto requires a URL")
-			}
-			if err := chromedp.Run(ctx, chromedp.Navigate(args)); err != nil {
-				return "", fmt.Errorf("goto: %w", err)
-			}
-			return "", nil
-		},
-		"click": func(ctx context.Context, args string) (string, error) {
-			if args == "" {
-				return "", fmt.Errorf("click requires a selector")
-			}
-			if err := chromedp.Run(ctx, chromedp.Click(args, chromedp.ByQuery)); err != nil {
-				return "", fmt.Errorf("click: %w", err)
-			}
-			return "", nil
-		},
-		"fill": fillHandler,
-		"type": fillHandler,
-		"wait": func(ctx context.Context, args string) (string, error) {
-			if args == "" {
-				return "", fmt.Errorf("wait requires a selector or duration (e.g. 2s)")
-			}
-			// Duration overload: if args parses as a duration, sleep instead.
-			if d, err := time.ParseDuration(args); err == nil {
-				time.Sleep(d)
-				return "", nil
-			}
-			if err := chromedp.Run(ctx, chromedp.WaitVisible(args, chromedp.ByQuery)); err != nil {
-				return "", fmt.Errorf("wait: %w", err)
-			}
-			return "", nil
-		},
-		"js": func(ctx context.Context, args string) (string, error) {
-			if args == "" {
-				return "", fmt.Errorf("js requires an expression")
-			}
-			var result any
-			if err := chromedp.Run(ctx, chromedp.Evaluate(args, &result)); err != nil {
-				return "", fmt.Errorf("js: %w", err)
-			}
-			return formatResult(result), nil
-		},
-		"title": func(ctx context.Context, args string) (string, error) {
-			var title string
-			if err := chromedp.Run(ctx, chromedp.Title(&title)); err != nil {
-				return "", fmt.Errorf("title: %w", err)
-			}
-			return title, nil
-		},
-		"url": func(ctx context.Context, args string) (string, error) {
-			var loc string
-			if err := chromedp.Run(ctx, chromedp.Location(&loc)); err != nil {
-				return "", fmt.Errorf("url: %w", err)
-			}
-			return loc, nil
-		},
-		"extract": func(ctx context.Context, args string) (string, error) {
-			if args == "" {
-				return "", fmt.Errorf("extract requires a selector")
-			}
-			var text string
-			if err := chromedp.Run(ctx, chromedp.Text(args, &text, chromedp.ByQuery)); err != nil {
-				return "", fmt.Errorf("extract: %w", err)
-			}
-			return text, nil
-		},
-		"screenshot": func(ctx context.Context, args string) (string, error) {
-			var buf []byte
-			if err := chromedp.Run(ctx, chromedp.FullScreenshot(&buf, 100)); err != nil {
-				return "", fmt.Errorf("screenshot: %w", err)
-			}
-			return "(screenshot captured)", nil
-		},
-		"reload": func(ctx context.Context, args string) (string, error) {
-			if err := chromedp.Run(ctx, chromedp.Reload()); err != nil {
-				return "", fmt.Errorf("reload: %w", err)
-			}
-			return "", nil
-		},
-		"back": func(ctx context.Context, args string) (string, error) {
-			if err := chromedp.Run(ctx, chromedp.NavigateBack()); err != nil {
-				return "", fmt.Errorf("back: %w", err)
-			}
-			return "", nil
-		},
-		"forward": func(ctx context.Context, args string) (string, error) {
-			if err := chromedp.Run(ctx, chromedp.NavigateForward()); err != nil {
-				return "", fmt.Errorf("forward: %w", err)
-			}
-			return "", nil
-		},
-		"snapshot": func(ctx context.Context, args string) (string, error) {
-			if args != "" {
-				// Named snapshot for diffing.
-				root, err := captureAXTree(ctx)
-				if err != nil {
-					return "", fmt.Errorf("snapshot: %w", err)
-				}
-				if session.domSnapshots == nil {
-					session.domSnapshots = newDomSnapshotStore()
-				}
-				session.domSnapshots.save(args, root)
-				return fmt.Sprintf("snapshot %q saved (%d nodes)", args, countNodes(root)), nil
-			}
-			// No name — return the AX tree like page_snapshot.
-			result, err := buildAXSnapshot(ctx, session.refs)
-			if err != nil {
-				return "", fmt.Errorf("snapshot: %w", err)
-			}
-			return result, nil
-		},
-		"snapshot-diff": func(ctx context.Context, args string) (string, error) {
-			before, after, ok := splitFirstArg(args)
-			if !ok {
-				return "", fmt.Errorf("snapshot-diff requires two snapshot names")
-			}
-			if session.domSnapshots == nil {
-				return "", fmt.Errorf("no snapshots available")
-			}
-			b := session.domSnapshots.get(before)
-			if b == nil {
-				return "", fmt.Errorf("snapshot %q not found", before)
-			}
-			a := session.domSnapshots.get(after)
-			if a == nil {
-				return "", fmt.Errorf("snapshot %q not found", after)
-			}
-			return diffDom(b, a), nil
-		},
-		"scroll": func(ctx context.Context, args string) (string, error) {
-			if args == "" {
-				args = "down"
-			}
-			dir, rest, _ := strings.Cut(args, " ")
-			distance := 500
-			if rest != "" {
-				if d, err := fmt.Sscanf(rest, "%d", &distance); err != nil || d == 0 {
-					distance = 500
-				}
-			}
-			var deltaX, deltaY float64
-			switch dir {
-			case "down":
-				deltaY = float64(distance)
-			case "up":
-				deltaY = -float64(distance)
-			case "right":
-				deltaX = float64(distance)
-			case "left":
-				deltaX = -float64(distance)
-			default:
-				return "", fmt.Errorf("scroll: unknown direction %q", dir)
-			}
-			var result map[string]any
-			if err := chromedp.Run(ctx, chromedp.Evaluate(`({x: window.innerWidth/2, y: window.innerHeight/2})`, &result)); err != nil {
-				return "", fmt.Errorf("scroll: %w", err)
-			}
-			x, _ := result["x"].(float64)
-			y, _ := result["y"].(float64)
-			if err := chromedp.Run(ctx, chromedp.ActionFunc(func(ctx context.Context) error {
-				return input.DispatchMouseEvent(input.MouseWheel, x, y).
-					WithDeltaX(deltaX).WithDeltaY(deltaY).Do(ctx)
-			})); err != nil {
-				return "", fmt.Errorf("scroll: %w", err)
-			}
-			return fmt.Sprintf("scrolled %s %dpx", dir, distance), nil
-		},
-		"press": func(ctx context.Context, args string) (string, error) {
-			if args == "" {
-				return "", fmt.Errorf("press requires a key name")
-			}
-			key, mods, _ := strings.Cut(args, " ")
-			if err := chromedp.Run(ctx, chromedp.ActionFunc(func(ctx context.Context) error {
-				return pressKey(ctx, key, mods)
-			})); err != nil {
-				return "", fmt.Errorf("press: %w", err)
-			}
-			return "", nil
-		},
-		"hover": func(ctx context.Context, args string) (string, error) {
-			if args == "" {
-				return "", fmt.Errorf("hover requires a selector")
-			}
-			if err := hoverBySelector(ctx, args); err != nil {
-				return "", fmt.Errorf("hover: %w", err)
-			}
-			return "", nil
-		},
-		"focus": func(ctx context.Context, args string) (string, error) {
-			if args == "" {
-				return "", fmt.Errorf("focus requires a selector")
-			}
-			if err := chromedp.Run(ctx, chromedp.Focus(args, chromedp.ByQuery)); err != nil {
-				return "", fmt.Errorf("focus: %w", err)
-			}
-			return "", nil
-		},
-		"intercept": func(ctx context.Context, args string) (string, error) {
-			// intercept <action> <url-pattern>
-			action, pattern, ok := splitFirstArg(args)
-			if !ok {
-				return "", fmt.Errorf("intercept requires action and url pattern")
-			}
-			if err := ensureInterceptEnabled(session); err != nil {
-				return "", fmt.Errorf("intercept: %w", err)
-			}
-			rule := interceptRule{
-				URLPattern: pattern,
-				Stage:      "request",
-				Action:     action,
-			}
-			id := session.intercepts.addRule(rule)
-			return fmt.Sprintf("intercept rule %s: %s %s", id, action, pattern), nil
-		},
-		"save-state": func(ctx context.Context, args string) (string, error) {
-			if args == "" {
-				args = "state.json"
-			}
-			// Delegate to JS for storage capture.
-			var ls, ss map[string]string
-			chromedp.Run(ctx, chromedp.Evaluate(`(function(){var r={};for(var i=0;i<localStorage.length;i++){var k=localStorage.key(i);r[k]=localStorage.getItem(k);}return r;})()`, &ls))
-			chromedp.Run(ctx, chromedp.Evaluate(`(function(){var r={};for(var i=0;i<sessionStorage.length;i++){var k=sessionStorage.key(i);r[k]=sessionStorage.getItem(k);}return r;})()`, &ss))
-			state := map[string]any{"local_storage": ls, "session_storage": ss}
-			data, _ := json.Marshal(state)
-			if err := os.WriteFile(args, data, 0644); err != nil {
-				return "", fmt.Errorf("save-state: %w", err)
-			}
-			return fmt.Sprintf("state saved to %s", args), nil
-		},
-	}
-}
-
-func fillHandler(ctx context.Context, args string) (string, error) {
-	sel, text, ok := splitFirstArg(args)
-	if !ok {
-		return "", fmt.Errorf("fill requires selector and text")
-	}
-	if err := chromedp.Run(ctx, chromedp.SendKeys(sel, text, chromedp.ByQuery)); err != nil {
-		return "", fmt.Errorf("fill: %w", err)
-	}
-	return "", nil
-}
-
-// execScriptCommand dispatches a single cdpscript command line against the browser.
-func execScriptCommand(session *mcpSession, line string) (string, error) {
-	cmd, args := splitCommand(line)
-	ctx := session.activeCtx()
-
-	commands := builtinScriptCommands(session)
-	if handler, ok := commands[cmd]; ok {
-		return handler(ctx, args)
-	}
-	return "", fmt.Errorf("unknown command: %s", cmd)
-}
-
-// splitCommand splits a line into the command name and the rest.
-func splitCommand(line string) (cmd, args string) {
-	cmd, args, _ = strings.Cut(line, " ")
-	return cmd, strings.TrimSpace(args)
-}
-
-// splitFirstArg splits args into the first whitespace-delimited token and the remainder.
-// Used for commands like "fill <selector> <text>".
-func splitFirstArg(args string) (first, rest string, ok bool) {
-	first, rest, ok = strings.Cut(strings.TrimSpace(args), " ")
-	rest = strings.TrimSpace(rest)
-	return first, rest, ok
-}
-
-// formatResult converts an arbitrary JS evaluation result to a string.
-func formatResult(v any) string {
-	if v == nil {
-		return ""
-	}
-	switch val := v.(type) {
-	case string:
-		return val
-	default:
-		b, err := json.Marshal(val)
-		if err != nil {
-			return fmt.Sprint(val)
-		}
-		return string(b)
-	}
+	return stdout, err
 }
 
 // registerDefineToolMeta registers the define_tool meta-tool for dynamic tool creation.
@@ -507,9 +197,23 @@ func registerDefineToolMeta(server *mcp.Server, session *mcpSession, toolsDir st
 			def.Inputs = append(def.Inputs, inp)
 		}
 
-		// Write the .cdp file.
-		path := filepath.Join(toolsDir, input.Name+".cdp")
 		content := tooldef.Generate(def)
+		parsed, err := tooldef.Parse(content, "define_tool")
+		if err != nil {
+			return &mcp.CallToolResult{
+				Content: []mcp.Content{&mcp.TextContent{Text: fmt.Sprintf("invalid tool definition: %v", err)}},
+				IsError: true,
+			}, nil, nil
+		}
+		if err := cdpscript.ValidateScript(parsed.Name, parsed.Script); err != nil {
+			return &mcp.CallToolResult{
+				Content: []mcp.Content{&mcp.TextContent{Text: fmt.Sprintf("invalid cdpscript: %v", err)}},
+				IsError: true,
+			}, nil, nil
+		}
+
+		// Write the .cdp file only after parse and dry-run validation.
+		path := filepath.Join(toolsDir, toolName+".cdp")
 		if err := os.MkdirAll(toolsDir, 0755); err != nil {
 			return nil, nil, fmt.Errorf("create tools dir: %w", err)
 		}

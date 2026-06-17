@@ -53,6 +53,7 @@ func registerMCPTools(server *mcp.Server, session *mcpSession, cfg mcpConfig) {
 	registerExtensionTools(server, session)
 	registerActionDiffTool(server, session)
 	registerNetworkTools(server, session)
+	registerCDPScriptTools(server, session)
 	if cfg.EnableInspect {
 		registerInspectTools(server, session)
 	}

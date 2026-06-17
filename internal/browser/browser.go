@@ -44,6 +44,17 @@ type Browser struct {
 	lastHTML       string
 }
 
+// FromContext returns a Browser wrapper around an existing chromedp context.
+// The returned Browser does not own the context; Close leaves it running.
+func FromContext(ctx context.Context) *Browser {
+	return &Browser{
+		ctx:           ctx,
+		cancelFunc:    func() {},
+		opts:          defaultOptions(),
+		attachedToTab: true,
+	}
+}
+
 // New creates a new Browser with the provided options
 func New(ctx context.Context, profileMgr browserprofile.ProfileManager, opts ...Option) (*Browser, error) {
 	// Create default options

@@ -1,38 +1,50 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"os"
+	"sort"
 	"strings"
+
+	"github.com/tmc/cdp/cdpscript"
+	"github.com/tmc/cdp/internal/browser"
 )
 
-// expandToolVars replaces $name occurrences in s with values from env.
-func expandToolVars(s string, env map[string]string) string {
-	for k, v := range env {
-		s = strings.ReplaceAll(s, "$"+k, v)
+func runCDPScriptBody(ctx context.Context, scriptBody string, env map[string]string, outputDir string) (stdout, stderr string, err error) {
+	if ctx == nil {
+		return "", "", fmt.Errorf("browser not ready")
 	}
-	return s
+	var out bytes.Buffer
+	var errout bytes.Buffer
+	opts := []cdpscript.Option{
+		cdpscript.WithBrowser(browser.FromContext(ctx)),
+		cdpscript.WithEnv(os.Environ()...),
+		cdpscript.WithEnv(toolEnv(env)...),
+		cdpscript.WithStdout(&out),
+		cdpscript.WithStderr(&errout),
+	}
+	if outputDir != "" {
+		opts = append(opts, cdpscript.WithOutputDir(outputDir))
+	}
+	engine := cdpscript.New(opts...)
+	err = engine.ExecuteScript(ctx, "tool.cdp", scriptBody, nil)
+	return strings.TrimSpace(out.String()), errout.String(), err
 }
 
-// executeToolLines runs each line of a tool script body against a CommandRegistry
-// in the given chromedp context. Lines starting with # are comments. Blank lines
-// are skipped. Variables ($name) in env are expanded before execution.
-//
-// The executor func maps a (ctx, line) pair to execution — in the interactive
-// shell this calls im.executeCommand; in MCP mode it may call something else.
-func executeToolLines(ctx context.Context, script string, env map[string]string, executor func(context.Context, string) error) (string, error) {
-	expanded := expandToolVars(script, env)
-	lines := strings.Split(expanded, "\n")
-
-	var output strings.Builder
-	for i, line := range lines {
-		line = strings.TrimSpace(line)
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-		if err := executor(ctx, line); err != nil {
-			return output.String(), fmt.Errorf("line %d (%s): %w", i+1, line, err)
-		}
+func toolEnv(env map[string]string) []string {
+	if len(env) == 0 {
+		return nil
 	}
-	return output.String(), nil
+	keys := make([]string, 0, len(env))
+	for k := range env {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	out := make([]string, 0, len(keys))
+	for _, k := range keys {
+		out = append(out, k+"="+env[k])
+	}
+	return out
 }

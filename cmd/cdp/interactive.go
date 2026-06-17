@@ -1556,9 +1556,13 @@ func (im *InteractiveMode) registerToolCommand(def *tooldef.ToolDef) {
 					env[inp.Name] = args[i]
 				}
 			}
-			_, err := executeToolLines(ctx, d.Script, env, func(c context.Context, line string) error {
-				return im.executeCommand(line)
-			})
+			stdout, stderr, err := runCDPScriptBody(im.ctx, d.Script, env, im.contextOutputDir())
+			if stdout != "" {
+				fmt.Println(stdout)
+			}
+			if stderr != "" && im.verbose {
+				fmt.Fprint(os.Stderr, stderr)
+			}
 			return err
 		},
 	})
