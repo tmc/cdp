@@ -1205,6 +1205,7 @@ func main() {
 		harMode         string // HAR capture mode: simple, enhanced (default: enhanced)
 		harlStream      bool   // Stream HAR entries as NDJSON
 		harlFile        string // File to stream NDJSON to
+		maxBodyBytes    int64
 		interactive     bool
 		background      bool
 		command         string
@@ -1299,6 +1300,7 @@ func main() {
 	flag.StringVar(&harMode, "har-mode", "enhanced", "HAR capture mode: enhanced (complete headers/bodies/POST data) or simple (fast, basic)")
 	flag.BoolVar(&harlStream, "harl", false, "Stream HAR entries as NDJSON")
 	flag.StringVar(&harlFile, "harl-file", "output.har.jsonl", "File to stream NDJSON to (use '-' for stdout)")
+	flag.Int64Var(&maxBodyBytes, "max-body-bytes", 0, "Maximum response body bytes to keep in HAR/HARL (0 keeps full bodies)")
 	flag.BoolVar(&interactive, "interactive", false, "Keep browser open for interaction")
 	flag.BoolVar(&background, "background", false, "Launch browser in background without focusing window")
 	flag.StringVar(&command, "command", "", "Execute a single CDP command")
@@ -1384,6 +1386,7 @@ func main() {
 			APIPort:           apiPort,
 			LoadExtensions:    loadExtensions,
 			EnableInspect:     enableInspect,
+			MaxBodyBytes:      maxBodyBytes,
 		}
 		if err := runMCP(mcpCfg); err != nil {
 			exitWithError(ExitGeneralError, ErrorTypeGeneral, "MCP server: %v", err)
@@ -1594,6 +1597,7 @@ func main() {
 			APIPort:           apiPort,
 			HarlStream:        harlStream,
 			HarlFile:          harlFile,
+			MaxBodyBytes:      maxBodyBytes,
 		})
 		return
 	}
@@ -1904,6 +1908,7 @@ func main() {
 							harrecorder.WithVerbose(verbose),
 							harrecorder.WithStreaming(harlStream),
 							harrecorder.WithOutputDir(outputDir),
+							harrecorder.WithMaxBodyBytes(maxBodyBytes),
 						}
 						recOpts = appendHARLOutputOptions(recOpts, outputDir, harlFile)
 						if !noScrub {
@@ -2778,6 +2783,7 @@ func main() {
 						harrecorder.WithVerbose(verbose),
 						harrecorder.WithStreaming(harlStream),
 						harrecorder.WithOutputDir(outputDir),
+						harrecorder.WithMaxBodyBytes(maxBodyBytes),
 					}
 					recOpts = appendHARLOutputOptions(recOpts, outputDir, harlFile)
 					if !noScrub {
@@ -4284,6 +4290,7 @@ func handleEnhancedMode(command string, interactive bool, cfg fullCaptureConfig)
 					harrecorder.WithVerbose(cfg.Verbose),
 					harrecorder.WithStreaming(true),
 					harrecorder.WithOutputDir(cfg.OutputDir),
+					harrecorder.WithMaxBodyBytes(cfg.MaxBodyBytes),
 				}
 				recOpts = appendHARLOutputOptions(recOpts, cfg.OutputDir, cfg.HarlFile)
 				if !cfg.NoScrub {
@@ -4493,6 +4500,7 @@ type fullCaptureConfig struct {
 	LoadExtensions    string
 	HarlStream        bool   // stream HAR entries as NDJSON
 	HarlFile          string // file to stream NDJSON to (use "-" for stdout)
+	MaxBodyBytes      int64
 }
 
 // resolveDebugPort checks if the desired port is available. If it's in use

@@ -48,6 +48,7 @@ type options struct {
 	headless        bool
 	filter          string
 	template        string
+	maxBodyBytes    int64
 	interactiveMode bool
 	debugPort       int    // Chrome debug port
 	timeout         int    // Global timeout in seconds
@@ -215,6 +216,7 @@ func main() {
 	flag.BoolVar(&opts.headless, "headless", false, "Run Chrome in headless mode")
 	flag.StringVar(&opts.filter, "filter", "", "JQ expression to filter HAR entries")
 	flag.StringVar(&opts.template, "template", "", "Go template to transform HAR entries")
+	flag.Int64Var(&opts.maxBodyBytes, "max-body-bytes", 0, "Maximum response body bytes to keep in HAR/HARL (0 keeps full bodies)")
 	flag.BoolVar(&opts.interactiveMode, "interactive", false, "Run in interactive CLI mode")
 	flag.IntVar(&opts.debugPort, "debug-port", 0, "Use specific port for Chrome DevTools (0 for auto)")
 	flag.IntVar(&opts.timeout, "timeout", 180, "Global timeout in seconds (default: 180)")
@@ -516,6 +518,7 @@ func (r *Runner) Run(ctx context.Context, opts options) error {
 		recorder.WithStreaming(opts.streaming),
 		recorder.WithFilter(opts.filter),
 		recorder.WithTemplate(opts.template),
+		recorder.WithMaxBodyBytes(opts.maxBodyBytes),
 	)
 	if err != nil {
 		return fmt.Errorf("%w: failed to create network recorder: %w", recorder.ErrNetworkRecord, err)

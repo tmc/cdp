@@ -196,6 +196,7 @@ type mcpConfig struct {
 	APIPort           int
 	LoadExtensions    string
 	EnableInspect     bool
+	MaxBodyBytes      int64
 }
 
 // runMCP starts the MCP server with browser session tools on stdio.
@@ -307,6 +308,7 @@ func runMCP(cfg mcpConfig) error {
 				harrecorder.WithVerbose(cfg.Verbose),
 				harrecorder.WithStreaming(true),
 				harrecorder.WithOutputDir(cfg.OutputDir),
+				harrecorder.WithMaxBodyBytes(cfg.MaxBodyBytes),
 			}
 			if scrubber != nil {
 				opts = append(opts, harrecorder.WithScrubber(scrubber))
