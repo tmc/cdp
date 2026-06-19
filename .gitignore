@@ -42,4 +42,5 @@ examples/scratch/
 # Local audit/review tool output
 notebooklm-improve-out*/
 bakeoff-*-findings.md
+docs/planning/reviews/
 *.err
