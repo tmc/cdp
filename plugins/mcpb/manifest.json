@@ -1,0 +1,41 @@
+{
+  "manifest_version": "0.3",
+  "name": "cdp",
+  "display_name": "cdp — Chrome DevTools Protocol",
+  "version": "0.1.0",
+  "description": "Drive Chrome over the DevTools Protocol from Claude: navigate, screenshot, extract content, capture HAR, and intercept network traffic.",
+  "long_description": "cdp exposes a Chrome DevTools Protocol automation toolkit as MCP tools. It can launch or attach to Chrome, navigate, click and type by selector or coordinate, take screenshots and PDFs, extract text and HTML, capture HAR/HARL network logs, intercept and block requests, manage cookies and storage, and emulate devices. Secrets in captured network and source output are redacted by default.\n\nThe server is the `cdp` binary running in MCP stdio mode (`cdp --mcp --headless`). Install it with `go install github.com/tmc/cdp/cmd/cdp@latest` (Go 1.26+) and make sure your Go bin directory is on PATH. To run with a visible browser or a capture output directory, edit the generated server config and adjust the args (see plugins/mcpb/README.md).",
+  "author": {
+    "name": "Travis Cline",
+    "url": "https://github.com/tmc"
+  },
+  "homepage": "https://github.com/tmc/cdp",
+  "documentation": "https://github.com/tmc/cdp/blob/main/docs/plugins.md",
+  "support": "https://github.com/tmc/cdp/issues",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/tmc/cdp"
+  },
+  "license": "MIT",
+  "keywords": [
+    "chrome",
+    "cdp",
+    "browser-automation",
+    "devtools",
+    "har",
+    "screenshot"
+  ],
+  "server": {
+    "type": "binary",
+    "entry_point": "cdp",
+    "mcp_config": {
+      "command": "cdp",
+      "args": ["--mcp", "--headless"]
+    }
+  },
+  "compatibility": {
+    "runtimes": {
+      "binary": ">=0.1.0"
+    }
+  }
+}

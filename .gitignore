@@ -39,6 +39,8 @@ test_output_dir/
 unminified/
 # Exploratory example drafts, kept local
 examples/scratch/
+# Built MCP bundle artifacts
+*.mcpb
 # Local audit/review tool output
 notebooklm-improve-out*/
 bakeoff-*-findings.md

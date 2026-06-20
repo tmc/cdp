@@ -1,0 +1,21 @@
+{
+  "name": "cdp",
+  "description": "Chrome DevTools Protocol browser automation for Claude Code: navigate, screenshot, extract, capture HAR, intercept network, and drive Chrome over MCP.",
+  "version": "0.1.0",
+  "author": {
+    "name": "Travis Cline",
+    "url": "https://github.com/tmc"
+  },
+  "homepage": "https://github.com/tmc/cdp",
+  "repository": "https://github.com/tmc/cdp",
+  "license": "MIT",
+  "keywords": [
+    "chrome",
+    "cdp",
+    "browser-automation",
+    "devtools",
+    "har",
+    "screenshot",
+    "mcp"
+  ]
+}

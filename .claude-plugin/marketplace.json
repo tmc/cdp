@@ -1,0 +1,21 @@
+{
+  "name": "cdp",
+  "owner": {
+    "name": "Travis Cline",
+    "url": "https://github.com/tmc"
+  },
+  "metadata": {
+    "description": "Chrome DevTools Protocol browser automation for Claude Code."
+  },
+  "plugins": [
+    {
+      "name": "cdp",
+      "source": ".",
+      "description": "Chrome DevTools Protocol browser automation: navigate, screenshot, extract, capture HAR, intercept network, and drive Chrome over MCP, plus browser-automation skills.",
+      "version": "0.1.0",
+      "author": {
+        "name": "Travis Cline"
+      }
+    }
+  ]
+}

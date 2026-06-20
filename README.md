@@ -207,6 +207,7 @@ See [docs/planning/cdp-best-in-class-checklist.md](docs/planning/cdp-best-in-cla
 ## Documentation
 
 - [docs/usage.md](docs/usage.md)
+- [docs/plugins.md](docs/plugins.md)
 - [docs/cdp.md](docs/cdp.md)
 - [docs/churl.md](docs/churl.md)
 - [docs/langmodel.md](docs/langmodel.md)
