@@ -8,5 +8,4 @@
 
 [mcp_servers.cdp]
 command = "cdp"
-args = ["--mcp", "--headless"]
-# startup_timeout_sec = 20  # raise if first Chrome launch is slow on your machine
+args = ["-mcp", "-headless"]

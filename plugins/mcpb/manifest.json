@@ -4,7 +4,7 @@
   "display_name": "cdp — Chrome DevTools Protocol",
   "version": "0.1.0",
   "description": "Drive Chrome over the DevTools Protocol from Claude: navigate, screenshot, extract content, capture HAR, and intercept network traffic.",
-  "long_description": "cdp exposes a Chrome DevTools Protocol automation toolkit as MCP tools. It can launch or attach to Chrome, navigate, click and type by selector or coordinate, take screenshots and PDFs, extract text and HTML, capture HAR/HARL network logs, intercept and block requests, manage cookies and storage, and emulate devices. Secrets in captured network and source output are redacted by default.\n\nThe server is the `cdp` binary running in MCP stdio mode (`cdp --mcp --headless`). Install it with `go install github.com/tmc/cdp/cmd/cdp@latest` (Go 1.26+) and make sure your Go bin directory is on PATH. To run with a visible browser or a capture output directory, edit the generated server config and adjust the args (see plugins/mcpb/README.md).",
+  "long_description": "cdp exposes a Chrome DevTools Protocol automation toolkit as MCP tools. It can launch or attach to Chrome, navigate, click and type by selector or coordinate, take screenshots and PDFs, extract text and HTML, capture HAR/HARL network logs, intercept and block requests, manage cookies and storage, and emulate devices. Secrets in captured HAR and source-capture output are redacted by default (disable with -no-scrub).\n\nThe server is the `cdp` binary running in MCP stdio mode. Install it with `go install github.com/tmc/cdp/cmd/cdp@latest` (Go 1.26+), then set the \"Path to the cdp binary\" config to where it landed (the default is ~/go/bin/cdp). The bundle does not embed the binary; it launches your installed copy by absolute path so it works regardless of the desktop app's PATH.",
   "author": {
     "name": "Travis Cline",
     "url": "https://github.com/tmc"
@@ -27,15 +27,23 @@
   ],
   "server": {
     "type": "binary",
-    "entry_point": "cdp",
+    "entry_point": "${user_config.cdp_path}",
     "mcp_config": {
-      "command": "cdp",
-      "args": ["--mcp", "--headless"]
+      "command": "${user_config.cdp_path}",
+      "args": ["-mcp", "-headless"]
     }
   },
-  "compatibility": {
-    "runtimes": {
-      "binary": ">=0.1.0"
+  "user_config": {
+    "cdp_path": {
+      "type": "file",
+      "title": "Path to the cdp binary",
+      "description": "Absolute path to the cdp binary from `go install github.com/tmc/cdp/cmd/cdp@latest`. The default assumes the standard Go bin directory; change it if your GOBIN/GOPATH differs.",
+      "required": true,
+      "default": "${HOME}/go/bin/cdp"
     }
+  },
+  "tools_generated": true,
+  "compatibility": {
+    "platforms": ["darwin", "win32", "linux"]
   }
 }

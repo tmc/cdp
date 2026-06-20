@@ -1,4 +1,5 @@
 {
+  "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "cdp",
   "description": "Chrome DevTools Protocol browser automation for Claude Code: navigate, screenshot, extract, capture HAR, intercept network, and drive Chrome over MCP.",
   "version": "0.1.0",
@@ -17,5 +18,13 @@
     "har",
     "screenshot",
     "mcp"
-  ]
+  ],
+  "userConfig": {
+    "headless": {
+      "type": "boolean",
+      "title": "Run Chrome headless",
+      "description": "Run Chrome without a visible window. Disable to watch the browser while Claude drives it.",
+      "default": true
+    }
+  }
 }

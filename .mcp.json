@@ -2,7 +2,7 @@
   "mcpServers": {
     "cdp": {
       "command": "cdp",
-      "args": ["--mcp", "--headless"]
+      "args": ["-mcp", "-headless=${user_config.headless}"]
     }
   }
 }
