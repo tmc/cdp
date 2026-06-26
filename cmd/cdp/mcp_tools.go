@@ -565,7 +565,11 @@ func registerTabTools(server *mcp.Server, s *mcpSession) {
 		Name:        "list_tabs",
 		Description: "List all open browser tabs",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input struct{}) (*mcp.CallToolResult, ListTabsOutput, error) {
-		targets, err := chromedp.Targets(s.browserCtx)
+		browserCtx, err := s.browserContext(ctx)
+		if err != nil {
+			return nil, ListTabsOutput{}, fmt.Errorf("list_tabs: %w", err)
+		}
+		targets, err := chromedp.Targets(browserCtx)
 		if err != nil {
 			return nil, ListTabsOutput{}, fmt.Errorf("list_tabs: %w", err)
 		}
@@ -586,8 +590,12 @@ func registerTabTools(server *mcp.Server, s *mcpSession) {
 		Name:        "switch_tab",
 		Description: "Switch to a browser tab by target ID",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input SwitchTabInput) (*mcp.CallToolResult, TabOutput, error) {
+		browserCtx, err := s.browserContext(ctx)
+		if err != nil {
+			return nil, TabOutput{}, fmt.Errorf("switch_tab: %w", err)
+		}
 		// Validate target exists and check its type before attempting attach.
-		targets, err := chromedp.Targets(s.browserCtx)
+		targets, err := chromedp.Targets(browserCtx)
 		if err != nil {
 			return nil, TabOutput{}, fmt.Errorf("switch_tab: list targets: %w", err)
 		}
@@ -608,7 +616,7 @@ func registerTabTools(server *mcp.Server, s *mcpSession) {
 				}},
 			}, TabOutput{ID: input.ID}, nil
 		}
-		tabCtx, tabCancel := chromedp.NewContext(s.browserCtx, chromedp.WithTargetID(target.ID(input.ID)))
+		tabCtx, tabCancel := chromedp.NewContext(browserCtx, chromedp.WithTargetID(target.ID(input.ID)))
 		// Attach and enable Page+Runtime domains so subsequent navigate/screenshot
 		// calls work reliably. A bare no-op Run attaches but doesn't enable the
 		// domains on the new session, causing timeouts on the next tool call.
@@ -638,7 +646,11 @@ func registerTabTools(server *mcp.Server, s *mcpSession) {
 		Name:        "new_tab",
 		Description: "Open a new browser tab, optionally navigating to a URL",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input NewTabInput) (*mcp.CallToolResult, TabOutput, error) {
-		tabCtx, tabCancel := chromedp.NewContext(s.browserCtx)
+		browserCtx, err := s.browserContext(ctx)
+		if err != nil {
+			return nil, TabOutput{}, fmt.Errorf("new_tab: %w", err)
+		}
+		tabCtx, tabCancel := chromedp.NewContext(browserCtx)
 		var actions []chromedp.Action
 		timeout := 10 * time.Second
 		if input.URL != "" {
@@ -661,6 +673,11 @@ func registerTabTools(server *mcp.Server, s *mcpSession) {
 		}
 		s.setActiveCtx(tabCtx, tabCancel)
 		var out TabOutput
+		// Report the new target's ID alongside title/URL; without reading it
+		// from the tab context the response would carry an empty id.
+		if c := chromedp.FromContext(tabCtx); c != nil && c.Target != nil {
+			out.ID = string(c.Target.TargetID)
+		}
 		_ = runWithTimeout(tabCtx, 5*time.Second, chromedp.Title(&out.Title), chromedp.Location(&out.URL))
 		return nil, out, nil
 	})
@@ -669,16 +686,25 @@ func registerTabTools(server *mcp.Server, s *mcpSession) {
 		Name:        "close_tab",
 		Description: "Close a browser tab by target ID. If no ID given, closes the current tab.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input CloseTabInput) (*mcp.CallToolResult, any, error) {
+		browserCtx, err := s.browserContext(ctx)
+		if err != nil {
+			return nil, nil, fmt.Errorf("close_tab: %w", err)
+		}
 		tid := input.TargetID
 		if tid == "" {
 			// Close the current tab.
-			tid = string(chromedp.FromContext(s.activeCtx()).Target.TargetID)
+			if c := chromedp.FromContext(s.activeCtx()); c != nil && c.Target != nil {
+				tid = string(c.Target.TargetID)
+			}
+		}
+		if tid == "" {
+			return nil, nil, fmt.Errorf("close_tab: no target id and no active tab")
 		}
 		// Validate target exists before attempting close.
-		if err := validateTarget(s.browserCtx, tid); err != nil {
+		if err := validateTarget(browserCtx, tid); err != nil {
 			return nil, nil, fmt.Errorf("close_tab: %w", err)
 		}
-		if err := chromedp.Run(s.browserCtx, chromedp.ActionFunc(func(ctx context.Context) error {
+		if err := chromedp.Run(browserCtx, chromedp.ActionFunc(func(ctx context.Context) error {
 			return target.CloseTarget(target.ID(tid)).Do(ctx)
 		})); err != nil {
 			return nil, nil, fmt.Errorf("close_tab: %w", err)
@@ -751,6 +777,16 @@ func registerConnectTool(server *mcp.Server, s *mcpSession) {
 		s.mu.Lock()
 		s.browserCtx = browserCtx
 		s.ctx = browserCtx
+		// A successful connect supersedes any earlier setup failure, so clear
+		// the recorded error and ensure browserContext() stops waiting/erroring.
+		s.setupErr = nil
+		if s.browserReady != nil {
+			select {
+			case <-s.browserReady:
+			default:
+				close(s.browserReady)
+			}
+		}
 		s.cancel = func() {
 			browserCancel()
 			allocCancel()

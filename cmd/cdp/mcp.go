@@ -22,6 +22,8 @@ import (
 type mcpSession struct {
 	mu                sync.Mutex
 	browserCtx        context.Context    // browser-level context
+	browserReady      chan struct{}      // closed when browser setup finishes (success or failure)
+	setupErr          error              // non-nil if browser setup failed; read after browserReady is closed
 	ctx               context.Context    // active tab context
 	tabCancel         context.CancelFunc // cancels the current tab context (nil for initial tab)
 	cancel            context.CancelFunc // cancels the browser context
@@ -42,11 +44,51 @@ type mcpSession struct {
 	contextStack      []string
 }
 
-// activeCtx returns the current active tab context.
+// activeCtx returns the current active tab context, waiting for browser setup
+// to finish first. Browser setup runs in a background goroutine, so a tool call
+// can arrive before s.ctx is populated; returning a nil context here makes
+// callers (e.g. requestToolCtx -> context.WithTimeout(nil, ...)) panic, which
+// the MCP SDK recovers per-request without replying — the client then hangs
+// until its own timeout. Waiting closes that race. If setup never populates a
+// context (e.g. it failed), this returns a context that is already cancelled,
+// so callers surface a clean error instead of panicking.
 func (s *mcpSession) activeCtx() context.Context {
+	if s.browserReady != nil {
+		<-s.browserReady
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.ctx == nil {
+		cancelled, cancel := context.WithCancel(context.Background())
+		cancel()
+		return cancelled
+	}
 	return s.ctx
+}
+
+// browserContext returns the browser-level context, waiting for browser setup
+// to finish first. Browser setup runs in a background goroutine, so a tool call
+// can arrive before browserCtx is populated; without this wait, handlers would
+// dereference a nil context and panic, which the MCP SDK recovers per-request
+// without sending a response — the client then hangs until its own timeout.
+// The wait is bounded by reqCtx. If setup failed, the recorded error is returned.
+func (s *mcpSession) browserContext(reqCtx context.Context) (context.Context, error) {
+	if s.browserReady != nil {
+		select {
+		case <-s.browserReady:
+		case <-reqCtx.Done():
+			return nil, fmt.Errorf("browser not ready: %w", reqCtx.Err())
+		}
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.setupErr != nil {
+		return nil, fmt.Errorf("browser setup failed: %w", s.setupErr)
+	}
+	if s.browserCtx == nil {
+		return nil, fmt.Errorf("browser not available")
+	}
+	return s.browserCtx, nil
 }
 
 func (s *mcpSession) getCoverageStore() coverage.Store {
@@ -234,8 +276,9 @@ func runMCP(cfg mcpConfig) error {
 	// to initialize before the browser is ready. Browser setup runs in
 	// the background; tools that need it will block until ready.
 	session := &mcpSession{
-		refs:      newRefRegistry(),
-		outputDir: cfg.OutputDir,
+		refs:         newRefRegistry(),
+		outputDir:    cfg.OutputDir,
+		browserReady: make(chan struct{}),
 	}
 
 	// Set up secret scrubber (default on, --no-scrub to disable).
@@ -277,9 +320,17 @@ func runMCP(cfg mcpConfig) error {
 	// Set up browser in a goroutine so the MCP server can respond to
 	// initialize immediately. The browser is typically ready within a
 	// few seconds, well before the first tool call arrives.
-	browserReady := make(chan struct{})
+	browserReady := session.browserReady
 	go func() {
 		defer close(browserReady)
+
+		// recordSetupErr stores a setup failure so browserContext() can return a
+		// clean error to tool callers instead of leaving browserCtx nil forever.
+		recordSetupErr := func(err error) {
+			session.mu.Lock()
+			session.setupErr = err
+			session.mu.Unlock()
+		}
 
 		fcfg := fullCaptureConfig{
 			Verbose:           cfg.Verbose,
@@ -293,6 +344,7 @@ func runMCP(cfg mcpConfig) error {
 		browserCtx, browserCancel, _, err := setupChromeForEnhanced(ctx, fcfg)
 		if err != nil {
 			log.Printf("error: setup browser: %v", err)
+			recordSetupErr(fmt.Errorf("setup browser: %w", err))
 			return
 		}
 
@@ -301,6 +353,7 @@ func runMCP(cfg mcpConfig) error {
 		if cfg.OutputDir != "" {
 			if err := os.MkdirAll(cfg.OutputDir, 0755); err != nil {
 				log.Printf("error: create output dir: %v", err)
+				recordSetupErr(fmt.Errorf("create output dir: %w", err))
 				browserCancel()
 				return
 			}
@@ -316,6 +369,7 @@ func runMCP(cfg mcpConfig) error {
 			rec, err = harrecorder.New(opts...)
 			if err != nil {
 				log.Printf("error: create recorder: %v", err)
+				recordSetupErr(fmt.Errorf("create recorder: %w", err))
 				browserCancel()
 				return
 			}
