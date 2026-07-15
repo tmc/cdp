@@ -20,6 +20,7 @@ import (
 	"github.com/chromedp/cdproto/cdp"
 	"github.com/chromedp/cdproto/css"
 	"github.com/chromedp/cdproto/debugger"
+	"github.com/chromedp/cdproto/page"
 	"github.com/chromedp/chromedp"
 	"github.com/tmc/cdp/internal/scrub"
 	"github.com/tmc/cdp/internal/sitegroup"
@@ -75,6 +76,8 @@ type Collector struct {
 	fetchCh        chan fetchItem    // channel for incremental capture
 	done           chan struct{}     // closed when background goroutine exits
 	incremental    bool              // whether incremental mode is active
+	pageMu         sync.RWMutex
+	pageDomain     string // registrable domain of the current top-level page
 }
 
 // New creates a source collector that writes to outputDir.
@@ -310,6 +313,13 @@ func (c *Collector) HandleEvent(ev any) {
 }
 
 func (c *Collector) dispatch(ctx context.Context, ev any) {
+	if e, ok := ev.(*page.EventFrameNavigated); ok && e.Frame != nil && e.Frame.ParentID == "" {
+		c.pageMu.Lock()
+		c.pageDomain = sourcePageDomain(e.Frame.URL)
+		c.pageMu.Unlock()
+		return
+	}
+
 	switch ev := ev.(type) {
 	case *debugger.EventScriptParsed:
 		if debugEvents {
@@ -419,9 +429,9 @@ func (c *Collector) CaptureAll(ctx context.Context) error {
 }
 
 // WriteToDisk writes all captured sources to the output directory.
-// Layout: outputDir/registrable-domain/sources/origin/_compiled/path for
-// served files, and outputDir/registrable-domain/sources/origin/... for
-// sourcemapped originals.
+// Layout: outputDir/page-domain/sources/origin/_compiled/path for served
+// files, and outputDir/page-domain/sources/origin/... for sourcemapped
+// originals.
 func (c *Collector) WriteToDisk() error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -562,8 +572,22 @@ func (c *Collector) writeSourceMap(origin, sourceURL, sourceMapURL, compiledSour
 	return wrote, firstErr
 }
 
+func sourcePageDomain(rawURL string) string {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return "unknown_domain"
+	}
+	return sitegroup.RegistrableDomain(u.Hostname())
+}
+
 func (c *Collector) sourcePath(origin string, parts ...string) string {
-	path := filepath.Join(c.outputDir, sitegroup.RegistrableDomain(origin), "sources", origin)
+	c.pageMu.RLock()
+	page := c.pageDomain
+	c.pageMu.RUnlock()
+	if page == "" {
+		page = "unknown_domain"
+	}
+	path := filepath.Join(c.outputDir, page, "sources", origin)
 	for _, part := range parts {
 		if part != "" {
 			path = filepath.Join(path, part)

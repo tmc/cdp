@@ -18,9 +18,11 @@ import (
 	"github.com/chromedp/cdproto/fetch"
 	"github.com/chromedp/cdproto/har"
 	"github.com/chromedp/cdproto/network"
+	"github.com/chromedp/cdproto/page"
 	"github.com/chromedp/chromedp"
 
 	"github.com/tmc/cdp/internal/scrub"
+	"github.com/tmc/cdp/internal/sitegroup"
 )
 
 type Annotation struct {
@@ -61,6 +63,7 @@ type Recorder struct {
 	postData     map[network.RequestID]string
 	timings      map[network.RequestID]*network.EventLoadingFinished
 	requestTags  map[network.RequestID]string // Tag for each request
+	requestPages map[network.RequestID]string // Page domain for each request
 	annotations  []*Annotation                // Manual annotations from shell commands
 	verbose      bool
 	streaming    bool
@@ -76,6 +79,7 @@ type Recorder struct {
 
 	// Tag tracking
 	currentTag string      // Currently active tag
+	pageDomain string      // Registrable domain of the current top-level page
 	tagRanges  []*TagRange // History of tag ranges
 
 	// Secret scrubbing
@@ -197,17 +201,18 @@ func (r *Recorder) Close() {
 
 func New(opts ...Option) (*Recorder, error) {
 	r := &Recorder{
-		requests:    make(map[network.RequestID]*network.Request),
-		responses:   make(map[network.RequestID]*network.Response),
-		bodies:      make(map[network.RequestID]capturedBody),
-		postData:    make(map[network.RequestID]string),
-		timings:     make(map[network.RequestID]*network.EventLoadingFinished),
-		requestTags: make(map[network.RequestID]string),
-		annotations: make([]*Annotation, 0),
-		fetchBodies: make(map[network.RequestID]capturedBody),
-		tagRanges:   make([]*TagRange, 0),
-		writes:      make(chan writerCmd, writeQueueSize),
-		writerDone:  make(chan struct{}),
+		requests:     make(map[network.RequestID]*network.Request),
+		responses:    make(map[network.RequestID]*network.Response),
+		bodies:       make(map[network.RequestID]capturedBody),
+		postData:     make(map[network.RequestID]string),
+		timings:      make(map[network.RequestID]*network.EventLoadingFinished),
+		requestTags:  make(map[network.RequestID]string),
+		requestPages: make(map[network.RequestID]string),
+		annotations:  make([]*Annotation, 0),
+		fetchBodies:  make(map[network.RequestID]capturedBody),
+		tagRanges:    make([]*TagRange, 0),
+		writes:       make(chan writerCmd, writeQueueSize),
+		writerDone:   make(chan struct{}),
 	}
 
 	for _, opt := range opts {
@@ -219,6 +224,14 @@ func New(opts ...Option) (*Recorder, error) {
 	go r.writerLoop()
 
 	return r, nil
+}
+
+func pageDomain(rawURL string) string {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return "unknown_domain"
+	}
+	return sitegroup.RegistrableDomain(u.Hostname())
 }
 
 func (r *Recorder) captureBody(body []byte) capturedBody {
@@ -254,6 +267,13 @@ func (r *Recorder) HandleNetworkEvent(ctx context.Context) func(interface{}) {
 	return func(ev interface{}) {
 		r.Lock()
 		defer r.Unlock()
+		if e, ok := ev.(*page.EventFrameNavigated); ok && e.Frame != nil && e.Frame.ParentID == "" {
+			r.pageDomain = pageDomain(e.Frame.URL)
+			if r.verbose {
+				log.Printf("Page navigated: %s (group %s)", e.Frame.URL, r.pageDomain)
+			}
+			return
+		}
 
 		// WebSocket events are dispatched to a dedicated handler. They share
 		// the recorder mutex with the HTTP path so streaming entries to the
@@ -276,6 +296,7 @@ func (r *Recorder) HandleNetworkEvent(ctx context.Context) func(interface{}) {
 				log.Printf("Request: %s %s", e.Request.Method, e.Request.URL)
 			}
 			r.requests[e.RequestID] = e.Request
+			r.requestPages[e.RequestID] = r.pageDomain
 			// Tag this request with the current tag
 			if r.currentTag != "" {
 				r.requestTags[e.RequestID] = r.currentTag
@@ -318,13 +339,14 @@ func (r *Recorder) HandleNetworkEvent(ctx context.Context) func(interface{}) {
 			// race with push/pop-context changing the output dir.
 			snapshotDir := r.outputDir
 			snapshotTag := r.currentTag
+			snapshotPage := r.requestPages[e.RequestID]
 
 			// Fetch response bodies for both streaming and non-streaming modes.
 			// NOTE: GetResponseBody can fail with -32000 ("No resource with given
 			// identifier found") for redirects, cached responses, and service worker
 			// responses where Chrome evicts the body before we fetch it. This is a
 			// known CDP limitation.
-			go func(reqID network.RequestID, snapDir, snapTag string) {
+			go func(reqID network.RequestID, snapDir, snapTag, snapPage string) {
 				r.Lock()
 				fetchCtx := r.ctx
 				r.Unlock()
@@ -372,7 +394,7 @@ func (r *Recorder) HandleNetworkEvent(ctx context.Context) func(interface{}) {
 							savedDir := r.outputDir
 							r.outputDir = snapDir
 							entry := r.buildStreamEntry(reqID, resp, nil)
-							r.streamEntry(entry)
+							r.streamEntryAtPage(entry, snapPage, snapDir)
 							r.outputDir = savedDir
 						}
 						r.Unlock()
@@ -396,12 +418,12 @@ func (r *Recorder) HandleNetworkEvent(ctx context.Context) func(interface{}) {
 						savedDir := r.outputDir
 						r.outputDir = snapDir
 						entry := r.buildStreamEntry(reqID, resp, &captured)
-						r.streamEntry(entry)
+						r.streamEntryAtPage(entry, snapPage, snapDir)
 						r.outputDir = savedDir
 					}
 				}
 				r.Unlock()
-			}(e.RequestID, snapshotDir, snapshotTag)
+			}(e.RequestID, snapshotDir, snapshotTag, snapshotPage)
 		}
 	}
 }
@@ -442,6 +464,7 @@ func (r *Recorder) HandleFetchEvent(ctx context.Context) func(interface{}) {
 		r.Lock()
 		snapshotDir := r.outputDir
 		snapshotTag := r.currentTag
+		snapshotPage := r.pageDomain
 		r.Unlock()
 
 		// Response stage — capture body then continue.
@@ -488,6 +511,7 @@ func (r *Recorder) HandleFetchEvent(ctx context.Context) func(interface{}) {
 			// Store the request if not already known from Network events.
 			if _, exists := r.requests[netID]; !exists {
 				r.requests[netID] = e.Request
+				r.requestPages[netID] = snapshotPage
 				if snapshotTag != "" {
 					r.requestTags[netID] = snapshotTag
 				}
@@ -539,7 +563,7 @@ func (r *Recorder) HandleFetchEvent(ctx context.Context) func(interface{}) {
 					// the correct push-context subdirectory.
 					savedDir := r.outputDir
 					r.outputDir = snapshotDir
-					r.streamEntry(entry)
+					r.streamEntryAtPage(entry, snapshotPage, snapshotDir)
 					r.outputDir = savedDir
 				}
 			}
@@ -647,6 +671,14 @@ func scrubURL(s *scrub.Scrubber, rawURL string) string {
 }
 
 func (r *Recorder) streamEntry(entry *har.Entry) {
+	r.Lock()
+	page := r.pageDomain
+	dir := r.outputDir
+	r.Unlock()
+	r.streamEntryAtPage(entry, page, dir)
+}
+
+func (r *Recorder) streamEntryAtPage(entry *har.Entry, page, dir string) {
 	if r.filter != nil && r.filter.JQExpr != "" {
 		filtered, err := r.applyJQFilter(entry)
 		if err != nil {
@@ -680,8 +712,8 @@ func (r *Recorder) streamEntry(entry *har.Entry) {
 		return
 	}
 
-	if r.outputDir != "" {
-		if err := r.writeToDomainFile(entry, jsonBytes); err != nil {
+	if dir != "" {
+		if err := r.writeToDomainFileAtPage(entry, page, dir, jsonBytes); err != nil {
 			if r.verbose {
 				log.Printf("Error writing to domain file: %v", err)
 			}
@@ -712,6 +744,12 @@ func appendJSONL(file string, data []byte) error {
 // writeToDomainFile streams entry to a domain-specific file via the writer
 // goroutine. Returns immediately; disk I/O happens asynchronously.
 func (r *Recorder) writeToDomainFile(entry *har.Entry, data []byte) error {
+	page := r.pageDomain
+	dir := r.outputDir
+	return r.writeToDomainFileAtPage(entry, page, dir, data)
+}
+
+func (r *Recorder) writeToDomainFileAtPage(entry *har.Entry, page, dir string, data []byte) error {
 	var uStr string
 	if entry.Request != nil && entry.Request.URL != "" {
 		uStr = entry.Request.URL
@@ -719,7 +757,7 @@ func (r *Recorder) writeToDomainFile(entry *har.Entry, data []byte) error {
 	if uStr == "" {
 		return fmt.Errorf("no URL in entry")
 	}
-	return r.writeRawToDomainFile(uStr, r.outputDir, data)
+	return r.writeRawToDomainFileAtPage(uStr, page, dir, data)
 }
 
 // writeRawToDomainFile enqueues a pre-marshaled JSON line for the writer
@@ -727,7 +765,12 @@ func (r *Recorder) writeToDomainFile(entry *har.Entry, data []byte) error {
 // WebSocket streaming paths. Non-blocking: under sustained backpressure the
 // write is dropped and Recorder.dropped is incremented (see writer.go).
 func (r *Recorder) writeRawToDomainFile(rawURL, dir string, data []byte) error {
-	return r.enqueueWrite(rawURL, dir, data)
+	page := r.pageDomain
+	return r.writeRawToDomainFileAtPage(rawURL, page, dir, data)
+}
+
+func (r *Recorder) writeRawToDomainFileAtPage(rawURL, page, dir string, data []byte) error {
+	return r.enqueueWrite(rawURL, page, dir, data)
 }
 
 // HAR returns the HAR data structure

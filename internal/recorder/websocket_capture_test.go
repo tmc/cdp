@@ -80,7 +80,7 @@ func TestWebSocketCapture(t *testing.T) {
 	// Force any open writer to flush.
 	r.CloseDomainWriters()
 
-	path := filepath.Join(dir, "example.com", "realtime.example.com.jsonl")
+	path := filepath.Join(dir, "unknown_domain", "realtime.example.com.jsonl")
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("expected JSONL file at %s: %v", path, err)

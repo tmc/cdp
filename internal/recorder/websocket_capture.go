@@ -41,6 +41,7 @@ type wsConn struct {
 	errorMessage    string
 	tag             string
 	outputDir       string // snapshotted at WebSocketCreated time
+	pageDomain      string // snapshotted at WebSocketCreated time
 }
 
 // wsHAREntry is the JSON shape we emit for a WebSocket connection. It mirrors
@@ -105,6 +106,7 @@ func (r *Recorder) wsCreated(e *network.EventWebSocketCreated) {
 		responseHeaders: map[string]string{},
 		tag:             r.currentTag,
 		outputDir:       r.outputDir,
+		pageDomain:      r.pageDomain,
 	}
 	r.ws.conns[e.RequestID] = c
 	if r.verbose {
@@ -251,7 +253,7 @@ func (r *Recorder) streamWSEntry(c *wsConn) {
 		if dir == "" {
 			dir = r.outputDir
 		}
-		if err := r.writeRawToDomainFile(c.url, dir, jsonBytes); err != nil {
+		if err := r.writeRawToDomainFileAtPage(c.url, c.pageDomain, dir, jsonBytes); err != nil {
 			if r.verbose {
 				log.Printf("Error writing WS entry: %v", err)
 			}

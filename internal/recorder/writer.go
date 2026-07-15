@@ -7,8 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"sync/atomic"
-
-	"github.com/tmc/cdp/internal/sitegroup"
 )
 
 // writerCmd is a command sent from any event-loop goroutine to the writer
@@ -16,9 +14,10 @@ import (
 // message.
 type writerCmd struct {
 	// write fields
-	hostname string
-	dir      string
-	data     []byte
+	hostname   string
+	pageDomain string
+	dir        string
+	data       []byte
 
 	// control: when ack != nil, the writer signals completion of the
 	// preceding command before continuing to the next.
@@ -56,7 +55,7 @@ func (r *Recorder) writerLoop() {
 	for cmd := range r.writes {
 		switch cmd.op {
 		case opWrite:
-			if err := writeOne(domainWriters, cmd.hostname, cmd.dir, cmd.data); err != nil {
+			if err := writeOne(domainWriters, cmd.hostname, cmd.pageDomain, cmd.dir, cmd.data); err != nil {
 				if r.verbose {
 					log.Printf("recorder: write %s: %v", cmd.hostname, err)
 				}
@@ -81,12 +80,16 @@ func (r *Recorder) writerLoop() {
 // writeOne resolves the per-host writer (opening lazily) and writes a single
 // JSON line. domainWriters is owned by the writer goroutine; this function
 // runs only from there.
-func writeOne(domainWriters map[string]*os.File, hostname, dir string, data []byte) error {
+func writeOne(domainWriters map[string]*os.File, hostname, pageDomain, dir string, data []byte) error {
 	if hostname == "" {
 		hostname = "unknown_domain"
 	}
+	if pageDomain == "" {
+		pageDomain = "unknown_domain"
+	}
 
-	writer, ok := domainWriters[hostname]
+	key := pageDomain + "\x00" + hostname
+	writer, ok := domainWriters[key]
 	if ok {
 		if _, statErr := writer.Stat(); statErr != nil {
 			writer.Close()
@@ -95,7 +98,7 @@ func writeOne(domainWriters map[string]*os.File, hostname, dir string, data []by
 		}
 	}
 	if !ok {
-		groupDir := filepath.Join(dir, sitegroup.RegistrableDomain(hostname))
+		groupDir := filepath.Join(dir, pageDomain)
 		if err := os.MkdirAll(groupDir, 0755); err != nil {
 			return err
 		}
@@ -105,7 +108,7 @@ func writeOne(domainWriters map[string]*os.File, hostname, dir string, data []by
 			return err
 		}
 		writer = f
-		domainWriters[hostname] = writer
+		domainWriters[key] = writer
 	}
 
 	_, err := fmt.Fprintln(writer, string(data))
@@ -123,7 +126,7 @@ func writeOne(domainWriters map[string]*os.File, hostname, dir string, data []by
 // Returns an error only for inputs the writer can never handle (e.g. an
 // unparseable URL). Disk errors surface via the writer goroutine's verbose
 // log; callers do not see them.
-func (r *Recorder) enqueueWrite(rawURL, dir string, data []byte) error {
+func (r *Recorder) enqueueWrite(rawURL, pageDomain, dir string, data []byte) error {
 	if rawURL == "" {
 		return fmt.Errorf("no URL")
 	}
@@ -138,7 +141,7 @@ func (r *Recorder) enqueueWrite(rawURL, dir string, data []byte) error {
 		return nil
 	}
 
-	cmd := writerCmd{op: opWrite, hostname: hostname, dir: dir, data: data}
+	cmd := writerCmd{op: opWrite, hostname: hostname, pageDomain: pageDomain, dir: dir, data: data}
 	select {
 	case r.writes <- cmd:
 	default:

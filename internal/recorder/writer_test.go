@@ -10,8 +10,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/chromedp/cdproto/cdp"
 	"github.com/chromedp/cdproto/har"
 	"github.com/chromedp/cdproto/network"
+	"github.com/chromedp/cdproto/page"
 )
 
 // TestWriterDoesNotBlockOnRecorderLock verifies that disk I/O is decoupled
@@ -63,7 +65,7 @@ func TestWriterDoesNotBlockOnRecorderLock(t *testing.T) {
 	// Force flush.
 	r.CloseDomainWriters()
 
-	path := filepath.Join(dir, "example.com", "example.com.jsonl")
+	path := filepath.Join(dir, "unknown_domain", "example.com.jsonl")
 	got, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("read jsonl: %v", err)
@@ -71,6 +73,35 @@ func TestWriterDoesNotBlockOnRecorderLock(t *testing.T) {
 	for _, want := range [][]byte{[]byte(`{"x":1}`), []byte(`{"x":2}`)} {
 		if !bytes.Contains(got, want) {
 			t.Errorf("missing entry %q in:\n%s", want, got)
+		}
+	}
+}
+
+func TestWriterGroupsRequestsByPageDomain(t *testing.T) {
+	dir := t.TempDir()
+	r, err := New(WithStreaming(true), WithOutputDir(dir))
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := r.HandleNetworkEvent(context.Background())
+	handler(&page.EventFrameNavigated{Frame: &cdp.Frame{URL: "https://www.lesswrong.com/posts/test"}})
+	if err := r.writeRawToDomainFile("https://res.cloudinary.com/image", dir, []byte(`{"url":"cloudinary"}`)); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.writeRawToDomainFile("https://p.typekit.net/font", dir, []byte(`{"url":"typekit"}`)); err != nil {
+		t.Fatal(err)
+	}
+	r.Close()
+
+	for _, host := range []string{"res.cloudinary.com", "p.typekit.net"} {
+		path := filepath.Join(dir, "lesswrong.com", host+".jsonl")
+		if _, err := os.Stat(path); err != nil {
+			t.Fatalf("stat %s: %v", path, err)
+		}
+	}
+	for _, group := range []string{"cloudinary.com", "typekit.net"} {
+		if _, err := os.Stat(filepath.Join(dir, group)); !os.IsNotExist(err) {
+			t.Fatalf("unexpected per-request group %s", group)
 		}
 	}
 }

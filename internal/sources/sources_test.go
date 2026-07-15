@@ -5,14 +5,26 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/chromedp/cdproto/cdp"
 	"github.com/chromedp/cdproto/debugger"
+	"github.com/chromedp/cdproto/page"
 )
 
 func TestSourcePathUsesSiteGroup(t *testing.T) {
 	c := New(filepath.Join(t.TempDir(), "capture"), false)
+	c.pageDomain = "lesswrong.com"
 	got := c.sourcePath("cdn.lesswrong.com", "_compiled", "app.js")
 	want := filepath.Join(c.OutputDir(), "lesswrong.com", "sources", "cdn.lesswrong.com", "_compiled", "app.js")
 	if got != want {
+		t.Fatalf("sourcePath = %q, want %q", got, want)
+	}
+}
+
+func TestSourcePathTracksNavigatedPage(t *testing.T) {
+	c := New(filepath.Join(t.TempDir(), "capture"), false)
+	c.Listener(context.Background())(&page.EventFrameNavigated{Frame: &cdp.Frame{URL: "https://www.lesswrong.com/posts/test"}})
+	want := filepath.Join(c.OutputDir(), "lesswrong.com", "sources", "cdn.lesswrong.com", "_compiled", "app.js")
+	if got := c.sourcePath("cdn.lesswrong.com", "_compiled", "app.js"); got != want {
 		t.Fatalf("sourcePath = %q, want %q", got, want)
 	}
 }

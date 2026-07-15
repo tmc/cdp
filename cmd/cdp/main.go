@@ -4353,7 +4353,7 @@ func handleEnhancedMode(command string, interactive bool, cfg fullCaptureConfig)
 					exitWithError(ExitGeneralError, ErrorTypeGeneral, "Failed to create recorder: %v", err)
 				}
 
-				if err := chromedp.Run(chromeCtx, network.Enable()); err != nil {
+				if err := chromedp.Run(chromeCtx, network.Enable(), page.Enable()); err != nil {
 					log.Printf("Warning: failed to enable network monitoring: %v", err)
 				} else {
 					chromedp.ListenTarget(chromeCtx, enhancedRec.HandleNetworkEvent(chromeCtx))
@@ -4393,7 +4393,7 @@ func handleEnhancedMode(command string, interactive bool, cfg fullCaptureConfig)
 
 					if cfg.Verbose {
 						if cfg.OutputDir != "" {
-							log.Printf("Streaming HAR entries as NDJSON to %s/{domain}.jsonl", cfg.OutputDir)
+							log.Printf("Streaming HAR entries as NDJSON to %s/{page-domain}/{hostname}.jsonl", cfg.OutputDir)
 						} else if cfg.HarlFile == "-" {
 							log.Println("Streaming HAR entries as NDJSON to stdout")
 						} else {
