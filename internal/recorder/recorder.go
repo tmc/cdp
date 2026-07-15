@@ -44,6 +44,11 @@ type capturedBody struct {
 	OriginalSize int
 }
 
+const (
+	fetchBodyTimeout     = 10 * time.Second
+	fetchContinueTimeout = 2 * time.Second
+)
+
 func (b capturedBody) truncated() bool {
 	return b.OriginalSize > len(b.Data)
 }
@@ -442,16 +447,23 @@ func (r *Recorder) HandleFetchEvent(ctx context.Context) func(interface{}) {
 		// Response stage — capture body then continue.
 		go func() {
 			var body []byte
-			err := chromedp.Run(ctx, chromedp.ActionFunc(func(c context.Context) error {
+			bodyCtx, bodyCancel := context.WithTimeout(ctx, fetchBodyTimeout)
+			err := chromedp.Run(bodyCtx, chromedp.ActionFunc(func(c context.Context) error {
 				var fetchErr error
 				body, fetchErr = fetch.GetResponseBody(e.RequestID).Do(c)
 				return fetchErr
 			}))
+			bodyCancel()
 
-			// Always continue the response regardless of body fetch result.
-			if contErr := chromedp.Run(ctx, chromedp.ActionFunc(func(c context.Context) error {
+			// Always continue the response regardless of body fetch result. Use
+			// a fresh deadline so a timed-out body request cannot leave Chrome
+			// paused indefinitely.
+			continueCtx, continueCancel := context.WithTimeout(ctx, fetchContinueTimeout)
+			contErr := chromedp.Run(continueCtx, chromedp.ActionFunc(func(c context.Context) error {
 				return fetch.ContinueResponse(e.RequestID).Do(c)
-			})); contErr != nil {
+			}))
+			continueCancel()
+			if contErr != nil {
 				if r.verbose {
 					log.Printf("fetch: continue response %s: %v", e.RequestID, contErr)
 				}
