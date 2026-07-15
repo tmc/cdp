@@ -1645,6 +1645,7 @@ func main() {
 			HarlFile:          harlFile,
 			MaxBodyBytes:      maxBodyBytes,
 			NavigationTimeout: navigationTimeout,
+			AutoDiscover:      autoDiscover,
 		})
 		return
 	}
@@ -1682,7 +1683,7 @@ func main() {
 
 	// Auto-discover browser if not explicitly specified
 	var selectedBrowser *BrowserCandidate
-	if autoDiscover && chromePath == "" && remoteHost == "" {
+	if autoDiscover && chromePath == "" && remoteHost == "" && !fullCapture && command == "" {
 		candidates, err := discoverBrowsers(verbose)
 		if err != nil && verbose {
 			log.Printf("Warning: browser discovery failed: %v", err)
@@ -4540,6 +4541,7 @@ type fullCaptureConfig struct {
 	DebugPort         int
 	DebugPortExplicit bool // true when --debug-port was explicitly set
 	ConnectExisting   bool // true when --connect-existing was set
+	AutoDiscover      bool
 	RemoteHost        string
 	RemotePort        int
 	TabID             string
@@ -4652,7 +4654,7 @@ func setupChromeForEnhanced(ctx context.Context, cfg fullCaptureConfig) (context
 		if verbose {
 			log.Printf("--connect-existing with explicit --debug-port %d: connecting directly", debugPort)
 		}
-	} else if selectedPath == "" {
+	} else if shouldDiscoverBrowser(cfg) {
 		// Auto-discover browser — prefer connecting to a running instance with debug port.
 		// When a running browser is found, its actual debug port overrides debugPort above,
 		// since we're connecting to it rather than launching a new one.
@@ -4871,11 +4873,13 @@ func setupChromeForEnhanced(ctx context.Context, cfg fullCaptureConfig) (context
 		chromedp.WithErrorf(filteredErrorf),
 	)
 
-	// Verify the browser starts by navigating to about:blank.
+	// Verify the browser starts by attaching to a target and evaluating a
+	// trivial expression. This checks process/CDP readiness without waiting
+	// for a page load; the user's navigation establishes page state later.
 	// Use browserCtx directly — do NOT wrap in context.WithTimeout,
 	// as cancelling a derived chromedp context kills the browser target.
 	if err := runStartupAction(browserCtx, func() error {
-		return chromedp.Run(browserCtx, chromedp.Navigate("about:blank"))
+		return chromedp.Run(browserCtx, chromedp.Evaluate("1", nil))
 	}); err != nil {
 		browserCancel()
 		allocCancel()
@@ -4898,6 +4902,16 @@ func setupChromeForEnhanced(ctx context.Context, cfg fullCaptureConfig) (context
 		}
 	}
 	return browserCtx, cancel, true, nil
+}
+
+func shouldDiscoverBrowser(cfg fullCaptureConfig) bool {
+	if !cfg.AutoDiscover || cfg.ChromePath != "" {
+		return false
+	}
+	if cfg.RemoteHost != "" && cfg.RemotePort > 0 {
+		return false
+	}
+	return !(cfg.ConnectExisting && cfg.DebugPortExplicit)
 }
 
 func runStartupAction(ctx context.Context, action func() error) error {

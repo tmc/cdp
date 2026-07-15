@@ -338,6 +338,7 @@ func runMCP(cfg mcpConfig) error {
 			DebugPort:         cfg.DebugPort,
 			DebugPortExplicit: cfg.DebugPortExplicit,
 			ConnectExisting:   cfg.ConnectExisting,
+			AutoDiscover:      true,
 			OutputDir:         cfg.OutputDir,
 			LoadExtensions:    cfg.LoadExtensions,
 		}

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -43,6 +44,45 @@ func TestPrepareCaptureDirs(t *testing.T) {
 		if !info.IsDir() {
 			t.Errorf("%s is not a directory", name)
 		}
+	}
+}
+
+func TestShouldDiscoverBrowser(t *testing.T) {
+	tests := []struct {
+		name string
+		cfg  fullCaptureConfig
+		want bool
+	}{
+		{name: "explicit chrome path", cfg: fullCaptureConfig{AutoDiscover: true, ChromePath: "/bin/chrome"}},
+		{name: "remote endpoint", cfg: fullCaptureConfig{AutoDiscover: true, RemoteHost: "localhost", RemotePort: 9222}},
+		{name: "explicit existing endpoint", cfg: fullCaptureConfig{AutoDiscover: true, ConnectExisting: true, DebugPortExplicit: true}},
+		{name: "disabled", cfg: fullCaptureConfig{AutoDiscover: false}},
+		{name: "default", cfg: fullCaptureConfig{AutoDiscover: true}, want: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := shouldDiscoverBrowser(tt.cfg); got != tt.want {
+				t.Fatalf("shouldDiscoverBrowser(%+v) = %v, want %v", tt.cfg, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestResolveDebugPortHonorsContext(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Millisecond)
+	defer cancel()
+	started := time.Now()
+	if got := resolveDebugPort(ctx, ln.Addr().(*net.TCPAddr).Port, false); got != 0 {
+		t.Fatalf("resolveDebugPort returned %d after context deadline, want 0", got)
+	}
+	if elapsed := time.Since(started); elapsed > 500*time.Millisecond {
+		t.Fatalf("resolveDebugPort took %v after context deadline", elapsed)
 	}
 }
 
