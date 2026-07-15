@@ -4441,6 +4441,9 @@ func handleEnhancedMode(command string, interactive bool, cfg fullCaptureConfig)
 			}
 			if enhancedRec != nil {
 				im.SetRecorder(enhancedRec, cfg.OutputDir)
+				// Drain queued HARL writes after the REPL has flushed sources,
+				// but before any browser teardown or keep-open detachment.
+				defer enhancedRec.Close()
 			}
 			cfg.Progress.ready()
 
