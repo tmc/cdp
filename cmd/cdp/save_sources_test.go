@@ -22,15 +22,19 @@ func TestFullCaptureSaveSourcesNewTab(t *testing.T) {
 	skipIfNoBrowser(t)
 
 	const marker = "window.__cdpSaveSourcesNewTab = 'just working';"
+	const styleMarker = "body { background: rgb(17, 34, 51); }"
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/app.js":
 			w.Header().Set("Content-Type", "application/javascript")
 			fmt.Fprintln(w, marker)
+		case "/app.css":
+			w.Header().Set("Content-Type", "text/css")
+			fmt.Fprintln(w, styleMarker)
 		default:
 			w.Header().Set("Content-Type", "text/html")
-			fmt.Fprintln(w, `<!doctype html><title>sources</title><script src="/app.js"></script>`)
+			fmt.Fprintln(w, `<!doctype html><title>sources</title><link rel="stylesheet" href="/app.css"><script src="/app.js"></script>`)
 		}
 	}))
 	defer srv.Close()
@@ -66,6 +70,19 @@ func TestFullCaptureSaveSourcesNewTab(t *testing.T) {
 	sourcePath, ok := fileContaining(t, outDir, marker)
 	if !ok {
 		t.Fatalf("captured sources do not contain marker %q\noutput:\n%s", marker, output.String())
+	}
+	rel, err := filepath.Rel(outDir, sourcePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	parts := strings.Split(rel, string(filepath.Separator))
+	if len(parts) < 5 || parts[1] != "sources" {
+		t.Fatalf("captured source path %q is not grouped under <site>/sources", rel)
+	}
+	if stylePath, ok := fileContaining(t, outDir, styleMarker); !ok {
+		t.Fatalf("captured sources do not contain CSS marker %q\noutput:\n%s", styleMarker, output.String())
+	} else {
+		t.Logf("captured stylesheet: %s", stylePath)
 	}
 	t.Logf("captured source: %s", sourcePath)
 }
