@@ -144,6 +144,9 @@ func buildCDP(t *testing.T) string {
 	if err != nil {
 		t.Fatalf("Failed to build cdp: %v\nOutput: %s", err, string(output))
 	}
+	if err := os.Chmod(cdpPath, 0755); err != nil {
+		t.Fatalf("Failed to make cdp executable: %v", err)
+	}
 
 	return cdpPath
 }
