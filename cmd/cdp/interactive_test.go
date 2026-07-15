@@ -1,8 +1,10 @@
 package main
 
 import (
+	"context"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestRawCDPNeedsContinuation(t *testing.T) {
@@ -48,6 +50,25 @@ func TestRawCDPNeedsContinuation(t *testing.T) {
 				t.Fatalf("rawCDPNeedsContinuation(%q) = %v, want %v", tt.line, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestInteractiveNavigationContextTimeout(t *testing.T) {
+	im := &InteractiveMode{
+		ctx: context.Background(),
+		cfg: fullCaptureConfig{NavigationTimeout: 20},
+	}
+	ctx, cancel := im.commandContext(&Command{Category: "Navigation"})
+	defer cancel()
+
+	select {
+	case <-ctx.Done():
+		t.Fatal("navigation context expired immediately")
+	case <-time.After(10 * time.Millisecond):
+	}
+
+	if _, ok := ctx.Deadline(); !ok {
+		t.Fatal("navigation context has no deadline")
 	}
 }
 

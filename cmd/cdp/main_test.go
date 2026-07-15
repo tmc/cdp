@@ -29,6 +29,23 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
+func TestPrepareCaptureDirs(t *testing.T) {
+	root := t.TempDir()
+	out := filepath.Join(root, "capture")
+	if err := prepareCaptureDirs(out, true); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{out, filepath.Join(out, "sources")} {
+		info, err := os.Stat(name)
+		if err != nil {
+			t.Fatalf("stat %s: %v", name, err)
+		}
+		if !info.IsDir() {
+			t.Errorf("%s is not a directory", name)
+		}
+	}
+}
+
 // skipIfNoBrowser skips the test if Chrome is not available or if running in short mode
 func skipIfNoBrowser(t testing.TB) {
 	t.Helper()

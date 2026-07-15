@@ -1359,13 +1359,18 @@ func (im *InteractiveMode) executeCommand(line string) error {
 		if im.verbose {
 			fmt.Printf("Executing: %s\n", cmd.Name)
 		}
-		err := cmd.Handler(im.ctx, args)
+		run := func() error {
+			ctx, cancel := im.commandContext(cmd)
+			defer cancel()
+			return cmd.Handler(ctx, args)
+		}
+		err := run()
 		if isDisconnected(err) {
 			if reconnErr := im.reconnect(); reconnErr != nil {
 				return reconnErr
 			}
 			// Retry the command once after reconnecting.
-			return cmd.Handler(im.ctx, args)
+			return run()
 		}
 		return err
 	}
@@ -1386,6 +1391,16 @@ func (im *InteractiveMode) executeCommand(line string) error {
 	}
 
 	return fmt.Errorf("unknown command: %s", cmdName)
+}
+
+func (im *InteractiveMode) commandContext(cmd *Command) (context.Context, context.CancelFunc) {
+	if cmd.Category != "Navigation" || im.cfg.NavigationTimeout == 0 {
+		return im.ctx, func() {}
+	}
+	if im.cfg.NavigationTimeout < 0 {
+		return im.ctx, func() {}
+	}
+	return context.WithTimeout(im.ctx, time.Duration(im.cfg.NavigationTimeout)*time.Second)
 }
 
 // executeRawCDP executes a raw CDP command

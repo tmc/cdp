@@ -1189,6 +1189,7 @@ func shouldStartMacgo(args []string) bool {
 }
 
 func main() {
+	processStart := time.Now()
 	if shouldStartMacgo(os.Args[1:]) {
 		macgo.Start(&macgo.Config{
 			Permissions: []macgo.Permission{macgo.Microphone, macgo.Camera},
@@ -1233,19 +1234,20 @@ func main() {
 		autoDiscover bool
 
 		// New features
-		jsScripts       stringSlice // Support multiple --js flags
-		tabID           string
-		harFile         string
-		harMode         string // HAR capture mode: simple, enhanced (default: enhanced)
-		harlStream      bool   // Stream HAR entries as NDJSON
-		harlFile        string // File to stream NDJSON to
-		maxBodyBytes    int64
-		interactive     bool
-		background      bool
-		command         string
-		fullCapture     bool
-		showChromeFlags bool
-		outputDir       string // Directory to write domain-organized logs to
+		jsScripts         stringSlice // Support multiple --js flags
+		tabID             string
+		harFile           string
+		harMode           string // HAR capture mode: simple, enhanced (default: enhanced)
+		harlStream        bool   // Stream HAR entries as NDJSON
+		harlFile          string // File to stream NDJSON to
+		maxBodyBytes      int64
+		interactive       bool
+		background        bool
+		command           string
+		fullCapture       bool
+		navigationTimeout int
+		showChromeFlags   bool
+		outputDir         string // Directory to write domain-organized logs to
 
 		// Profile management features
 		useProfile      string
@@ -1340,6 +1342,7 @@ func main() {
 	flag.BoolVar(&background, "background", false, "Launch browser in background without focusing window")
 	flag.StringVar(&command, "command", "", "Execute a single CDP command")
 	flag.BoolVar(&fullCapture, "full-capture", false, "Interactive mode with full request/response body capture")
+	flag.IntVar(&navigationTimeout, "navigation-timeout", 30, "Maximum seconds to wait for interactive navigation (0 for no timeout)")
 	flag.BoolVar(&showChromeFlags, "show-chrome-flags", false, "Print the Chrome command-line flags used at launch")
 	flag.StringVar(&outputDir, "output-dir", "", "Directory to write domain-organized logs to (overrides --harl-file)")
 	flag.BoolVar(&monitorAllTabs, "monitor-all-tabs", false, "Monitor network traffic from all browser tabs")
@@ -1398,6 +1401,9 @@ func main() {
 	flag.BoolVar(&macosPermissions, "macos-permissions", false, "On macOS, relaunch through an app bundle to request camera and microphone permissions")
 
 	flag.Parse()
+	if verbose {
+		log.Printf("startup: flags parsed in %v", time.Since(processStart))
+	}
 
 	// MCP server mode — run as MCP server and exit
 	if mcpMode {
@@ -1611,6 +1617,10 @@ func main() {
 		return
 	}
 
+	if err := prepareCaptureDirs(outputDir, saveSources); err != nil {
+		exitWithError(ExitGeneralError, ErrorTypeGeneral, "prepare capture directories: %v", err)
+	}
+
 	// Handle enhanced command mode
 	if fullCapture || command != "" {
 		handleEnhancedMode(command, fullCapture, fullCaptureConfig{
@@ -1634,6 +1644,7 @@ func main() {
 			HarlStream:        harlStream,
 			HarlFile:          harlFile,
 			MaxBodyBytes:      maxBodyBytes,
+			NavigationTimeout: navigationTimeout,
 		})
 		return
 	}
@@ -4263,6 +4274,7 @@ func isNonBrowserCommand(cmdName string) bool {
 
 // handleEnhancedMode handles the new enhanced command mode
 func handleEnhancedMode(command string, interactive bool, cfg fullCaptureConfig) {
+	started := time.Now()
 	registry := NewCommandRegistry()
 	help := NewHelpSystem(registry)
 
@@ -4274,10 +4286,13 @@ func handleEnhancedMode(command string, interactive bool, cfg fullCaptureConfig)
 			if err != nil {
 				exitWithError(ExitBrowserError, ErrorTypeBrowser, "Failed to setup Chrome: %v", err)
 			}
+			if cfg.Verbose {
+				log.Printf("startup: browser ready after %v", time.Since(started))
+			}
 
 			// Ensure we have a page target attached (needed for CDP domain commands
 			// like debugger.Enable used by source capture).
-			if err := chromedp.Run(chromeCtx, chromedp.Navigate("about:blank")); err != nil {
+			if err := chromedp.Run(chromeCtx, chromedp.Evaluate("1", nil)); err != nil {
 				exitWithError(ExitBrowserError, ErrorTypeBrowser, "Failed to attach to browser: %v", err)
 			}
 
@@ -4303,6 +4318,9 @@ func handleEnhancedMode(command string, interactive bool, cfg fullCaptureConfig)
 				})); err != nil {
 					log.Printf("Warning: failed to enable source capture: %v", err)
 					sc = nil
+				}
+				if cfg.Verbose {
+					log.Printf("startup: source capture ready after %v", time.Since(started))
 				}
 			}
 
@@ -4376,6 +4394,12 @@ func handleEnhancedMode(command string, interactive bool, cfg fullCaptureConfig)
 						}
 					}
 				}
+			}
+			if cfg.Verbose {
+				log.Printf("startup: recorder ready after %v", time.Since(started))
+			}
+			if cfg.Verbose {
+				log.Printf("startup: REPL initialized after %v", time.Since(started))
 			}
 
 			// Start interactive mode with reconnection support
@@ -4527,6 +4551,25 @@ type fullCaptureConfig struct {
 	HarlStream        bool   // stream HAR entries as NDJSON
 	HarlFile          string // file to stream NDJSON to (use "-" for stdout)
 	MaxBodyBytes      int64
+	NavigationTimeout int
+}
+
+func prepareCaptureDirs(outputDir string, saveSources bool) error {
+	if outputDir != "" {
+		if err := os.MkdirAll(outputDir, 0755); err != nil {
+			return fmt.Errorf("create output directory %q: %w", outputDir, err)
+		}
+	}
+	if saveSources {
+		sourcesDir := "sources"
+		if outputDir != "" {
+			sourcesDir = filepath.Join(outputDir, "sources")
+		}
+		if err := os.MkdirAll(sourcesDir, 0755); err != nil {
+			return fmt.Errorf("create sources directory %q: %w", sourcesDir, err)
+		}
+	}
+	return nil
 }
 
 // resolveDebugPort checks if the desired port is available. If it's in use
@@ -4534,7 +4577,11 @@ type fullCaptureConfig struct {
 // will connect to it via the remote path). If it's in use by something else,
 // it tries the next ports until it finds a free one.
 func resolveDebugPort(ctx context.Context, port int, verbose bool) int {
+	client := &http.Client{Timeout: 500 * time.Millisecond}
 	for attempt := 0; attempt < 10; attempt++ {
+		if err := ctx.Err(); err != nil {
+			return 0
+		}
 		candidate := port + attempt
 		ln, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", candidate))
 		if err == nil {
@@ -4546,7 +4593,12 @@ func resolveDebugPort(ctx context.Context, port int, verbose bool) int {
 			return candidate
 		}
 		// Port is in use — check if it's a Chrome DevTools endpoint.
-		resp, err := http.Get(fmt.Sprintf("http://127.0.0.1:%d/json/version", candidate))
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet,
+			fmt.Sprintf("http://127.0.0.1:%d/json/version", candidate), nil)
+		if err != nil {
+			continue
+		}
+		resp, err := client.Do(req)
 		if err == nil {
 			resp.Body.Close()
 			if verbose {
@@ -4573,6 +4625,7 @@ func resolveDebugPort(ctx context.Context, port int, verbose bool) int {
 // launched is true if we started a new browser process (and should kill it on exit),
 // false if we connected to an existing one.
 func setupChromeForEnhanced(ctx context.Context, cfg fullCaptureConfig) (context.Context, context.CancelFunc, bool, error) {
+	started := time.Now()
 	verbose := cfg.Verbose
 	selectedPath := cfg.ChromePath
 	// In enhanced mode, debugPort 0 means "use the standard port" (not auto-assign),
@@ -4598,13 +4651,16 @@ func setupChromeForEnhanced(ctx context.Context, cfg fullCaptureConfig) (context
 		if verbose {
 			log.Printf("--connect-existing with explicit --debug-port %d: connecting directly", debugPort)
 		}
-	} else {
+	} else if selectedPath == "" {
 		// Auto-discover browser — prefer connecting to a running instance with debug port.
 		// When a running browser is found, its actual debug port overrides debugPort above,
 		// since we're connecting to it rather than launching a new one.
 		// A requested profile always needs its own browser instance, so don't reuse
 		// a running one in that case.
 		candidates, err := discoverBrowsers(verbose)
+		if verbose {
+			log.Printf("startup: browser discovery took %v", time.Since(started))
+		}
 		if err == nil && len(candidates) > 0 {
 			best := selectBestBrowser(candidates, verbose)
 			if best != nil {
@@ -4762,6 +4818,9 @@ func setupChromeForEnhanced(ctx context.Context, cfg fullCaptureConfig) (context
 
 	// Check if the debug port is already in use.
 	debugPort = resolveDebugPort(ctx, debugPort, verbose)
+	if verbose {
+		log.Printf("startup: debug port resolution took %v", time.Since(started))
+	}
 
 	// Launch new browser instance with minimal flags to avoid triggering
 	// automation detection. We skip chromedp.DefaultExecAllocatorOptions
@@ -4814,13 +4873,18 @@ func setupChromeForEnhanced(ctx context.Context, cfg fullCaptureConfig) (context
 	// Verify the browser starts by navigating to about:blank.
 	// Use browserCtx directly — do NOT wrap in context.WithTimeout,
 	// as cancelling a derived chromedp context kills the browser target.
-	if err := chromedp.Run(browserCtx, chromedp.Navigate("about:blank")); err != nil {
+	if err := runStartupAction(browserCtx, func() error {
+		return chromedp.Run(browserCtx, chromedp.Navigate("about:blank"))
+	}); err != nil {
 		browserCancel()
 		allocCancel()
 		if profileCleanup != nil {
 			profileCleanup()
 		}
 		return nil, nil, false, fmt.Errorf("failed to start browser: %w", err)
+	}
+	if verbose {
+		log.Printf("startup: browser launch and CDP readiness took %v", time.Since(started))
 	}
 
 	fmt.Fprintf(os.Stderr, "Launched new browser on debug port %d\n", debugPort)
@@ -4833,6 +4897,24 @@ func setupChromeForEnhanced(ctx context.Context, cfg fullCaptureConfig) (context
 		}
 	}
 	return browserCtx, cancel, true, nil
+}
+
+func runStartupAction(ctx context.Context, action func() error) error {
+	const timeout = 60 * time.Second
+	done := make(chan error, 1)
+	go func() {
+		done <- action()
+	}()
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	select {
+	case err := <-done:
+		return err
+	case <-timer.C:
+		return fmt.Errorf("startup action timed out after %s", timeout)
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 // buildExtractionScript builds a JavaScript extraction script based on mode
