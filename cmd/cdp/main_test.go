@@ -86,6 +86,25 @@ func TestResolveDebugPortHonorsContext(t *testing.T) {
 	}
 }
 
+func TestStartupProgress(t *testing.T) {
+	var out bytes.Buffer
+	progress := newStartupProgress(&out, true)
+	progress.begin("Discovering browser")
+	progress.begin("Starting Chrome")
+	progress.begin("Connecting (CDP)")
+	progress.begin("Preparing capture")
+	progress.ready()
+	if got, want := out.String(), "Discovering browser...\nStarting Chrome...\nConnecting (CDP)...\nPreparing capture...\nReady.\n"; got != want {
+		t.Fatalf("startup progress = %q, want %q", got, want)
+	}
+
+	out.Reset()
+	newStartupProgress(&out, false).begin("Starting Chrome")
+	if out.Len() != 0 {
+		t.Fatalf("disabled startup progress wrote %q", out.String())
+	}
+}
+
 // skipIfNoBrowser skips the test if Chrome is not available or if running in short mode
 func skipIfNoBrowser(t testing.TB) {
 	t.Helper()

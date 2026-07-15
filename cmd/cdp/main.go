@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"net/http"
@@ -1225,6 +1226,7 @@ func main() {
 		debugPort    int
 		timeout      int
 		verbose      bool
+		quiet        bool
 		remoteHost   string
 		remotePort   int
 		remoteTab    string
@@ -1318,6 +1320,7 @@ func main() {
 	flag.IntVar(&debugPort, "debug-port", 9222, "Connect to Chrome on specific port (0 for auto)")
 	flag.IntVar(&timeout, "timeout", 60, "Timeout in seconds (0 for no timeout)")
 	flag.BoolVar(&verbose, "verbose", false, "Enable verbose logging")
+	flag.BoolVar(&quiet, "quiet", false, "Suppress interactive startup progress")
 	flag.StringVar(&remoteHost, "remote-host", "", "Connect to remote Chrome at this host")
 	// remotePort is used when connecting to an already-running Chrome instance (via --remote-host
 	// or auto-discovery). It is separate from debugPort, which applies when launching a new browser.
@@ -1646,6 +1649,7 @@ func main() {
 			MaxBodyBytes:      maxBodyBytes,
 			NavigationTimeout: navigationTimeout,
 			AutoDiscover:      autoDiscover,
+			Progress:          newStartupProgress(os.Stderr, fullCapture && !quiet && stderrIsTerminal()),
 		})
 		return
 	}
@@ -4290,6 +4294,7 @@ func handleEnhancedMode(command string, interactive bool, cfg fullCaptureConfig)
 			if cfg.Verbose {
 				log.Printf("startup: browser ready after %v", time.Since(started))
 			}
+			cfg.Progress.begin("Preparing capture")
 
 			// Ensure we have a page target attached (needed for CDP domain commands
 			// like debugger.Enable used by source capture).
@@ -4412,6 +4417,7 @@ func handleEnhancedMode(command string, interactive bool, cfg fullCaptureConfig)
 			if enhancedRec != nil {
 				im.SetRecorder(enhancedRec, cfg.OutputDir)
 			}
+			cfg.Progress.ready()
 
 			if err := im.Run(); err != nil {
 				exitWithError(ExitGeneralError, ErrorTypeGeneral, "Interactive mode error: %v", err)
@@ -4555,6 +4561,35 @@ type fullCaptureConfig struct {
 	HarlFile          string // file to stream NDJSON to (use "-" for stdout)
 	MaxBodyBytes      int64
 	NavigationTimeout int
+	Progress          *startupProgress
+}
+
+type startupProgress struct {
+	w       io.Writer
+	enabled bool
+}
+
+func newStartupProgress(w io.Writer, enabled bool) *startupProgress {
+	return &startupProgress{w: w, enabled: enabled}
+}
+
+func (p *startupProgress) begin(phase string) {
+	if p == nil || !p.enabled {
+		return
+	}
+	fmt.Fprintf(p.w, "%s...\n", phase)
+}
+
+func (p *startupProgress) ready() {
+	if p == nil || !p.enabled {
+		return
+	}
+	fmt.Fprintln(p.w, "Ready.")
+}
+
+func stderrIsTerminal() bool {
+	info, err := os.Stderr.Stat()
+	return err == nil && info.Mode()&os.ModeCharDevice != 0
 }
 
 func prepareCaptureDirs(outputDir string, saveSources bool) error {
@@ -4655,6 +4690,7 @@ func setupChromeForEnhanced(ctx context.Context, cfg fullCaptureConfig) (context
 			log.Printf("--connect-existing with explicit --debug-port %d: connecting directly", debugPort)
 		}
 	} else if shouldDiscoverBrowser(cfg) {
+		cfg.Progress.begin("Discovering browser")
 		// Auto-discover browser — prefer connecting to a running instance with debug port.
 		// When a running browser is found, its actual debug port overrides debugPort above,
 		// since we're connecting to it rather than launching a new one.
@@ -4679,6 +4715,7 @@ func setupChromeForEnhanced(ctx context.Context, cfg fullCaptureConfig) (context
 
 	// Connect to a running browser with a debug port if available.
 	if remoteHost != "" && remotePort > 0 {
+		cfg.Progress.begin("Connecting (CDP)")
 		remoteURL := fmt.Sprintf("ws://%s:%d", remoteHost, remotePort)
 		if verbose {
 			log.Printf("Connecting to running browser at %s", remoteURL)
@@ -4819,6 +4856,8 @@ func setupChromeForEnhanced(ctx context.Context, cfg fullCaptureConfig) (context
 		}
 	}
 
+	cfg.Progress.begin("Starting Chrome")
+
 	// Check if the debug port is already in use.
 	debugPort = resolveDebugPort(ctx, debugPort, verbose)
 	if verbose {
@@ -4872,6 +4911,7 @@ func setupChromeForEnhanced(ctx context.Context, cfg fullCaptureConfig) (context
 	browserCtx, browserCancel := chromedp.NewContext(allocCtx,
 		chromedp.WithErrorf(filteredErrorf),
 	)
+	cfg.Progress.begin("Connecting (CDP)")
 
 	// Verify the browser starts by attaching to a target and evaluating a
 	// trivial expression. This checks process/CDP readiness without waiting

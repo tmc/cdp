@@ -71,6 +71,7 @@ Common flags:
   directory and place saved sources under that domain's `sources/` directory
 - `-navigation-timeout`: bound interactive `goto`/navigation commands (30
   seconds by default; use `0` to disable the bound)
+- `-quiet`: suppress interactive startup progress
 - `-screenshot`: capture a screenshot; use `full <file>` to write a full-page
   PNG to a specific path
 - `-extract`: extract text or HTML from a selector
@@ -80,6 +81,10 @@ Common flags:
 - `-remote-host` and `-remote-port`: connect to a remote Chrome instance
 - `attach`: list attachable page targets, or print launch instructions when no
   debug browser is listening
+
+Interactive startup reports browser discovery, Chrome launch, CDP connection,
+capture preparation, and readiness on stderr when attached to a terminal. Use
+`-quiet` to suppress these messages.
 
 Examples:
 
