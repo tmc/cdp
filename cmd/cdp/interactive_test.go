@@ -1,7 +1,9 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -69,6 +71,25 @@ func TestInteractiveNavigationContextTimeout(t *testing.T) {
 
 	if _, ok := ctx.Deadline(); !ok {
 		t.Fatal("navigation context has no deadline")
+	}
+}
+
+func TestNavigationProgressWrapError(t *testing.T) {
+	var output bytes.Buffer
+	nav := newNavigationProgress(newStartupProgress(&output, true), "https://example.test/stall", 3)
+	nav.start()
+	nav.setStage("response received")
+	err := nav.wrapError(context.DeadlineExceeded)
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("wrapped navigation error does not preserve deadline: %v", err)
+	}
+	for _, want := range []string{"https://example.test/stall", "timeout 3s", "response received"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("navigation error %q does not contain %q", err, want)
+		}
+	}
+	if !strings.Contains(output.String(), "navigating https://example.test/stall") {
+		t.Fatalf("navigation progress missing start: %q", output.String())
 	}
 }
 

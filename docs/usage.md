@@ -86,6 +86,10 @@ Interactive startup reports browser discovery, Chrome launch, CDP connection,
 capture preparation, and readiness on stderr when attached to a terminal. Use
 `-quiet` to suppress these messages.
 
+Interactive `goto`/navigation commands report their current stage on the same
+stderr channel. Timeout errors include the URL, elapsed time, configured
+timeout, and last observed stage.
+
 Examples:
 
 ```bash

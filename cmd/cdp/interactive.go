@@ -13,8 +13,11 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
+	"github.com/chromedp/cdproto/network"
+	"github.com/chromedp/cdproto/page"
 	"github.com/chromedp/cdproto/target"
 	"github.com/chromedp/chromedp"
 	"github.com/tmc/cdp/internal/coverage"
@@ -1359,12 +1362,22 @@ func (im *InteractiveMode) executeCommand(line string) error {
 		if im.verbose {
 			fmt.Printf("Executing: %s\n", cmd.Name)
 		}
+		var nav *navigationProgress
+		if cmd.Category == "Navigation" {
+			nav = newNavigationProgress(im.cfg.Progress, navigationURL(cmd, args), im.cfg.NavigationTimeout)
+			nav.listen(im.ctx)
+			nav.start()
+		}
 		run := func() error {
 			ctx, cancel := im.commandContext(cmd)
 			defer cancel()
 			return cmd.Handler(ctx, args)
 		}
 		err := run()
+		if nav != nil {
+			nav.finish(err)
+			err = nav.wrapError(err)
+		}
 		if isDisconnected(err) {
 			if reconnErr := im.reconnect(); reconnErr != nil {
 				return reconnErr
@@ -1391,6 +1404,118 @@ func (im *InteractiveMode) executeCommand(line string) error {
 	}
 
 	return fmt.Errorf("unknown command: %s", cmdName)
+}
+
+func navigationURL(cmd *Command, args []string) string {
+	if len(args) > 0 {
+		return args[0]
+	}
+	return cmd.Name
+}
+
+type navigationProgress struct {
+	progress *startupProgress
+	url      string
+	timeout  int
+	started  time.Time
+
+	mu     sync.Mutex
+	active bool
+	stage  string
+}
+
+func newNavigationProgress(progress *startupProgress, url string, timeout int) *navigationProgress {
+	return &navigationProgress{progress: progress, url: url, timeout: timeout, stage: "request not sent"}
+}
+
+func (n *navigationProgress) listen(ctx context.Context) {
+	if n == nil {
+		return
+	}
+	chromedp.ListenTarget(ctx, func(ev interface{}) {
+		switch e := ev.(type) {
+		case *network.EventRequestWillBeSent:
+			if e.Request != nil && e.Request.URL == n.url {
+				n.setStage("request sent")
+			}
+		case *network.EventResponseReceived:
+			if e.Response != nil && e.Response.URL == n.url {
+				n.setStage("response received")
+			}
+		case *page.EventDomContentEventFired:
+			n.setStage("DOM content loaded")
+		case *page.EventLoadEventFired:
+			n.setStage("load event")
+		}
+	})
+}
+
+func (n *navigationProgress) start() {
+	if n == nil {
+		return
+	}
+	n.mu.Lock()
+	n.started = time.Now()
+	n.active = true
+	n.mu.Unlock()
+	n.write("navigating " + n.url + " (requesting)")
+}
+
+func (n *navigationProgress) setStage(stage string) {
+	n.mu.Lock()
+	if !n.active || n.stage == stage {
+		n.mu.Unlock()
+		return
+	}
+	n.stage = stage
+	n.mu.Unlock()
+	n.write("navigating " + n.url + " (" + stage + ")")
+}
+
+func (n *navigationProgress) finish(err error) {
+	if n == nil {
+		return
+	}
+	n.mu.Lock()
+	n.active = false
+	elapsed := time.Since(n.started)
+	n.mu.Unlock()
+	if err == nil {
+		n.write(fmt.Sprintf("loaded %s (%s)", n.url, elapsed.Round(time.Millisecond)))
+		return
+	}
+	n.write(fmt.Sprintf("navigation failed %s (%s)", n.url, elapsed.Round(time.Millisecond)))
+}
+
+func (n *navigationProgress) stageName() string {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	return n.stage
+}
+
+func (n *navigationProgress) elapsed() time.Duration {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	return time.Since(n.started)
+}
+
+func (n *navigationProgress) write(message string) {
+	if n == nil || n.progress == nil || !n.progress.enabled {
+		return
+	}
+	fmt.Fprintf(n.progress.w, "%s\n", message)
+}
+
+func (n *navigationProgress) wrapError(err error) error {
+	if err == nil {
+		return nil
+	}
+	elapsed := n.elapsed().Round(time.Millisecond)
+	stage := n.stageName()
+	if errors.Is(err, context.DeadlineExceeded) {
+		return fmt.Errorf("navigate %s: timed out after %s (timeout %ds, last stage: %s): %w", n.url, elapsed, n.timeout, stage, err)
+	}
+	return fmt.Errorf("navigate %s failed after %s (last stage: %s): %w", n.url, elapsed, stage, err)
 }
 
 func (im *InteractiveMode) commandContext(cmd *Command) (context.Context, context.CancelFunc) {
