@@ -28,7 +28,10 @@ func TestFullCaptureNavigationTimeoutWritesMetadata(t *testing.T) {
 		}
 		<-r.Context().Done()
 	}))
-	defer srv.Close()
+	defer func() {
+		srv.CloseClientConnections()
+		srv.Close()
+	}()
 
 	outDir, output, elapsed := runFullCaptureNavigation(t, srv.URL, 1)
 	if elapsed > 8*time.Second {
@@ -67,7 +70,7 @@ func runFullCaptureNavigation(t *testing.T, url string, timeout int) (string, st
 		t.Skip("no Chrome-compatible browser found")
 	}
 	outDir := t.TempDir()
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, cdpPath,
 		"--headless",
@@ -75,6 +78,7 @@ func runFullCaptureNavigation(t *testing.T, url string, timeout int) (string, st
 		"--debug-port", fmt.Sprint(freeTCPPort(t)),
 		"--full-capture",
 		"--harl",
+		"--verbose",
 		"--navigation-timeout", fmt.Sprint(timeout),
 		"--output-dir", outDir,
 	)

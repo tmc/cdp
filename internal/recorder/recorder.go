@@ -48,6 +48,7 @@ type capturedBody struct {
 
 const (
 	fetchBodyTimeout     = 10 * time.Second
+	fetchBodyGrace       = 250 * time.Millisecond
 	fetchContinueTimeout = 2 * time.Second
 )
 
@@ -488,14 +489,34 @@ func (r *Recorder) HandleFetchEvent(ctx context.Context) func(interface{}) {
 
 		// Response stage — capture body then continue.
 		go func() {
+			type bodyResult struct {
+				body []byte
+				err  error
+			}
+			bodyCh := make(chan bodyResult, 1)
+			go func() {
+				bodyCtx, bodyCancel := context.WithTimeout(ctx, fetchBodyTimeout)
+				defer bodyCancel()
+				var body []byte
+				err := chromedp.Run(bodyCtx, chromedp.ActionFunc(func(c context.Context) error {
+					var fetchErr error
+					body, fetchErr = fetch.GetResponseBody(e.RequestID).Do(c)
+					return fetchErr
+				}))
+				bodyCh <- bodyResult{body: body, err: err}
+			}()
+
 			var body []byte
-			bodyCtx, bodyCancel := context.WithTimeout(ctx, fetchBodyTimeout)
-			err := chromedp.Run(bodyCtx, chromedp.ActionFunc(func(c context.Context) error {
-				var fetchErr error
-				body, fetchErr = fetch.GetResponseBody(e.RequestID).Do(c)
-				return fetchErr
-			}))
-			bodyCancel()
+			var err error
+			bodyReady := false
+			select {
+			case result := <-bodyCh:
+				body, err, bodyReady = result.body, result.err, true
+			case <-time.After(fetchBodyGrace):
+				// Continue promptly for streaming or stalled responses. A
+				// completed body is preferred, but it must not hold Chrome
+				// paused while navigation waits for load.
+			}
 
 			// Always continue the response regardless of body fetch result. Use
 			// a fresh deadline so a timed-out body request cannot leave Chrome
@@ -508,6 +529,14 @@ func (r *Recorder) HandleFetchEvent(ctx context.Context) func(interface{}) {
 			if contErr != nil {
 				if r.verbose {
 					log.Printf("fetch: continue response %s: %v", e.RequestID, contErr)
+				}
+			}
+			if !bodyReady {
+				select {
+				case result := <-bodyCh:
+					body, err = result.body, result.err
+				case <-time.After(100 * time.Millisecond):
+					err = context.DeadlineExceeded
 				}
 			}
 
