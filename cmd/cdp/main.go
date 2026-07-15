@@ -4336,9 +4336,7 @@ func handleEnhancedMode(command string, interactive bool, cfg fullCaptureConfig)
 				// calling sc.Enable, so the initial scriptParsed burst
 				// that Debugger.enable triggers is delivered.
 				chromedp.ListenTarget(chromeCtx, sc.Listener(chromeCtx))
-				if err := chromedp.Run(chromeCtx, chromedp.ActionFunc(func(ctx context.Context) error {
-					return sc.Enable(ctx)
-				})); err != nil {
+				if err := sc.Enable(chromeCtx); err != nil {
 					chromeCancel()
 					exitWithError(ExitGeneralError, ErrorTypeGeneral,
 						"enable source capture in %s: %v", sourcesDir, err)

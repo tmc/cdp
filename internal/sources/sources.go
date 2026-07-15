@@ -133,9 +133,7 @@ func (c *Collector) Enable(ctx context.Context) error {
 	c.mu.Unlock()
 	go c.backgroundFetcher()
 
-	var innerCtx context.Context
 	if err := chromedp.Run(ctx, chromedp.ActionFunc(func(ctx context.Context) error {
-		innerCtx = ctx
 		if _, err := debugger.Enable().Do(ctx); err != nil {
 			return fmt.Errorf("enable debugger: %w", err)
 		}
@@ -159,7 +157,10 @@ func (c *Collector) Enable(ctx context.Context) error {
 		return err
 	}
 	c.mu.Lock()
-	c.ctx = innerCtx
+	// Keep the long-lived browser context, not the short-lived action
+	// context passed to the function above. The fetcher runs after Enable
+	// returns and must create a fresh action context for each CDP call.
+	c.ctx = ctx
 	c.mu.Unlock()
 	return nil
 }
@@ -238,14 +239,21 @@ func (c *Collector) backgroundFetcher() {
 func (c *Collector) fetchAndWriteScript(item fetchItem) {
 	ctx := item.ctx
 	if ctx == nil {
+		c.mu.Lock()
 		ctx = c.ctx
+		c.mu.Unlock()
 	}
 	c.mu.Lock()
 	fetchContext := c.fetchContext
 	c.mu.Unlock()
 	opCtx, done := c.operationContext(ctx, fetchContext)
 	defer done()
-	src, _, err := debugger.GetScriptSource(item.scriptID).Do(opCtx)
+	var src string
+	err := chromedp.Run(opCtx, chromedp.ActionFunc(func(ctx context.Context) error {
+		var err error
+		src, _, err = debugger.GetScriptSource(item.scriptID).Do(ctx)
+		return err
+	}))
 	if err != nil {
 		if c.verbose {
 			log.Printf("sources: incremental get script %s: %v", item.url, err)
@@ -265,14 +273,21 @@ func (c *Collector) fetchAndWriteScript(item fetchItem) {
 func (c *Collector) fetchAndWriteStyle(item fetchItem) {
 	ctx := item.ctx
 	if ctx == nil {
+		c.mu.Lock()
 		ctx = c.ctx
+		c.mu.Unlock()
 	}
 	c.mu.Lock()
 	fetchContext := c.fetchContext
 	c.mu.Unlock()
 	opCtx, done := c.operationContext(ctx, fetchContext)
 	defer done()
-	text, err := css.GetStyleSheetText(item.styleSheetID).Do(opCtx)
+	var text string
+	err := chromedp.Run(opCtx, chromedp.ActionFunc(func(ctx context.Context) error {
+		var err error
+		text, err = css.GetStyleSheetText(item.styleSheetID).Do(ctx)
+		return err
+	}))
 	if err != nil {
 		if c.verbose {
 			log.Printf("sources: incremental get stylesheet %s: %v", item.url, err)
