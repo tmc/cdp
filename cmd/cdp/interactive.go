@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -1435,11 +1436,11 @@ func (n *navigationProgress) listen(ctx context.Context) {
 	chromedp.ListenTarget(ctx, func(ev interface{}) {
 		switch e := ev.(type) {
 		case *network.EventRequestWillBeSent:
-			if e.Request != nil && e.Request.URL == n.url {
+			if e.Request != nil && sameNavigationURL(e.Request.URL, n.url) {
 				n.setStage("request sent")
 			}
 		case *network.EventResponseReceived:
-			if e.Response != nil && e.Response.URL == n.url {
+			if e.Response != nil && sameNavigationURL(e.Response.URL, n.url) {
 				n.setStage("response received")
 			}
 		case *page.EventDomContentEventFired:
@@ -1448,6 +1449,19 @@ func (n *navigationProgress) listen(ctx context.Context) {
 			n.setStage("load event")
 		}
 	})
+}
+
+func sameNavigationURL(a, b string) bool {
+	ua, errA := url.Parse(a)
+	ub, errB := url.Parse(b)
+	if errA != nil || errB != nil {
+		return a == b
+	}
+	if ua.Scheme != ub.Scheme || ua.Host != ub.Host || ua.RawQuery != ub.RawQuery {
+		return false
+	}
+	pa, pb := strings.TrimSuffix(ua.Path, "/"), strings.TrimSuffix(ub.Path, "/")
+	return pa == pb
 }
 
 func (n *navigationProgress) start() {

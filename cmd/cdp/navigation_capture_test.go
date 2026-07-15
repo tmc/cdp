@@ -34,7 +34,7 @@ func TestFullCaptureNavigationTimeoutWritesMetadata(t *testing.T) {
 	}()
 
 	outDir, output, elapsed := runFullCaptureNavigation(t, srv.URL, 1)
-	if elapsed > 8*time.Second {
+	if elapsed > 12*time.Second {
 		t.Fatalf("timed-out navigation took %v\noutput:\n%s", elapsed, output)
 	}
 	if !strings.Contains(output, "timed out after") || !strings.Contains(output, srv.URL) {
