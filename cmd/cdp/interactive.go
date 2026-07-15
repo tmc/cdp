@@ -905,13 +905,28 @@ func (im *InteractiveMode) Run() error {
 			return
 		}
 		im.sourceCollector.Close() // drain background goroutine
-		if err := chromedp.Run(im.ctx, chromedp.ActionFunc(func(ctx context.Context) error {
-			return im.sourceCollector.CaptureAll(ctx)
-		})); err != nil && im.verbose {
-			log.Printf("Warning: source capture errors: %v", err)
+		captureDone := make(chan error, 1)
+		go func() {
+			captureDone <- chromedp.Run(im.ctx, chromedp.ActionFunc(func(ctx context.Context) error {
+				return im.sourceCollector.CaptureAll(ctx)
+			}))
+		}()
+		captureComplete := false
+		select {
+		case err := <-captureDone:
+			captureComplete = true
+			if err != nil && im.verbose {
+				log.Printf("Warning: source capture errors: %v", err)
+			}
+		case <-time.After(30 * time.Second):
+			if im.verbose {
+				log.Printf("Warning: source capture timed out; writing incrementally captured sources")
+			}
 		}
-		if err := im.sourceCollector.WriteToDisk(); err != nil {
-			log.Printf("Warning: failed to write sources to %s: %v", im.sourceCollector.OutputDir(), err)
+		if captureComplete {
+			if err := im.sourceCollector.WriteToDisk(); err != nil {
+				log.Printf("Warning: failed to write sources to %s: %v", im.sourceCollector.OutputDir(), err)
+			}
 		}
 	}
 
