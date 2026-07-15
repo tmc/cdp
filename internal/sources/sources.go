@@ -75,11 +75,15 @@ type Collector struct {
 	ctx            context.Context   // browser context for CDP calls
 	fetchCh        chan fetchItem    // channel for incremental capture
 	done           chan struct{}     // closed when background goroutine exits
-	incremental    bool              // whether incremental mode is active
+	fetchContext   context.Context
+	fetchCancel    context.CancelFunc
+	incremental    bool // whether incremental mode is active
 	pageMu         sync.RWMutex
 	pageDomain     string // registrable domain of the current top-level page
 	groupByPage    bool
 }
+
+const sourceFetchTimeout = 5 * time.Second
 
 // New creates a source collector that writes to outputDir.
 func New(outputDir string, verbose bool) *Collector {
@@ -124,6 +128,7 @@ func (c *Collector) Enable(ctx context.Context) error {
 	c.mu.Lock()
 	c.fetchCh = make(chan fetchItem, 256)
 	c.done = make(chan struct{})
+	c.fetchContext, c.fetchCancel = context.WithCancel(context.Background())
 	c.incremental = true
 	c.mu.Unlock()
 	go c.backgroundFetcher()
@@ -145,6 +150,11 @@ func (c *Collector) Enable(ctx context.Context) error {
 		c.incremental = false
 		close(c.fetchCh)
 		c.fetchCh = nil
+		if c.fetchCancel != nil {
+			c.fetchCancel()
+			c.fetchCancel = nil
+		}
+		c.fetchContext = nil
 		c.mu.Unlock()
 		return err
 	}
@@ -182,13 +192,31 @@ func (c *Collector) AttachToTarget(ctx context.Context) error {
 // Close stops the background fetcher goroutine. Safe to call multiple times.
 func (c *Collector) Close() {
 	c.mu.Lock()
+	cancel := c.fetchCancel
+	c.fetchCancel = nil
+	c.fetchContext = nil
 	if c.incremental && c.fetchCh != nil {
 		close(c.fetchCh)
 		c.incremental = false
 	}
 	c.mu.Unlock()
+	if cancel != nil {
+		cancel()
+	}
 	if c.done != nil {
 		<-c.done
+	}
+}
+
+func (c *Collector) operationContext(base, cancelFetch context.Context) (context.Context, func()) {
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(base), sourceFetchTimeout)
+	if cancelFetch == nil {
+		return ctx, cancel
+	}
+	stop := context.AfterFunc(cancelFetch, cancel)
+	return ctx, func() {
+		stop()
+		cancel()
 	}
 }
 
@@ -212,7 +240,12 @@ func (c *Collector) fetchAndWriteScript(item fetchItem) {
 	if ctx == nil {
 		ctx = c.ctx
 	}
-	src, _, err := debugger.GetScriptSource(item.scriptID).Do(ctx)
+	c.mu.Lock()
+	fetchContext := c.fetchContext
+	c.mu.Unlock()
+	opCtx, done := c.operationContext(ctx, fetchContext)
+	defer done()
+	src, _, err := debugger.GetScriptSource(item.scriptID).Do(opCtx)
 	if err != nil {
 		if c.verbose {
 			log.Printf("sources: incremental get script %s: %v", item.url, err)
@@ -234,7 +267,12 @@ func (c *Collector) fetchAndWriteStyle(item fetchItem) {
 	if ctx == nil {
 		ctx = c.ctx
 	}
-	text, err := css.GetStyleSheetText(item.styleSheetID).Do(ctx)
+	c.mu.Lock()
+	fetchContext := c.fetchContext
+	c.mu.Unlock()
+	opCtx, done := c.operationContext(ctx, fetchContext)
+	defer done()
+	text, err := css.GetStyleSheetText(item.styleSheetID).Do(opCtx)
 	if err != nil {
 		if c.verbose {
 			log.Printf("sources: incremental get stylesheet %s: %v", item.url, err)
@@ -405,7 +443,9 @@ func (c *Collector) CaptureAll(ctx context.Context) error {
 			if skipURL(s.URL) {
 				continue
 			}
-			src, _, err := debugger.GetScriptSource(s.ScriptID).Do(ctx)
+			opCtx, done := c.operationContext(ctx, nil)
+			src, _, err := debugger.GetScriptSource(s.ScriptID).Do(opCtx)
+			done()
 			if err != nil {
 				if c.verbose {
 					log.Printf("sources: get script %s (%s): %v", s.ScriptID, s.URL, err)
@@ -422,7 +462,9 @@ func (c *Collector) CaptureAll(ctx context.Context) error {
 			if skipURL(s.URL) {
 				continue
 			}
-			text, err := css.GetStyleSheetText(s.StyleSheetID).Do(ctx)
+			opCtx, done := c.operationContext(ctx, nil)
+			text, err := css.GetStyleSheetText(s.StyleSheetID).Do(opCtx)
+			done()
 			if err != nil {
 				if c.verbose {
 					log.Printf("sources: get stylesheet %s (%s): %v", s.StyleSheetID, s.URL, err)
