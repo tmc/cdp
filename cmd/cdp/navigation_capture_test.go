@@ -61,7 +61,38 @@ func TestFullCaptureNavigationFiniteResponse(t *testing.T) {
 	}
 }
 
+func TestFullCaptureNavigationWaitContract(t *testing.T) {
+	skipIfNoBrowser(t)
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/dom-only":
+			w.Header().Set("Content-Type", "text/html")
+			_, _ = fmt.Fprint(w, "<!doctype html><img src='/never'>")
+		case "/never":
+			<-r.Context().Done()
+		}
+	}))
+	defer func() {
+		srv.CloseClientConnections()
+		srv.Close()
+	}()
+
+	_, domOutput, domElapsed := runFullCaptureNavigationWithWait(t, srv.URL+"/dom-only", 3, "domcontentloaded")
+	if domElapsed > 10*time.Second {
+		t.Fatalf("DOMContentLoaded navigation took %v\noutput:\n%s", domElapsed, domOutput)
+	}
+	_, loadOutput, _ := runFullCaptureNavigationWithWait(t, srv.URL+"/dom-only", 1, "load")
+	if !strings.Contains(loadOutput, "last stage: DOM content loaded") {
+		t.Fatalf("load wait did not report DOM-ready stall:\n%s", loadOutput)
+	}
+}
+
 func runFullCaptureNavigation(t *testing.T, url string, timeout int) (string, string, time.Duration) {
+	return runFullCaptureNavigationWithWait(t, url, timeout, "domcontentloaded")
+}
+
+func runFullCaptureNavigationWithWait(t *testing.T, url string, timeout int, wait string) (string, string, time.Duration) {
 	t.Helper()
 
 	cdpPath := buildCDP(t)
@@ -80,6 +111,7 @@ func runFullCaptureNavigation(t *testing.T, url string, timeout int) (string, st
 		"--harl",
 		"--verbose",
 		"--navigation-timeout", fmt.Sprint(timeout),
+		"--wait", wait,
 		"--output-dir", outDir,
 	)
 	cmd.Stdin = strings.NewReader("goto " + url + "\nexit\n")

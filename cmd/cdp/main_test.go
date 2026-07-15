@@ -105,6 +105,19 @@ func TestStartupProgress(t *testing.T) {
 	}
 }
 
+func TestStartupProgressPlain(t *testing.T) {
+	var out bytes.Buffer
+	progress := &startupProgress{w: &out, enabled: true}
+	progress.begin("Starting Chrome")
+	progress.status("connecting", true)
+	if strings.ContainsAny(out.String(), "\x1b") {
+		t.Fatalf("plain progress contains ANSI escapes: %q", out.String())
+	}
+	if !strings.Contains(out.String(), "  Starting Chrome...\n") {
+		t.Fatalf("plain progress is not indented: %q", out.String())
+	}
+}
+
 // skipIfNoBrowser skips the test if Chrome is not available or if running in short mode
 func skipIfNoBrowser(t testing.TB) {
 	t.Helper()
