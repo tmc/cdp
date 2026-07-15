@@ -63,7 +63,7 @@ func TestWriterDoesNotBlockOnRecorderLock(t *testing.T) {
 	// Force flush.
 	r.CloseDomainWriters()
 
-	path := filepath.Join(dir, "example.com.jsonl")
+	path := filepath.Join(dir, "example.com", "example.com.jsonl")
 	got, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("read jsonl: %v", err)

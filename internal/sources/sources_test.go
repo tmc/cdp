@@ -2,10 +2,20 @@ package sources
 
 import (
 	"context"
+	"path/filepath"
 	"testing"
 
 	"github.com/chromedp/cdproto/debugger"
 )
+
+func TestSourcePathUsesSiteGroup(t *testing.T) {
+	c := New(filepath.Join(t.TempDir(), "capture"), false)
+	got := c.sourcePath("cdn.lesswrong.com", "_compiled", "app.js")
+	want := filepath.Join(c.OutputDir(), "lesswrong.com", "sources", "cdn.lesswrong.com", "_compiled", "app.js")
+	if got != want {
+		t.Fatalf("sourcePath = %q, want %q", got, want)
+	}
+}
 
 func TestSplitURL(t *testing.T) {
 	tests := []struct {

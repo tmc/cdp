@@ -22,6 +22,7 @@ import (
 	"github.com/chromedp/cdproto/debugger"
 	"github.com/chromedp/chromedp"
 	"github.com/tmc/cdp/internal/scrub"
+	"github.com/tmc/cdp/internal/sitegroup"
 )
 
 // ScriptInfo holds metadata and source for a parsed script.
@@ -259,7 +260,7 @@ func (c *Collector) writeSourceEntry(sourceURL, source, sourceMapURL string) {
 	if c.scrubber != nil && c.scrubber.Enabled() {
 		src, _ = c.scrubber.ScrubText(src)
 	}
-	if err := writeFile(filepath.Join(c.outputDir, origin, "_compiled", relPath), src); err != nil {
+	if err := writeFile(c.sourcePath(origin, "_compiled", relPath), src); err != nil {
 		if c.verbose {
 			log.Printf("sources: write %s: %v", sourceURL, err)
 		}
@@ -418,8 +419,9 @@ func (c *Collector) CaptureAll(ctx context.Context) error {
 }
 
 // WriteToDisk writes all captured sources to the output directory.
-// Layout: outputDir/origin/_compiled/path for served files,
-// outputDir/origin/... for sourcemapped originals.
+// Layout: outputDir/registrable-domain/sources/origin/_compiled/path for
+// served files, and outputDir/registrable-domain/sources/origin/... for
+// sourcemapped originals.
 func (c *Collector) WriteToDisk() error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -460,7 +462,7 @@ func (c *Collector) WriteToDisk() error {
 			src, n = c.scrubber.ScrubText(src)
 			totalRedactions += n
 		}
-		record(writeFile(filepath.Join(c.outputDir, origin, "_compiled", relPath), src))
+		record(writeFile(c.sourcePath(origin, "_compiled", relPath), src))
 		c.written[e.url] = true
 		wrote++
 		if e.sourceMapURL != "" {
@@ -523,7 +525,7 @@ func (c *Collector) writeSourceMap(origin, sourceURL, sourceMapURL, compiledSour
 
 	// Write the sourcemap file itself.
 	if mapRelPath != "" {
-		smPath := filepath.Join(c.outputDir, origin, "_compiled", mapRelPath)
+		smPath := c.sourcePath(origin, "_compiled", mapRelPath)
 		if err := writeFile(smPath, mapContent); err != nil {
 			return 0, fmt.Errorf("write sourcemap: %w", err)
 		}
@@ -548,7 +550,7 @@ func (c *Collector) writeSourceMap(origin, sourceURL, sourceMapURL, compiledSour
 		if strings.HasPrefix(clean, "..") {
 			continue
 		}
-		dest := filepath.Join(c.outputDir, origin, clean)
+		dest := c.sourcePath(origin, "", clean)
 		if err := writeFile(dest, content); err != nil {
 			if firstErr == nil {
 				firstErr = err
@@ -558,6 +560,16 @@ func (c *Collector) writeSourceMap(origin, sourceURL, sourceMapURL, compiledSour
 		wrote++
 	}
 	return wrote, firstErr
+}
+
+func (c *Collector) sourcePath(origin string, parts ...string) string {
+	path := filepath.Join(c.outputDir, sitegroup.RegistrableDomain(origin), "sources", origin)
+	for _, part := range parts {
+		if part != "" {
+			path = filepath.Join(path, part)
+		}
+	}
+	return path
 }
 
 // fetchSourceMap fetches sourcemap content. Handles inline data URIs

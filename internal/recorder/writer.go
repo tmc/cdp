@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"sync/atomic"
+
+	"github.com/tmc/cdp/internal/sitegroup"
 )
 
 // writerCmd is a command sent from any event-loop goroutine to the writer
@@ -93,10 +95,11 @@ func writeOne(domainWriters map[string]*os.File, hostname, dir string, data []by
 		}
 	}
 	if !ok {
-		if err := os.MkdirAll(dir, 0755); err != nil {
+		groupDir := filepath.Join(dir, sitegroup.RegistrableDomain(hostname))
+		if err := os.MkdirAll(groupDir, 0755); err != nil {
 			return err
 		}
-		filename := filepath.Join(dir, fmt.Sprintf("%s.jsonl", hostname))
+		filename := filepath.Join(groupDir, fmt.Sprintf("%s.jsonl", hostname))
 		f, err := os.OpenFile(filename, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 		if err != nil {
 			return err

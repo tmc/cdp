@@ -67,6 +67,10 @@ Common flags:
 - `-harl`: stream HAR entries as JSONL to `output.har.jsonl` by default
 - `-harl-file`: set the HARL JSONL output path; use `-harl-file -` only when
   stdout streaming is intended
+- `-output-dir`: write per-host HARL files under their registrable-domain
+  directory and place saved sources under that domain's `sources/` directory
+- `-navigation-timeout`: bound interactive `goto`/navigation commands (30
+  seconds by default; use `0` to disable the bound)
 - `-screenshot`: capture a screenshot; use `full <file>` to write a full-page
   PNG to a specific path
 - `-extract`: extract text or HTML from a selector

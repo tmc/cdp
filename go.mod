@@ -17,6 +17,7 @@ require (
 	github.com/tmc/macgo v0.1.1
 	github.com/yuin/goldmark v1.7.1
 	golang.org/x/image v0.38.0
+	golang.org/x/net v0.50.0
 	golang.org/x/term v0.40.0
 	golang.org/x/tools v0.42.0
 	rsc.io/script v0.0.2
@@ -37,7 +38,6 @@ require (
 	github.com/segmentio/encoding v0.5.4 // indirect
 	github.com/spf13/pflag v1.0.9 // indirect
 	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect
-	golang.org/x/net v0.50.0 // indirect
 	golang.org/x/oauth2 v0.34.0 // indirect
 	golang.org/x/sys v0.42.0 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
