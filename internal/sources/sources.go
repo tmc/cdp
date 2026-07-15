@@ -85,6 +85,8 @@ type Collector struct {
 
 const sourceFetchTimeout = 5 * time.Second
 
+const sourceShutdownTimeout = sourceFetchTimeout + time.Second
+
 // New creates a source collector that writes to outputDir.
 func New(outputDir string, verbose bool) *Collector {
 	return &Collector{
@@ -194,18 +196,33 @@ func (c *Collector) AttachToTarget(ctx context.Context) error {
 func (c *Collector) Close() {
 	c.mu.Lock()
 	cancel := c.fetchCancel
-	c.fetchCancel = nil
-	c.fetchContext = nil
+	done := c.done
 	if c.incremental && c.fetchCh != nil {
 		close(c.fetchCh)
 		c.incremental = false
 	}
 	c.mu.Unlock()
-	if cancel != nil {
-		cancel()
+
+	if done != nil {
+		timer := time.NewTimer(sourceShutdownTimeout)
+		select {
+		case <-done:
+			timer.Stop()
+		case <-timer.C:
+			if cancel != nil {
+				cancel()
+			}
+			<-done
+		}
 	}
-	if c.done != nil {
-		<-c.done
+
+	c.mu.Lock()
+	c.fetchCancel = nil
+	c.fetchContext = nil
+	c.mu.Unlock()
+	if cancel != nil {
+		// Release the context even when the fetcher drained normally.
+		cancel()
 	}
 }
 
