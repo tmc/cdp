@@ -63,7 +63,7 @@ func TestFullCaptureSaveSourcesNewTab(t *testing.T) {
 		t.Fatalf("cdp failed: %v\n%s", err, output.String())
 	}
 
-	sourcePath, ok := fileContaining(t, filepath.Join(outDir, "sources"), marker)
+	sourcePath, ok := fileContaining(t, outDir, marker)
 	if !ok {
 		t.Fatalf("captured sources do not contain marker %q\noutput:\n%s", marker, output.String())
 	}
