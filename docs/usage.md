@@ -77,6 +77,7 @@ Common flags:
 - `-wait`: interactive navigation completion policy: `domcontentloaded`
   (default), `load`, or `networkidle`
 - `-keep-open`: leave a browser launched by cdp running after interactive exit
+  (`-no-quit` is an alias); this applies only to browsers launched by cdp
 - `-quiet`: suppress interactive startup progress
 - `-screenshot`: capture a screenshot; use `full <file>` to write a full-page
   PNG to a specific path

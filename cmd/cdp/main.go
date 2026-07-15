@@ -1352,6 +1352,7 @@ func main() {
 	flag.BoolVar(&groupByPage, "group-by-page", true, "Group capture output by navigated page domain")
 	flag.StringVar(&waitMode, "wait", "domcontentloaded", "Interactive navigation wait: domcontentloaded, load, or networkidle")
 	flag.BoolVar(&keepOpen, "keep-open", false, "Leave a launched browser running after cdp exits")
+	flag.BoolVar(&keepOpen, "no-quit", false, "Alias for --keep-open")
 	flag.BoolVar(&showChromeFlags, "show-chrome-flags", false, "Print the Chrome command-line flags used at launch")
 	flag.StringVar(&outputDir, "output-dir", "", "Directory to write domain-organized logs to (overrides --harl-file)")
 	flag.BoolVar(&monitorAllTabs, "monitor-all-tabs", false, "Monitor network traffic from all browser tabs")
@@ -4219,7 +4220,7 @@ func printHelp() {
 	fmt.Println("  help aliases      - List all alias commands")
 	fmt.Println("  help enhanced     - List enhanced commands (remote Chrome only)")
 	fmt.Println("  hup               - Detach from browser (leave browser running)")
-	fmt.Println("  exit / quit       - Exit the program (closes browser)")
+	fmt.Println("  exit / quit       - Exit the program (closes launched browser unless --keep-open)")
 
 	fmt.Println("\nExit Codes:")
 	fmt.Println("  0 - Success")
@@ -4313,6 +4314,9 @@ func handleEnhancedMode(command string, interactive bool, cfg fullCaptureConfig)
 			if err := chromedp.Run(chromeCtx, chromedp.Evaluate("1", nil)); err != nil {
 				exitWithError(ExitBrowserError, ErrorTypeBrowser, "Failed to attach to browser: %v", err)
 			}
+			if err := chromedp.Run(chromeCtx, page.Enable()); err != nil {
+				exitWithError(ExitBrowserError, ErrorTypeBrowser, "Failed to enable page events: %v", err)
+			}
 
 			// Wire source collector if --save-sources is enabled.
 			// Must be set up before InteractiveMode so defers run in correct order
@@ -4369,7 +4373,7 @@ func handleEnhancedMode(command string, interactive bool, cfg fullCaptureConfig)
 					exitWithError(ExitGeneralError, ErrorTypeGeneral, "Failed to create recorder: %v", err)
 				}
 
-				if err := chromedp.Run(chromeCtx, network.Enable(), page.Enable()); err != nil {
+				if err := chromedp.Run(chromeCtx, network.Enable()); err != nil {
 					log.Printf("Warning: failed to enable network monitoring: %v", err)
 				} else {
 					chromedp.ListenTarget(chromeCtx, enhancedRec.HandleNetworkEvent(chromeCtx))

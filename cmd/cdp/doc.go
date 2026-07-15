@@ -183,7 +183,7 @@ Session Commands:
 	hup                 Detach from browser (leave it running)
 	help                Show help
 	help aliases        List all alias commands
-	exit / quit         Exit the program
+	exit / quit         Exit the program (closes launched browser unless --keep-open)
 
 Exit Codes:
 
