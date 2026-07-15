@@ -386,9 +386,9 @@ func runMCP(cfg mcpConfig) error {
 		// Set up source capture if requested.
 		var sourceCollector *sources.Collector
 		if cfg.SaveSources {
-			sourcesDir := filepath.Join(cfg.OutputDir, "sources")
-			if cfg.OutputDir == "" {
-				sourcesDir = "sources"
+			sourcesDir := cfg.OutputDir
+			if sourcesDir == "" {
+				sourcesDir = "."
 			}
 			sourceCollector = sources.New(sourcesDir, cfg.Verbose)
 			if scrubber != nil {

@@ -3254,9 +3254,9 @@ func main() {
 		// listener stranded).
 		var sourceCollector *sources.Collector
 		if saveSources {
-			sourcesDir := filepath.Join(outputDir, "sources")
-			if outputDir == "" {
-				sourcesDir = "sources"
+			sourcesDir := outputDir
+			if sourcesDir == "" {
+				sourcesDir = "."
 			}
 			sc := sources.New(sourcesDir, verbose)
 			// Register the listener on browserCtx (long-lived) BEFORE
@@ -4307,9 +4307,9 @@ func handleEnhancedMode(command string, interactive bool, cfg fullCaptureConfig)
 			// (capture sources before cancelling browser context).
 			var sc *sources.Collector
 			if cfg.SaveSources {
-				sourcesDir := filepath.Join(cfg.OutputDir, "sources")
-				if cfg.OutputDir == "" {
-					sourcesDir = "sources"
+				sourcesDir := cfg.OutputDir
+				if sourcesDir == "" {
+					sourcesDir = "."
 				}
 				sc = sources.New(sourcesDir, cfg.Verbose)
 				if !cfg.NoScrub {
