@@ -312,6 +312,12 @@ func (r *Recorder) HandleNetworkEvent(ctx context.Context) func(interface{}) {
 
 		switch e := ev.(type) {
 		case *network.EventRequestWillBeSent:
+			// The request for the top-level document can arrive before
+			// Page.frameNavigated. Use it to seed the page group so the
+			// document itself is not stranded under unknown_domain.
+			if r.pageDomain == "" && e.Type == network.ResourceTypeDocument && e.Request != nil {
+				r.pageDomain = pageDomain(e.Request.URL)
+			}
 			if r.verbose {
 				log.Printf("Request: %s %s", e.Request.Method, e.Request.URL)
 			}

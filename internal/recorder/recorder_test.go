@@ -181,6 +181,31 @@ func TestRecorderStreaming(t *testing.T) {
 	}
 }
 
+func TestRequestSeedsPageDomainBeforeNavigationEvent(t *testing.T) {
+	r, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Close()
+
+	handler := r.HandleNetworkEvent(context.Background())
+	handler(&network.EventRequestWillBeSent{
+		RequestID: "1",
+		Type:      network.ResourceTypeDocument,
+		Request: &network.Request{
+			URL:    "https://www.lesswrong.com/",
+			Method: "GET",
+		},
+	})
+
+	r.Lock()
+	got := r.requestPages["1"]
+	r.Unlock()
+	if got != "lesswrong.com" {
+		t.Fatalf("request page = %q, want lesswrong.com", got)
+	}
+}
+
 // TestCreateHAREntry is disabled because createHAREntry is now a private implementation detail
 // func TestCreateHAREntry(t *testing.T) {
 // 	tests := []struct {
