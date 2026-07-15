@@ -5063,13 +5063,6 @@ func launchKeepOpenChrome(ctx context.Context, chromePath string, debugPort int,
 	browserCtx, browserCancel := chromedp.NewContext(allocCtx,
 		chromedp.WithErrorf(filteredErrorf),
 	)
-	if err := runStartupAction(browserCtx, func() error {
-		return chromedp.Run(browserCtx, chromedp.Evaluate("1", nil))
-	}); err != nil {
-		browserCancel()
-		allocCancel()
-		return nil, nil, false, fmt.Errorf("attach to keep-open browser: %w", err)
-	}
 	fmt.Fprintf(os.Stderr, "Launched new browser on debug port %d\n", debugPort)
 	cancel := func() {
 		browserCancel()
