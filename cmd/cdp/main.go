@@ -1248,6 +1248,7 @@ func main() {
 		command           string
 		fullCapture       bool
 		navigationTimeout int
+		groupByPage       bool
 		showChromeFlags   bool
 		outputDir         string // Directory to write domain-organized logs to
 
@@ -1346,6 +1347,7 @@ func main() {
 	flag.StringVar(&command, "command", "", "Execute a single CDP command")
 	flag.BoolVar(&fullCapture, "full-capture", false, "Interactive mode with full request/response body capture")
 	flag.IntVar(&navigationTimeout, "navigation-timeout", 30, "Maximum seconds to wait for interactive navigation (0 for no timeout)")
+	flag.BoolVar(&groupByPage, "group-by-page", true, "Group capture output by navigated page domain")
 	flag.BoolVar(&showChromeFlags, "show-chrome-flags", false, "Print the Chrome command-line flags used at launch")
 	flag.StringVar(&outputDir, "output-dir", "", "Directory to write domain-organized logs to (overrides --harl-file)")
 	flag.BoolVar(&monitorAllTabs, "monitor-all-tabs", false, "Monitor network traffic from all browser tabs")
@@ -1650,6 +1652,7 @@ func main() {
 			NavigationTimeout: navigationTimeout,
 			AutoDiscover:      autoDiscover,
 			Progress:          newStartupProgress(os.Stderr, fullCapture && !quiet && stderrIsTerminal()),
+			GroupByPage:       groupByPage,
 		})
 		return
 	}
@@ -4312,6 +4315,7 @@ func handleEnhancedMode(command string, interactive bool, cfg fullCaptureConfig)
 					sourcesDir = "."
 				}
 				sc = sources.New(sourcesDir, cfg.Verbose)
+				sc.SetGroupByPage(cfg.GroupByPage)
 				if !cfg.NoScrub {
 					sc.SetScrubber(scrub.New())
 				}
@@ -4342,6 +4346,7 @@ func handleEnhancedMode(command string, interactive bool, cfg fullCaptureConfig)
 					harrecorder.WithStreaming(true),
 					harrecorder.WithOutputDir(cfg.OutputDir),
 					harrecorder.WithMaxBodyBytes(cfg.MaxBodyBytes),
+					harrecorder.WithGroupByPage(cfg.GroupByPage),
 				}
 				recOpts = appendHARLOutputOptions(recOpts, cfg.OutputDir, cfg.HarlFile)
 				if !cfg.NoScrub {
@@ -4562,6 +4567,7 @@ type fullCaptureConfig struct {
 	MaxBodyBytes      int64
 	NavigationTimeout int
 	Progress          *startupProgress
+	GroupByPage       bool
 }
 
 type startupProgress struct {

@@ -73,6 +73,7 @@ type Recorder struct {
 	outputDir    string
 	outputFile   string
 	maxBodyBytes int64
+	groupByPage  bool
 
 	// Fetch domain interception
 	fetchBodies map[network.RequestID]capturedBody // Bodies captured via Fetch domain
@@ -168,6 +169,15 @@ func WithMaxBodyBytes(n int64) Option {
 	}
 }
 
+// WithGroupByPage selects whether output directories use the navigated page's
+// registrable domain. The default is enabled.
+func WithGroupByPage(enabled bool) Option {
+	return func(r *Recorder) error {
+		r.groupByPage = enabled
+		return nil
+	}
+}
+
 func WithScrubber(s *scrub.Scrubber) Option {
 	return func(r *Recorder) error {
 		r.scrubber = s
@@ -213,6 +223,7 @@ func New(opts ...Option) (*Recorder, error) {
 		tagRanges:    make([]*TagRange, 0),
 		writes:       make(chan writerCmd, writeQueueSize),
 		writerDone:   make(chan struct{}),
+		groupByPage:  true,
 	}
 
 	for _, opt := range opts {
@@ -227,6 +238,14 @@ func New(opts ...Option) (*Recorder, error) {
 }
 
 func pageDomain(rawURL string) string {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return "unknown_domain"
+	}
+	return sitegroup.RegistrableDomain(u.Hostname())
+}
+
+func requestDomain(rawURL string) string {
 	u, err := url.Parse(rawURL)
 	if err != nil {
 		return "unknown_domain"
@@ -770,6 +789,9 @@ func (r *Recorder) writeRawToDomainFile(rawURL, dir string, data []byte) error {
 }
 
 func (r *Recorder) writeRawToDomainFileAtPage(rawURL, page, dir string, data []byte) error {
+	if !r.groupByPage {
+		page = requestDomain(rawURL)
+	}
 	return r.enqueueWrite(rawURL, page, dir, data)
 }
 

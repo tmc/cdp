@@ -139,7 +139,11 @@ func buildCDP(t *testing.T) string {
 	}
 
 	cmd := exec.Command("go", "build", "-o", cdpPath, ".")
-	cmd.Dir = filepath.Dir(".")
+	_, sourceFile, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("failed to locate test source directory")
+	}
+	cmd.Dir = filepath.Dir(sourceFile)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("Failed to build cdp: %v\nOutput: %s", err, string(output))

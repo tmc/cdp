@@ -70,6 +70,8 @@ Common flags:
 - `-output-dir`: write per-host HARL files under the registrable domain of the
   navigated page, and place saved sources under that page domain's `sources/`
   directory
+- `-group-by-page`: group output by the navigated page's registrable domain
+  (enabled by default; use `-group-by-page=false` for request-domain layout)
 - `-navigation-timeout`: bound interactive `goto`/navigation commands (30
   seconds by default; use `0` to disable the bound)
 - `-quiet`: suppress interactive startup progress

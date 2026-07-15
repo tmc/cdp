@@ -78,6 +78,7 @@ type Collector struct {
 	incremental    bool              // whether incremental mode is active
 	pageMu         sync.RWMutex
 	pageDomain     string // registrable domain of the current top-level page
+	groupByPage    bool
 }
 
 // New creates a source collector that writes to outputDir.
@@ -92,7 +93,16 @@ func New(outputDir string, verbose bool) *Collector {
 			Timeout: 30 * time.Second,
 		},
 		sourcemapCache: make(map[string]string),
+		groupByPage:    true,
 	}
+}
+
+// SetGroupByPage selects whether source paths use the navigated page's
+// registrable domain. The default is enabled.
+func (c *Collector) SetGroupByPage(enabled bool) {
+	c.pageMu.Lock()
+	c.groupByPage = enabled
+	c.pageMu.Unlock()
 }
 
 // Enable activates the Debugger and CSS domains so the browser emits
@@ -583,7 +593,11 @@ func sourcePageDomain(rawURL string) string {
 func (c *Collector) sourcePath(origin string, parts ...string) string {
 	c.pageMu.RLock()
 	page := c.pageDomain
+	groupByPage := c.groupByPage
 	c.pageMu.RUnlock()
+	if !groupByPage {
+		return filepath.Join(append([]string{c.outputDir, "sources", origin}, parts...)...)
+	}
 	if page == "" {
 		page = "unknown_domain"
 	}

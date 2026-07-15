@@ -106,6 +106,22 @@ func TestWriterGroupsRequestsByPageDomain(t *testing.T) {
 	}
 }
 
+func TestWriterCanUseRequestDomainLayout(t *testing.T) {
+	dir := t.TempDir()
+	r, err := New(WithStreaming(true), WithOutputDir(dir), WithGroupByPage(false))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := r.writeRawToDomainFile("https://res.cloudinary.com/image", dir, []byte(`{"url":"cloudinary"}`)); err != nil {
+		t.Fatal(err)
+	}
+	r.Close()
+	path := filepath.Join(dir, "cloudinary.com", "res.cloudinary.com.jsonl")
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("stat %s: %v", path, err)
+	}
+}
+
 func TestStreamingWritesOutputFile(t *testing.T) {
 	t.Parallel()
 	file := filepath.Join(t.TempDir(), "out.har.jsonl")
