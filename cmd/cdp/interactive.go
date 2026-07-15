@@ -906,7 +906,7 @@ func (im *InteractiveMode) Run() error {
 			log.Printf("Warning: source capture errors: %v", err)
 		}
 		if err := im.sourceCollector.WriteToDisk(); err != nil {
-			log.Printf("Warning: failed to write sources: %v", err)
+			log.Printf("Warning: failed to write sources to %s: %v", im.sourceCollector.OutputDir(), err)
 		}
 	}
 

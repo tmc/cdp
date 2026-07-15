@@ -3263,7 +3263,7 @@ func main() {
 			if err := chromedp.Run(browserCtx, chromedp.ActionFunc(func(ctx context.Context) error {
 				return sc.Enable(ctx)
 			})); err != nil {
-				log.Printf("Warning: failed to enable source capture: %v", err)
+				log.Printf("Warning: failed to enable source capture in %s: %v", sourcesDir, err)
 			} else {
 				sourceCollector = sc
 				defer func() {
@@ -3274,7 +3274,7 @@ func main() {
 						log.Printf("Warning: source capture errors: %v", err)
 					}
 					if err := sc.WriteToDisk(); err != nil {
-						log.Printf("Warning: failed to write sources: %v", err)
+						log.Printf("Warning: failed to write sources to %s: %v", sc.OutputDir(), err)
 					}
 				}()
 			}
@@ -4316,8 +4316,9 @@ func handleEnhancedMode(command string, interactive bool, cfg fullCaptureConfig)
 				if err := chromedp.Run(chromeCtx, chromedp.ActionFunc(func(ctx context.Context) error {
 					return sc.Enable(ctx)
 				})); err != nil {
-					log.Printf("Warning: failed to enable source capture: %v", err)
-					sc = nil
+					chromeCancel()
+					exitWithError(ExitGeneralError, ErrorTypeGeneral,
+						"enable source capture in %s: %v", sourcesDir, err)
 				}
 				if cfg.Verbose {
 					log.Printf("startup: source capture ready after %v", time.Since(started))
