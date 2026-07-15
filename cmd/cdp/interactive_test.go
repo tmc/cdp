@@ -72,6 +72,13 @@ func TestInteractiveNavigationContextTimeout(t *testing.T) {
 	if _, ok := ctx.Deadline(); !ok {
 		t.Fatal("navigation context has no deadline")
 	}
+	parentDone := im.ctx.Done()
+	cancel()
+	select {
+	case <-parentDone:
+		t.Fatal("navigation timeout canceled the browser context")
+	default:
+	}
 }
 
 func TestNavigationProgressWrapError(t *testing.T) {
@@ -90,6 +97,28 @@ func TestNavigationProgressWrapError(t *testing.T) {
 	}
 	if !strings.Contains(output.String(), "navigating https://example.test/stall") {
 		t.Fatalf("navigation progress missing start: %q", output.String())
+	}
+}
+
+func TestNavigationProgressWaitModes(t *testing.T) {
+	for _, mode := range []string{"domcontentloaded", "load", "networkidle"} {
+		t.Run(mode, func(t *testing.T) {
+			nav := newNavigationProgress(nil, "https://example.test", 1)
+			nav.start()
+			switch mode {
+			case "domcontentloaded":
+				nav.domOnce.Do(func() { close(nav.domReady) })
+			case "load":
+				nav.loadOnce.Do(func() { close(nav.loadReady) })
+			case "networkidle":
+				nav.idleOnce.Do(func() { close(nav.idleReady) })
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+			defer cancel()
+			if err := nav.wait(ctx, mode); err != nil {
+				t.Fatal(err)
+			}
+		})
 	}
 }
 

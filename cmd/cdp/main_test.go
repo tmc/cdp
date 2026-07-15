@@ -94,7 +94,7 @@ func TestStartupProgress(t *testing.T) {
 	progress.begin("Connecting (CDP)")
 	progress.begin("Preparing capture")
 	progress.ready()
-	if got, want := out.String(), "Discovering browser...\nStarting Chrome...\nConnecting (CDP)...\nPreparing capture...\nReady.\n"; got != want {
+	if got, want := out.String(), "\x1b[2m  Discovering browser...\x1b[0m\n\x1b[2m  Starting Chrome...\x1b[0m\n\x1b[2m  Connecting (CDP)...\x1b[0m\n\x1b[2m  Preparing capture...\x1b[0m\n\x1b[2m  Ready.\x1b[0m\n"; got != want {
 		t.Fatalf("startup progress = %q, want %q", got, want)
 	}
 

@@ -17,6 +17,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/chromedp/cdproto/cdp"
 	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/cdproto/page"
 	"github.com/chromedp/cdproto/target"
@@ -1372,6 +1373,9 @@ func (im *InteractiveMode) executeCommand(line string) error {
 		run := func() error {
 			ctx, cancel := im.commandContext(cmd)
 			defer cancel()
+			if cmd.Name == "navigate" {
+				return im.navigate(ctx, args, nav)
+			}
 			return cmd.Handler(ctx, args)
 		}
 		err := run()
@@ -1420,9 +1424,17 @@ type navigationProgress struct {
 	timeout  int
 	started  time.Time
 
-	mu     sync.Mutex
-	active bool
-	stage  string
+	mu        sync.Mutex
+	active    bool
+	stage     string
+	domReady  chan struct{}
+	loadReady chan struct{}
+	idleReady chan struct{}
+	domOnce   sync.Once
+	loadOnce  sync.Once
+	idleOnce  sync.Once
+	pending   map[network.RequestID]struct{}
+	idleTimer *time.Timer
 }
 
 func newNavigationProgress(progress *startupProgress, url string, timeout int) *navigationProgress {
@@ -1436,6 +1448,12 @@ func (n *navigationProgress) listen(ctx context.Context) {
 	chromedp.ListenTarget(ctx, func(ev interface{}) {
 		switch e := ev.(type) {
 		case *network.EventRequestWillBeSent:
+			n.mu.Lock()
+			if n.active {
+				n.pending[e.RequestID] = struct{}{}
+				n.resetIdleLocked()
+			}
+			n.mu.Unlock()
 			if e.Request != nil && sameNavigationURL(e.Request.URL, n.url) {
 				n.setStage("request sent")
 			}
@@ -1445,8 +1463,14 @@ func (n *navigationProgress) listen(ctx context.Context) {
 			}
 		case *page.EventDomContentEventFired:
 			n.setStage("DOM content loaded")
+			n.domOnce.Do(func() { close(n.domReady) })
 		case *page.EventLoadEventFired:
 			n.setStage("load event")
+			n.loadOnce.Do(func() { close(n.loadReady) })
+		case *network.EventLoadingFinished:
+			n.requestDone(e.RequestID)
+		case *network.EventLoadingFailed:
+			n.requestDone(e.RequestID)
 		}
 	})
 }
@@ -1471,8 +1495,61 @@ func (n *navigationProgress) start() {
 	n.mu.Lock()
 	n.started = time.Now()
 	n.active = true
+	n.domReady = make(chan struct{})
+	n.loadReady = make(chan struct{})
+	n.idleReady = make(chan struct{})
+	n.pending = make(map[network.RequestID]struct{})
 	n.mu.Unlock()
 	n.write("navigating " + n.url + " (requesting)")
+}
+
+func (n *navigationProgress) beginIdle() {
+	if n == nil {
+		return
+	}
+	n.mu.Lock()
+	n.resetIdleLocked()
+	n.mu.Unlock()
+}
+
+func (n *navigationProgress) requestDone(id network.RequestID) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	if !n.active {
+		return
+	}
+	delete(n.pending, id)
+	n.resetIdleLocked()
+}
+
+func (n *navigationProgress) resetIdleLocked() {
+	if n.idleTimer != nil {
+		n.idleTimer.Stop()
+	}
+	if len(n.pending) != 0 {
+		return
+	}
+	n.idleTimer = time.AfterFunc(500*time.Millisecond, func() {
+		n.idleOnce.Do(func() { close(n.idleReady) })
+	})
+}
+
+func (n *navigationProgress) wait(ctx context.Context, mode string) error {
+	var ready <-chan struct{}
+	switch mode {
+	case "load":
+		ready = n.loadReady
+	case "networkidle":
+		ready = n.idleReady
+	default:
+		ready = n.domReady
+	}
+	select {
+	case <-ready:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 func (n *navigationProgress) setStage(stage string) {
@@ -1495,10 +1572,10 @@ func (n *navigationProgress) finish(err error) {
 	elapsed := time.Since(n.started)
 	n.mu.Unlock()
 	if err == nil {
-		n.write(fmt.Sprintf("loaded %s (%s)", n.url, elapsed.Round(time.Millisecond)))
+		n.writeFinal(fmt.Sprintf("✓ loaded %s (%s)", n.url, elapsed.Round(time.Millisecond)))
 		return
 	}
-	n.write(fmt.Sprintf("navigation failed %s (%s)", n.url, elapsed.Round(time.Millisecond)))
+	n.writeFinal(fmt.Sprintf("navigation failed %s (%s)", n.url, elapsed.Round(time.Millisecond)))
 }
 
 func (n *navigationProgress) stageName() string {
@@ -1517,7 +1594,14 @@ func (n *navigationProgress) write(message string) {
 	if n == nil || n.progress == nil || !n.progress.enabled {
 		return
 	}
-	fmt.Fprintf(n.progress.w, "%s\n", message)
+	n.progress.status(message, false)
+}
+
+func (n *navigationProgress) writeFinal(message string) {
+	if n == nil || n.progress == nil || !n.progress.enabled {
+		return
+	}
+	n.progress.status(message, true)
 }
 
 func (n *navigationProgress) wrapError(err error) error {
@@ -1539,7 +1623,32 @@ func (im *InteractiveMode) commandContext(cmd *Command) (context.Context, contex
 	if im.cfg.NavigationTimeout < 0 {
 		return im.ctx, func() {}
 	}
-	return context.WithTimeout(im.ctx, time.Duration(im.cfg.NavigationTimeout)*time.Second)
+	// A timeout derived directly from a chromedp context can close its target
+	// when the child is cancelled. Preserve the executor and values while
+	// severing cancellation from the browser-owning context.
+	return context.WithTimeout(context.WithoutCancel(im.ctx), time.Duration(im.cfg.NavigationTimeout)*time.Second)
+}
+
+func (im *InteractiveMode) navigate(ctx context.Context, args []string, nav *navigationProgress) error {
+	if len(args) < 1 {
+		return errors.New("URL required")
+	}
+	cdpContext := chromedp.FromContext(im.ctx)
+	if cdpContext == nil || cdpContext.Target == nil {
+		return errors.New("browser target unavailable")
+	}
+	_, _, errorText, _, err := page.Navigate(args[0]).Do(cdp.WithExecutor(ctx, cdpContext.Target))
+	if err != nil {
+		return err
+	}
+	if errorText != "" {
+		return fmt.Errorf("page load error %s", errorText)
+	}
+	if nav == nil {
+		return nil
+	}
+	nav.beginIdle()
+	return nav.wait(ctx, im.cfg.WaitMode)
 }
 
 // executeRawCDP executes a raw CDP command

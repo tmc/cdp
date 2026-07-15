@@ -74,6 +74,9 @@ Common flags:
   (enabled by default; use `-group-by-page=false` for request-domain layout)
 - `-navigation-timeout`: bound interactive `goto`/navigation commands (30
   seconds by default; use `0` to disable the bound)
+- `-wait`: interactive navigation completion policy: `domcontentloaded`
+  (default), `load`, or `networkidle`
+- `-keep-open`: leave a browser launched by cdp running after interactive exit
 - `-quiet`: suppress interactive startup progress
 - `-screenshot`: capture a screenshot; use `full <file>` to write a full-page
   PNG to a specific path

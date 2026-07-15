@@ -1249,6 +1249,8 @@ func main() {
 		fullCapture       bool
 		navigationTimeout int
 		groupByPage       bool
+		waitMode          string
+		keepOpen          bool
 		showChromeFlags   bool
 		outputDir         string // Directory to write domain-organized logs to
 
@@ -1348,6 +1350,8 @@ func main() {
 	flag.BoolVar(&fullCapture, "full-capture", false, "Interactive mode with full request/response body capture")
 	flag.IntVar(&navigationTimeout, "navigation-timeout", 30, "Maximum seconds to wait for interactive navigation (0 for no timeout)")
 	flag.BoolVar(&groupByPage, "group-by-page", true, "Group capture output by navigated page domain")
+	flag.StringVar(&waitMode, "wait", "domcontentloaded", "Interactive navigation wait: domcontentloaded, load, or networkidle")
+	flag.BoolVar(&keepOpen, "keep-open", false, "Leave a launched browser running after cdp exits")
 	flag.BoolVar(&showChromeFlags, "show-chrome-flags", false, "Print the Chrome command-line flags used at launch")
 	flag.StringVar(&outputDir, "output-dir", "", "Directory to write domain-organized logs to (overrides --harl-file)")
 	flag.BoolVar(&monitorAllTabs, "monitor-all-tabs", false, "Monitor network traffic from all browser tabs")
@@ -1493,6 +1497,9 @@ func main() {
 	// Validate har-mode flag
 	if harMode != "simple" && harMode != "enhanced" {
 		exitWithError(ExitUsageError, ErrorTypeUsage, "Invalid --har-mode value: %s (must be 'simple' or 'enhanced')", harMode)
+	}
+	if waitMode != "domcontentloaded" && waitMode != "load" && waitMode != "networkidle" {
+		exitWithError(ExitUsageError, ErrorTypeUsage, "Invalid --wait value: %s (must be domcontentloaded, load, or networkidle)", waitMode)
 	}
 	runMode := cliRunMode{
 		jsCount:             len(jsScripts),
@@ -1653,6 +1660,8 @@ func main() {
 			AutoDiscover:      autoDiscover,
 			Progress:          newStartupProgress(os.Stderr, fullCapture && !quiet && stderrIsTerminal()),
 			GroupByPage:       groupByPage,
+			WaitMode:          waitMode,
+			KeepOpen:          keepOpen,
 		})
 		return
 	}
@@ -4335,7 +4344,9 @@ func handleEnhancedMode(command string, interactive bool, cfg fullCaptureConfig)
 				}
 			}
 
-			defer chromeCancel()
+			if !cfg.KeepOpen {
+				defer chromeCancel()
+			}
 
 			// Set up HARL streaming (network recording) if requested.
 			var enhancedRec *harrecorder.Recorder
@@ -4415,6 +4426,11 @@ func handleEnhancedMode(command string, interactive bool, cfg fullCaptureConfig)
 			}
 
 			// Start interactive mode with reconnection support
+			if cfg.KeepOpen {
+				// Leave the allocator and its child process alive after exit.
+				chromeCancel = nil
+				launched = false
+			}
 			im := NewInteractiveMode(chromeCtx, chromeCancel, launched, cfg, cfg.ToolsDir)
 			if sc != nil {
 				im.SetSourceCollector(sc)
@@ -4568,29 +4584,58 @@ type fullCaptureConfig struct {
 	NavigationTimeout int
 	Progress          *startupProgress
 	GroupByPage       bool
+	WaitMode          string
+	KeepOpen          bool
 }
 
 type startupProgress struct {
 	w       io.Writer
 	enabled bool
+	styled  bool
 }
 
 func newStartupProgress(w io.Writer, enabled bool) *startupProgress {
-	return &startupProgress{w: w, enabled: enabled}
+	return &startupProgress{w: w, enabled: enabled, styled: enabled}
+}
+
+func (p *startupProgress) line(message string) {
+	if p == nil || !p.enabled {
+		return
+	}
+	if p.styled {
+		fmt.Fprintf(p.w, "\x1b[2m  %s\x1b[0m\n", message)
+		return
+	}
+	fmt.Fprintf(p.w, "  %s\n", message)
+}
+
+func (p *startupProgress) status(message string, final bool) {
+	if p == nil || !p.enabled {
+		return
+	}
+	if p.styled {
+		if final {
+			fmt.Fprintf(p.w, "\r\x1b[2m  %s\x1b[0m\x1b[K\n", message)
+			return
+		}
+		fmt.Fprintf(p.w, "\r\x1b[2m  %s\x1b[0m\x1b[K", message)
+		return
+	}
+	fmt.Fprintf(p.w, "  %s\n", message)
 }
 
 func (p *startupProgress) begin(phase string) {
 	if p == nil || !p.enabled {
 		return
 	}
-	fmt.Fprintf(p.w, "%s...\n", phase)
+	p.line(phase + "...")
 }
 
 func (p *startupProgress) ready() {
 	if p == nil || !p.enabled {
 		return
 	}
-	fmt.Fprintln(p.w, "Ready.")
+	p.line("Ready.")
 }
 
 func stderrIsTerminal() bool {
