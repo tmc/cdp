@@ -4965,6 +4965,10 @@ func setupChromeForEnhanced(ctx context.Context, cfg fullCaptureConfig) (context
 		}))
 	}
 
+	if cfg.KeepOpen {
+		return launchKeepOpenChrome(ctx, selectedPath, debugPort, cfg, userDataDir, profileCleanup)
+	}
+
 	allocCtx, allocCancel := chromedp.NewExecAllocator(ctx, opts...)
 	browserCtx, browserCancel := chromedp.NewContext(allocCtx,
 		chromedp.WithErrorf(filteredErrorf),
@@ -5000,6 +5004,108 @@ func setupChromeForEnhanced(ctx context.Context, cfg fullCaptureConfig) (context
 		}
 	}
 	return browserCtx, cancel, true, nil
+}
+
+// launchKeepOpenChrome starts a browser independently of chromedp's exec
+// allocator. A remote allocator can disconnect when cdp exits without owning
+// the browser process, which is the lifecycle required by --keep-open.
+func launchKeepOpenChrome(ctx context.Context, chromePath string, debugPort int, cfg fullCaptureConfig, userDataDir string, profileCleanup func()) (context.Context, context.CancelFunc, bool, error) {
+	if chromePath == "" {
+		return nil, nil, false, errors.New("--keep-open requires a discovered or explicit Chrome executable")
+	}
+	if userDataDir == "" {
+		var err error
+		userDataDir, err = os.MkdirTemp("", "cdp-keep-open-")
+		if err != nil {
+			return nil, nil, false, fmt.Errorf("create keep-open profile: %w", err)
+		}
+	}
+
+	args := []string{
+		"--no-first-run",
+		"--no-default-browser-check",
+		"--remote-debugging-port=" + strconv.Itoa(debugPort),
+		"--disable-background-networking",
+		"--disable-breakpad",
+		"--disable-dev-shm-usage",
+		"--disable-renderer-backgrounding",
+		"--metrics-recording-only",
+		"--enable-unsafe-extension-debugging",
+		"--user-data-dir=" + userDataDir,
+		"about:blank",
+	}
+	if cfg.LoadExtensions != "" {
+		args = append(args, "--load-extension="+cfg.LoadExtensions)
+	}
+	if cfg.Headless {
+		args = append(args, "--headless")
+	}
+	if cfg.ShowChromeFlags {
+		fmt.Fprintf(os.Stderr, "Chrome flags: %s\n", strings.Join(args, " "))
+	}
+
+	cmd := exec.Command(chromePath, args...)
+	cmd.Stdout = io.Discard
+	cmd.Stderr = io.Discard
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+	if err := cmd.Start(); err != nil {
+		if profileCleanup != nil {
+			profileCleanup()
+		}
+		return nil, nil, false, fmt.Errorf("start keep-open browser: %w", err)
+	}
+	if err := waitForDebugEndpoint(ctx, debugPort); err != nil {
+		return nil, nil, false, fmt.Errorf("wait for keep-open browser: %w", err)
+	}
+
+	remoteURL := fmt.Sprintf("ws://127.0.0.1:%d", debugPort)
+	allocCtx, allocCancel := chromedp.NewRemoteAllocator(ctx, remoteURL)
+	browserCtx, browserCancel := chromedp.NewContext(allocCtx,
+		chromedp.WithErrorf(filteredErrorf),
+	)
+	if err := runStartupAction(browserCtx, func() error {
+		return chromedp.Run(browserCtx, chromedp.Evaluate("1", nil))
+	}); err != nil {
+		browserCancel()
+		allocCancel()
+		return nil, nil, false, fmt.Errorf("attach to keep-open browser: %w", err)
+	}
+	fmt.Fprintf(os.Stderr, "Launched new browser on debug port %d\n", debugPort)
+	cancel := func() {
+		browserCancel()
+		allocCancel()
+	}
+	return browserCtx, cancel, true, nil
+}
+
+func waitForDebugEndpoint(ctx context.Context, port int) error {
+	client := &http.Client{Timeout: 500 * time.Millisecond}
+	deadline := time.NewTimer(60 * time.Second)
+	defer deadline.Stop()
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		requestCtx, cancel := context.WithTimeout(ctx, 500*time.Millisecond)
+		req, err := http.NewRequestWithContext(requestCtx, http.MethodGet, fmt.Sprintf("http://127.0.0.1:%d/json/version", port), nil)
+		if err == nil {
+			resp, requestErr := client.Do(req)
+			if resp != nil {
+				resp.Body.Close()
+			}
+			if requestErr == nil && resp != nil && resp.StatusCode == http.StatusOK {
+				cancel()
+				return nil
+			}
+		}
+		cancel()
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-deadline.C:
+			return fmt.Errorf("debug endpoint did not become ready on port %d", port)
+		case <-ticker.C:
+		}
+	}
 }
 
 func shouldDiscoverBrowser(cfg fullCaptureConfig) bool {
