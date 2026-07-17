@@ -47,6 +47,7 @@ type InteractiveMode struct {
 	baseOutputDir     string                // root output dir from --output-dir
 	contextStack      []string              // stack of context names for push/pop
 	recorder          recorderWithOutputDir // optional recorder for output dir switching
+	attachRecorder    func(context.Context) // re-attaches traffic capture to a tab context
 	toolsDir          string                // directory for .cdp tool definitions
 	sourceCollector   *sources.Collector
 	coverageCollector *coverage.Collector
@@ -97,6 +98,22 @@ func NewInteractiveMode(ctx context.Context, cancel context.CancelFunc, launched
 func (im *InteractiveMode) SetRecorder(rec recorderWithOutputDir, baseOutputDir string) {
 	im.recorder = rec
 	im.baseOutputDir = baseOutputDir
+}
+
+// SetAttachRecorder registers a function that re-attaches traffic capture
+// (network/fetch listeners) to a given tab context. It is invoked when the
+// active tab changes so full capture follows tab switches, mirroring how the
+// source collector re-attaches.
+func (im *InteractiveMode) SetAttachRecorder(attach func(context.Context)) {
+	im.attachRecorder = attach
+}
+
+// attachRecorderToTab re-attaches traffic capture to ctx if a recorder attach
+// function has been registered.
+func (im *InteractiveMode) attachRecorderToTab(ctx context.Context) {
+	if im.attachRecorder != nil {
+		im.attachRecorder(ctx)
+	}
 }
 
 // SetSourceCollector sets the source collector for source browsing commands.
@@ -1170,6 +1187,7 @@ func (im *InteractiveMode) listTabs() {
 func (im *InteractiveMode) newTab(url string) {
 	tabCtx, _ := chromedp.NewContext(im.browserCtx)
 	im.attachSourceCollector(tabCtx)
+	im.attachRecorderToTab(tabCtx)
 	if err := chromedp.Run(tabCtx, chromedp.Navigate(url)); err != nil {
 		fmt.Printf("Error creating tab: %v\n", err)
 		return
@@ -1225,6 +1243,7 @@ func (im *InteractiveMode) switchTab(selector string) {
 		return
 	}
 	im.attachSourceCollector(tabCtx)
+	im.attachRecorderToTab(tabCtx)
 	im.ctx = tabCtx
 
 	title := targetInfo.Title

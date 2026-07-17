@@ -4374,6 +4374,7 @@ func handleEnhancedMode(command string, interactive bool, cfg fullCaptureConfig)
 
 			// Set up HARL streaming (network recording) if requested.
 			var enhancedRec *harrecorder.Recorder
+			var attachTrafficCapture func(context.Context)
 			if cfg.HarlStream {
 				warnHARLStdout(cfg.OutputDir, cfg.HarlFile)
 				recOpts := []harrecorder.Option{
@@ -4393,20 +4394,31 @@ func handleEnhancedMode(command string, interactive bool, cfg fullCaptureConfig)
 					exitWithError(ExitGeneralError, ErrorTypeGeneral, "Failed to create recorder: %v", err)
 				}
 
-				if err := chromedp.Run(chromeCtx, network.Enable()); err != nil {
-					log.Printf("Warning: failed to enable network monitoring: %v", err)
-				} else {
-					chromedp.ListenTarget(chromeCtx, enhancedRec.HandleNetworkEvent(chromeCtx))
+				// attachTrafficCapture wires the recorder's network/fetch
+				// listeners and JS capture scripts onto a tab context. It runs
+				// for the initial tab and again on every tab switch so full
+				// capture follows `tab`/`newtab`.
+				attachTrafficCapture = func(ctx context.Context) {
+					// Enable page events so frameNavigated updates the capture
+					// group when this tab navigates.
+					if err := chromedp.Run(ctx, page.Enable()); err != nil && cfg.Verbose {
+						log.Printf("Warning: failed to enable page events: %v", err)
+					}
+					if err := chromedp.Run(ctx, network.Enable()); err != nil {
+						log.Printf("Warning: failed to enable network monitoring: %v", err)
+						return
+					}
+					chromedp.ListenTarget(ctx, enhancedRec.HandleNetworkEvent(ctx))
 
 					// Enable Fetch domain interception for response body capture.
-					if err := chromedp.Run(chromeCtx, fetch.Enable().WithPatterns([]*fetch.RequestPattern{
+					if err := chromedp.Run(ctx, fetch.Enable().WithPatterns([]*fetch.RequestPattern{
 						{URLPattern: "*", RequestStage: fetch.RequestStageResponse},
 					})); err != nil {
 						if cfg.Verbose {
 							log.Printf("Warning: failed to enable Fetch domain: %v", err)
 						}
 					} else {
-						chromedp.ListenTarget(chromeCtx, enhancedRec.HandleFetchEvent(chromeCtx))
+						chromedp.ListenTarget(ctx, enhancedRec.HandleFetchEvent(ctx))
 					}
 
 					// Inject JS capture scripts for gRPC-Web streaming and WebRTC.
@@ -4414,7 +4426,7 @@ func handleEnhancedMode(command string, interactive bool, cfg fullCaptureConfig)
 						"fetch-capture":  harrecorder.FetchCaptureScript,
 						"webrtc-capture": harrecorder.WebRTCCaptureScript,
 					} {
-						if err := chromedp.Run(chromeCtx, chromedp.ActionFunc(func(ctx context.Context) error {
+						if err := chromedp.Run(ctx, chromedp.ActionFunc(func(ctx context.Context) error {
 							_, err := page.AddScriptToEvaluateOnNewDocument(script).Do(ctx)
 							return err
 						})); err != nil {
@@ -4425,20 +4437,21 @@ func handleEnhancedMode(command string, interactive bool, cfg fullCaptureConfig)
 					}
 
 					// Route structured capture console messages to recorder.
-					chromedp.ListenTarget(chromeCtx, func(ev interface{}) {
+					chromedp.ListenTarget(ctx, func(ev interface{}) {
 						if ce, ok := ev.(*runtime.EventConsoleAPICalled); ok {
 							enhancedRec.HandleConsoleCapture(ce)
 						}
 					})
+				}
 
-					if cfg.Verbose {
-						if cfg.OutputDir != "" {
-							log.Printf("Streaming HAR entries as NDJSON to %s/{page-domain}/{hostname}.jsonl", cfg.OutputDir)
-						} else if cfg.HarlFile == "-" {
-							log.Println("Streaming HAR entries as NDJSON to stdout")
-						} else {
-							log.Printf("Streaming HAR entries as NDJSON to %s", cfg.HarlFile)
-						}
+				attachTrafficCapture(chromeCtx)
+				if cfg.Verbose {
+					if cfg.OutputDir != "" {
+						log.Printf("Streaming HAR entries as NDJSON to %s/{page-domain}/{hostname}.jsonl", cfg.OutputDir)
+					} else if cfg.HarlFile == "-" {
+						log.Println("Streaming HAR entries as NDJSON to stdout")
+					} else {
+						log.Printf("Streaming HAR entries as NDJSON to %s", cfg.HarlFile)
 					}
 				}
 			}
@@ -4461,6 +4474,9 @@ func handleEnhancedMode(command string, interactive bool, cfg fullCaptureConfig)
 			}
 			if enhancedRec != nil {
 				im.SetRecorder(enhancedRec, cfg.OutputDir)
+				if attachTrafficCapture != nil {
+					im.SetAttachRecorder(attachTrafficCapture)
+				}
 				// Drain queued HARL writes after the REPL has flushed sources,
 				// but before any browser teardown or keep-open detachment.
 				defer enhancedRec.Close()
