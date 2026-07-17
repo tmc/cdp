@@ -22,7 +22,7 @@ func (r *V8Runtime) EnableRuntime() error {
 		return err
 	}
 
-	r.client.runtimeEnabled = true
+	r.client.setRuntimeEnabled(true)
 
 	if r.client.verbose {
 		fmt.Println("Runtime domain enabled")
@@ -38,7 +38,7 @@ func (r *V8Runtime) DisableRuntime() error {
 		return err
 	}
 
-	r.client.runtimeEnabled = false
+	r.client.setRuntimeEnabled(false)
 	return nil
 }
 

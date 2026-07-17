@@ -23,7 +23,7 @@ func (d *V8Debugger) EnableDebugger() error {
 		return err
 	}
 
-	d.client.debuggerEnabled = true
+	d.client.setDebuggerEnabled(true)
 
 	// Set up common debugger configuration
 	d.client.SendCommand("Debugger.setSkipAllPauses", map[string]interface{}{"skip": false})
@@ -44,7 +44,7 @@ func (d *V8Debugger) DisableDebugger() error {
 		return err
 	}
 
-	d.client.debuggerEnabled = false
+	d.client.setDebuggerEnabled(false)
 	return nil
 }
 
@@ -79,14 +79,14 @@ func (d *V8Debugger) SetBreakpointByLineNumber(lineNumber int, url string, condi
 		breakpoint.Resolved = true
 		if loc, ok := locations[0].(map[string]interface{}); ok {
 			if scriptId, ok := loc["scriptId"].(string); ok {
-				if script, exists := d.client.scripts[scriptId]; exists {
+				if script, exists := d.client.scriptByID(scriptId); exists {
 					breakpoint.URL = script.URL
 				}
 			}
 		}
 	}
 
-	d.client.breakpoints[breakpoint.ID] = breakpoint
+	d.client.addBreakpoint(breakpoint)
 
 	if d.client.verbose {
 		fmt.Printf("Breakpoint set: %s at line %d\n", breakpoint.ID, lineNumber)
@@ -118,7 +118,7 @@ func (d *V8Debugger) SetBreakpointByLocation(location string, condition string) 
 
 	// Try to find exact URL match first
 	var targetURL string
-	for _, script := range d.client.scripts {
+	for _, script := range d.client.Scripts() {
 		if strings.Contains(script.URL, fileName) || strings.HasSuffix(script.URL, fileName) {
 			targetURL = script.URL
 			break
@@ -153,7 +153,7 @@ func (d *V8Debugger) SetBreakpointByLocation(location string, condition string) 
 			breakpoint.Resolved = true
 		}
 
-		d.client.breakpoints[breakpoint.ID] = breakpoint
+		d.client.addBreakpoint(breakpoint)
 		return breakpoint, nil
 	}
 
@@ -171,7 +171,7 @@ func (d *V8Debugger) RemoveBreakpoint(breakpointID string) error {
 		return err
 	}
 
-	delete(d.client.breakpoints, breakpointID)
+	d.client.removeBreakpoint(breakpointID)
 
 	if d.client.verbose {
 		fmt.Printf("Breakpoint removed: %s\n", breakpointID)
@@ -182,11 +182,7 @@ func (d *V8Debugger) RemoveBreakpoint(breakpointID string) error {
 
 // ListBreakpoints returns all active breakpoints
 func (d *V8Debugger) ListBreakpoints() []*V8Breakpoint {
-	var breakpoints []*V8Breakpoint
-	for _, bp := range d.client.breakpoints {
-		breakpoints = append(breakpoints, bp)
-	}
-	return breakpoints
+	return d.client.breakpointList()
 }
 
 // Resume continues execution
@@ -261,7 +257,7 @@ func (d *V8Debugger) Pause() error {
 
 // GetCallStack returns the current call stack
 func (d *V8Debugger) GetCallStack() []*V8CallFrame {
-	return d.client.callFrames
+	return d.client.currentCallFrames()
 }
 
 // SetPauseOnExceptions configures pause behavior for exceptions

@@ -22,7 +22,7 @@ func (p *V8Profiler) EnableProfiler() error {
 		return err
 	}
 
-	p.client.profilerEnabled = true
+	p.client.setProfilerEnabled(true)
 
 	if p.client.verbose {
 		fmt.Println("Profiler domain enabled")
@@ -38,7 +38,7 @@ func (p *V8Profiler) DisableProfiler() error {
 		return err
 	}
 
-	p.client.profilerEnabled = false
+	p.client.setProfilerEnabled(false)
 	return nil
 }
 

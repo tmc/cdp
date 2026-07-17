@@ -167,29 +167,32 @@ func (c *V8InspectorClient) Connect(ctx context.Context, target *V8Target) error
 		return errors.New("target has no WebSocket debugger URL")
 	}
 
-	c.wsURL = target.WebSocketDebuggerURL
+	wsURL := target.WebSocketDebuggerURL
 
 	// Parse and validate WebSocket URL
-	_, err := url.Parse(c.wsURL)
+	_, err := url.Parse(wsURL)
 	if err != nil {
-		return fmt.Errorf(fmt.Sprintf("invalid WebSocket URL: %s", c.wsURL)+": %w", err)
+		return fmt.Errorf(fmt.Sprintf("invalid WebSocket URL: %s", wsURL)+": %w", err)
 	}
 
 	// Establish WebSocket connection
 	dialer := websocket.DefaultDialer
 	dialer.HandshakeTimeout = 10 * time.Second
 
-	conn, _, err := dialer.Dial(c.wsURL, nil)
+	conn, _, err := dialer.Dial(wsURL, nil)
 	if err != nil {
-		return fmt.Errorf(fmt.Sprintf("failed to connect to WebSocket: %s", c.wsURL)+": %w", err)
+		return fmt.Errorf(fmt.Sprintf("failed to connect to WebSocket: %s", wsURL)+": %w", err)
 	}
 
+	c.mu.Lock()
+	c.wsURL = wsURL
 	c.conn = conn
 	c.connected = true
+	c.mu.Unlock()
 
 	if c.verbose {
 		log.Printf("Connected to Node.js target: %s", target.Title)
-		log.Printf("WebSocket URL: %s", c.wsURL)
+		log.Printf("WebSocket URL: %s", wsURL)
 	}
 
 	// Start message handling goroutine
@@ -247,11 +250,12 @@ func (c *V8InspectorClient) IsConnected() bool {
 
 // SendCommand sends a CDP command and waits for the response
 func (c *V8InspectorClient) SendCommand(method string, params map[string]interface{}) (map[string]interface{}, error) {
-	if !c.connected {
+	c.mu.Lock()
+	if !c.connected || c.conn == nil {
+		c.mu.Unlock()
 		return nil, errors.New("not connected to debugging target")
 	}
-
-	c.mu.Lock()
+	conn := c.conn
 	c.messageID++
 	msgID := c.messageID
 
@@ -274,7 +278,7 @@ func (c *V8InspectorClient) SendCommand(method string, params map[string]interfa
 		Params: params,
 	}
 
-	if err := c.conn.WriteJSON(message); err != nil {
+	if err := conn.WriteJSON(message); err != nil {
 		return nil, fmt.Errorf(fmt.Sprintf("failed to send command %s", method)+": %w", err)
 	}
 
@@ -303,9 +307,16 @@ func (c *V8InspectorClient) handleMessages() {
 		c.mu.Unlock()
 	}()
 
+	c.mu.RLock()
+	conn := c.conn
+	c.mu.RUnlock()
+	if conn == nil {
+		return
+	}
+
 	for {
 		var response CDPResponse
-		if err := c.conn.ReadJSON(&response); err != nil {
+		if err := conn.ReadJSON(&response); err != nil {
 			if c.verbose {
 				log.Printf("WebSocket read error: %v", err)
 			}
@@ -376,11 +387,16 @@ func (c *V8InspectorClient) handleScriptParsed(params map[string]interface{}) {
 	script := &V8Script{}
 	if data, err := json.Marshal(params); err == nil {
 		json.Unmarshal(data, script)
+		c.mu.Lock()
 		c.scripts[script.ScriptID] = script
+		c.mu.Unlock()
 	}
 }
 
 func (c *V8InspectorClient) handleDebuggerPaused(params map[string]interface{}) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	c.paused = true
 	if callFrames, ok := params["callFrames"].([]interface{}); ok {
 		c.callFrames = nil
@@ -396,20 +412,30 @@ func (c *V8InspectorClient) handleDebuggerPaused(params map[string]interface{}) 
 }
 
 func (c *V8InspectorClient) handleDebuggerResumed(params map[string]interface{}) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	c.paused = false
 	c.callFrames = nil
 }
 
 func (c *V8InspectorClient) handleBreakpointResolved(params map[string]interface{}) {
 	if breakpointID, ok := params["breakpointId"].(string); ok {
+		c.mu.Lock()
+		defer c.mu.Unlock()
 		if bp, exists := c.breakpoints[breakpointID]; exists {
-			bp.Resolved = true
+			// Replace rather than mutate: callers hold pointers to the old value.
+			resolved := *bp
+			resolved.Resolved = true
+			c.breakpoints[breakpointID] = &resolved
 		}
 	}
 }
 
 // GetTargetInfo returns information about the current target
 func (c *V8InspectorClient) GetTargetInfo() map[string]interface{} {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
 	return map[string]interface{}{
 		"connected":       c.connected,
 		"debuggerEnabled": c.debuggerEnabled,
@@ -431,4 +457,62 @@ func (c *V8InspectorClient) Scripts() map[string]*V8Script {
 		out[k] = v
 	}
 	return out
+}
+
+// scriptByID returns the loaded script with the given ID.
+func (c *V8InspectorClient) scriptByID(id string) (*V8Script, bool) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	script, ok := c.scripts[id]
+	return script, ok
+}
+
+// addBreakpoint records a breakpoint set on the target.
+func (c *V8InspectorClient) addBreakpoint(bp *V8Breakpoint) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.breakpoints[bp.ID] = bp
+}
+
+// removeBreakpoint forgets a breakpoint by ID.
+func (c *V8InspectorClient) removeBreakpoint(id string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	delete(c.breakpoints, id)
+}
+
+// breakpointList returns a snapshot of the current breakpoints.
+func (c *V8InspectorClient) breakpointList() []*V8Breakpoint {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	out := make([]*V8Breakpoint, 0, len(c.breakpoints))
+	for _, bp := range c.breakpoints {
+		out = append(out, bp)
+	}
+	return out
+}
+
+// currentCallFrames returns a snapshot of the paused call stack.
+func (c *V8InspectorClient) currentCallFrames() []*V8CallFrame {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return append([]*V8CallFrame(nil), c.callFrames...)
+}
+
+func (c *V8InspectorClient) setDebuggerEnabled(v bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.debuggerEnabled = v
+}
+
+func (c *V8InspectorClient) setRuntimeEnabled(v bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.runtimeEnabled = v
+}
+
+func (c *V8InspectorClient) setProfilerEnabled(v bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.profilerEnabled = v
 }
