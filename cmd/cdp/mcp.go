@@ -91,6 +91,22 @@ func (s *mcpSession) browserContext(reqCtx context.Context) (context.Context, er
 	return s.browserCtx, nil
 }
 
+// signalBrowserReady marks browser setup as finished (success or failure),
+// unblocking tool calls waiting in activeCtx or browserContext. Safe to call
+// more than once; only the first call closes the channel.
+func (s *mcpSession) signalBrowserReady() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.browserReady == nil {
+		return
+	}
+	select {
+	case <-s.browserReady:
+	default:
+		close(s.browserReady)
+	}
+}
+
 func (s *mcpSession) getCoverageStore() coverage.Store {
 	if s.coverageCollector == nil {
 		return nil
@@ -341,9 +357,10 @@ func runMCP(cfg mcpConfig) error {
 	// Set up browser in a goroutine so the MCP server can respond to
 	// initialize immediately. The browser is typically ready within a
 	// few seconds, well before the first tool call arrives.
-	browserReady := session.browserReady
 	go func() {
-		defer close(browserReady)
+		// Covers the early-return error paths; the success path signals
+		// explicitly below, long before this goroutine exits at shutdown.
+		defer session.signalBrowserReady()
 
 		// recordSetupErr stores a setup failure so browserContext() can return a
 		// clean error to tool callers instead of leaving browserCtx nil forever.
@@ -435,6 +452,11 @@ func runMCP(cfg mcpConfig) error {
 		session.dialogs = enableDialogCapture(browserCtx)
 		session.sourceCollector = sourceCollector
 		session.mu.Unlock()
+
+		// Unblock tool calls waiting on browser setup. Without this, the
+		// deferred signal would not fire until shutdown and every tool
+		// call would hang in activeCtx forever.
+		session.signalBrowserReady()
 
 		// Auto-load sourcemaps from disk if --save-sources is active.
 		if sourceCollector != nil {

@@ -55,6 +55,24 @@ func TestActiveCtxNeverNil(t *testing.T) {
 	}
 }
 
+// TestSignalBrowserReady verifies that signaling unblocks waiters, that
+// repeated signals do not panic (the setup goroutine's deferred signal runs
+// after the connect tool may have already signaled), and that a session
+// without a readiness channel is a no-op.
+func TestSignalBrowserReady(t *testing.T) {
+	s := &mcpSession{browserReady: make(chan struct{})}
+	s.signalBrowserReady()
+	s.signalBrowserReady() // second signal must not close twice
+
+	select {
+	case <-s.browserReady:
+	default:
+		t.Fatal("browserReady not closed after signalBrowserReady")
+	}
+
+	(&mcpSession{}).signalBrowserReady() // nil channel: no-op, no panic
+}
+
 // TestBrowserContextReportsSetupError verifies that browserContext returns the
 // recorded setup error (and no context) once setup has failed, instead of
 // blocking forever or handing back a nil browser context.

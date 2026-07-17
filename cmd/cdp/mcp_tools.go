@@ -780,13 +780,6 @@ func registerConnectTool(server *mcp.Server, s *mcpSession) {
 		// A successful connect supersedes any earlier setup failure, so clear
 		// the recorded error and ensure browserContext() stops waiting/erroring.
 		s.setupErr = nil
-		if s.browserReady != nil {
-			select {
-			case <-s.browserReady:
-			default:
-				close(s.browserReady)
-			}
-		}
 		s.cancel = func() {
 			browserCancel()
 			allocCancel()
@@ -797,6 +790,8 @@ func registerConnectTool(server *mcp.Server, s *mcpSession) {
 		s.console = enableConsoleCapture(browserCtx)
 		s.dialogs = enableDialogCapture(browserCtx)
 		s.mu.Unlock()
+
+		s.signalBrowserReady()
 
 		return nil, out, nil
 	})
