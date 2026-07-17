@@ -125,6 +125,7 @@ churl [options] URL
 | `--wait-network-idle` | bool | Wait for network activity to stop | true |
 | `--wait-for` | string | Wait for CSS selector to appear | - |
 | `--stable-timeout` | int | Max seconds to wait for stability | 30 |
+| `--wait-for-challenge` | bool | Wait for anti-bot interstitials (e.g. Cloudflare) to resolve | true |
 
 ### HTTP Request Options
 
@@ -303,6 +304,28 @@ churl --verbose https://example.com
 churl --debug-port=9222 --headless=false https://example.com
 # Then open chrome://inspect in another Chrome instance
 ```
+
+### Anti-Bot Challenges (Cloudflare, etc.)
+
+Some sites gate content behind an anti-bot interstitial such as Cloudflare's
+"Just a moment..." page. By default churl detects these and waits (up to
+`--stable-timeout`) for the challenge to redirect to the real content.
+
+Headless Chrome rarely passes these challenges. When a default (headless) run
+gets stuck on an interstitial, churl automatically relaunches a headed browser
+and retries — a real window solves the challenge, so the plain command still
+returns the real content:
+
+```bash
+# churl detects the challenge and retries headed automatically
+churl --output-format=text https://medium.com/@user/some-article
+
+# Skip the auto-retry and get the interstitial HTML back immediately
+churl --wait-for-challenge=false https://example.com
+```
+
+If even a headed browser can't clear the challenge, churl says so on stderr and
+returns whatever the page currently shows.
 
 ### Custom Chrome Flags
 

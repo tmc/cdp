@@ -48,9 +48,10 @@ type options struct {
 	listTabs   bool
 
 	// Wait options
-	waitNetworkIdle bool
-	waitSelector    string
-	stableTimeout   int
+	waitNetworkIdle  bool
+	waitSelector     string
+	stableTimeout    int
+	waitForChallenge bool
 
 	// Request options
 	headers        headerSlice
@@ -237,6 +238,7 @@ func main() {
 	flag.BoolVar(&opts.waitNetworkIdle, "wait-network-idle", true, "Wait until network activity becomes idle")
 	flag.StringVar(&opts.waitSelector, "wait-for", "", "Wait for specific CSS selector to appear")
 	flag.IntVar(&opts.stableTimeout, "stable-timeout", 30, "Max time in seconds to wait for stability")
+	flag.BoolVar(&opts.waitForChallenge, "wait-for-challenge", true, "Wait for anti-bot interstitials (e.g. Cloudflare) to resolve")
 
 	// Request options
 	flag.Var(&opts.headers, "H", "Add request header (can be used multiple times)")
@@ -533,6 +535,7 @@ func run(ctx context.Context, pm browserprofile.ProfileManager, url string, opts
 		browser.WithVerbose(opts.verbose),
 		browser.WithWaitNetworkIdle(opts.waitNetworkIdle),
 		browser.WithStableTimeout(opts.stableTimeout),
+		browser.WithWaitForChallenge(opts.waitForChallenge),
 	}
 
 	if opts.chromePath != "" {
@@ -665,7 +668,9 @@ func run(ctx context.Context, pm browserprofile.ProfileManager, url string, opts
 	if err := b.Launch(launchCtx); err != nil {
 		return fmt.Errorf("%w: failed to launch browser: %w", errChromeLaunch, err)
 	}
-	defer b.Close()
+	// Close whichever browser is current at return time: b may be replaced by a
+	// headed browser below if a headless navigation hits an anti-bot challenge.
+	defer func() { b.Close() }()
 
 	// Set up request headers
 	if len(headers) > 0 {
@@ -743,6 +748,45 @@ func run(ctx context.Context, pm browserprofile.ProfileManager, url string, opts
 		// Use regular navigation for GET requests without data
 		if err := b.Navigate(url); err != nil {
 			return fmt.Errorf("failed to navigate to URL %q: %w", url, err)
+		}
+
+		// Headless Chrome rarely passes anti-bot interstitials (e.g. Cloudflare
+		// Turnstile). If we're headless and stuck on one, relaunch a headed
+		// browser and try again: a real window solves the challenge, so the
+		// bare command still returns the real content.
+		if opts.headless && opts.waitForChallenge && b.IsChallengePage() {
+			fmt.Fprintf(os.Stderr, "churl: %s is behind an anti-bot challenge; retrying with a headed browser.\n", url)
+			b.Close()
+
+			// WithHeadless(false) must come last so it overrides the headless
+			// setting already present in browserOpts (options apply in order).
+			headedOpts := append(append([]browser.Option{}, browserOpts...), browser.WithHeadless(false))
+			hb, err := browser.New(launchCtx, pm, headedOpts...)
+			if err != nil {
+				return fmt.Errorf("%w: failed to create headed browser instance: %w", errChromeLaunch, err)
+			}
+			if err := hb.Launch(launchCtx); err != nil {
+				return fmt.Errorf("%w: failed to launch headed browser: %w", errChromeLaunch, err)
+			}
+			b = hb
+
+			if len(headers) > 0 {
+				if err := b.SetRequestHeaders(headers); err != nil {
+					return fmt.Errorf("failed to set request headers: %w", err)
+				}
+			}
+			if opts.username != "" && opts.password != "" {
+				if err := b.SetBasicAuth(opts.username, opts.password); err != nil {
+					return fmt.Errorf("%w: failed to set basic authentication: %w", errAuthentication, err)
+				}
+			}
+
+			if err := b.Navigate(url); err != nil {
+				return fmt.Errorf("failed to navigate to URL %q: %w", url, err)
+			}
+			if b.IsChallengePage() {
+				fmt.Fprintf(os.Stderr, "churl: %s: anti-bot challenge did not resolve even with a headed browser.\n", url)
+			}
 		}
 	}
 

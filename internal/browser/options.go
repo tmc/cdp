@@ -28,6 +28,7 @@ type Options struct {
 	WaitNetworkIdle   bool
 	WaitSelector      string
 	StableTimeout     int
+	WaitForChallenge  bool // Wait for anti-bot interstitials (e.g. Cloudflare) to resolve
 
 	// Stability detection settings
 	StabilityConfig  *StabilityConfig
@@ -100,6 +101,7 @@ func defaultOptions() *Options {
 		Timeout:           180,
 		NavigationTimeout: 45,
 		StableTimeout:     30,
+		WaitForChallenge:  true,
 		UseProfile:        false,
 		CookieDomains:     []string{},
 
@@ -200,6 +202,18 @@ func WithWaitNetworkIdle(wait bool) Option {
 func WithWaitSelector(selector string) Option {
 	return func(o *Options) error {
 		o.WaitSelector = selector
+		return nil
+	}
+}
+
+// WithWaitForChallenge controls whether the browser waits for anti-bot
+// interstitials (such as Cloudflare's "Just a moment..." page) to resolve
+// before returning the page. When enabled, Navigate keeps waiting after the
+// initial load until the challenge redirects to the real content or the
+// stable timeout elapses.
+func WithWaitForChallenge(wait bool) Option {
+	return func(o *Options) error {
+		o.WaitForChallenge = wait
 		return nil
 	}
 }

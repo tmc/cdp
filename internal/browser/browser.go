@@ -457,6 +457,12 @@ func (b *Browser) Navigate(url string) error {
 		}
 	}
 
+	// If an anti-bot interstitial (e.g. Cloudflare) is showing, wait for it to
+	// redirect to the real content before returning.
+	if b.opts.WaitForChallenge {
+		b.waitForChallengeResolved()
+	}
+
 	// Execute post-navigation scripts
 	if err := b.executeScriptsAfter(); err != nil {
 		if b.opts.Verbose {
@@ -466,6 +472,151 @@ func (b *Browser) Navigate(url string) error {
 	}
 
 	return nil
+}
+
+// challengeTitles are document titles shown by common anti-bot interstitials
+// while they verify the client. They are matched case-insensitively as
+// substrings of the page title.
+var challengeTitles = []string{
+	"just a moment",       // Cloudflare
+	"attention required",  // Cloudflare block/challenge
+	"checking your browser", // Cloudflare legacy IUAM, DDoS-Guard
+	"please wait",         // generic JS interstitials
+	"verifying you are human",
+	"one more step",
+}
+
+// isChallengeTitle reports whether title looks like an anti-bot interstitial.
+func isChallengeTitle(title string) bool {
+	t := strings.ToLower(strings.TrimSpace(title))
+	if t == "" {
+		return false
+	}
+	for _, marker := range challengeTitles {
+		if strings.Contains(t, marker) {
+			return true
+		}
+	}
+	return false
+}
+
+// IsChallengePage reports whether the current page appears to be an anti-bot
+// interstitial (such as Cloudflare's "Just a moment..." page) rather than the
+// requested content. It is used to decide whether a headless navigation should
+// be retried with a headed browser.
+func (b *Browser) IsChallengePage() bool {
+	if b.ctx == nil {
+		return false
+	}
+	return isChallengeTitle(b.currentTitle())
+}
+
+// currentTitle returns the current document title, or "" if it cannot be read.
+func (b *Browser) currentTitle() string {
+	var title string
+	ctx, cancel := context.WithTimeout(b.ctx, 5*time.Second)
+	defer cancel()
+	if err := chromedp.Run(ctx, chromedp.Title(&title)); err != nil {
+		return ""
+	}
+	return title
+}
+
+// waitForChallengeResolved waits for an anti-bot interstitial (such as
+// Cloudflare's "Just a moment..." page) to redirect to the real content. It
+// returns immediately when the current page is not a challenge, and otherwise
+// polls the document title until the challenge clears or the stable timeout
+// elapses. It never fails navigation: a page that stays on the challenge is
+// returned as-is so the caller can inspect it.
+func (b *Browser) waitForChallengeResolved() {
+	if b.ctx == nil {
+		return
+	}
+	if !isChallengeTitle(b.currentTitle()) {
+		return
+	}
+
+	if b.opts.Verbose {
+		log.Printf("Anti-bot interstitial detected; waiting for it to resolve")
+		if b.opts.Headless {
+			log.Printf("Note: headless Chrome rarely passes these challenges; try -headless=false")
+		}
+	}
+
+	// Headless Chrome cannot solve interactive challenges (e.g. Cloudflare
+	// Turnstile), so only wait briefly for a fast client-side redirect before
+	// giving up. A headed browser gets the full stable timeout.
+	timeout := time.Duration(b.opts.StableTimeout) * time.Second
+	if b.opts.Headless {
+		if headlessWait := 5 * time.Second; headlessWait < timeout {
+			timeout = headlessWait
+		}
+	}
+	deadline := time.NewTimer(timeout)
+	defer deadline.Stop()
+	ticker := time.NewTicker(500 * time.Millisecond)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-b.ctx.Done():
+			return
+		case <-deadline.C:
+			if b.opts.Verbose {
+				log.Printf("Interstitial did not resolve within %s; returning current page", timeout)
+			}
+			return
+		case <-ticker.C:
+			if !isChallengeTitle(b.currentTitle()) {
+				// The challenge cleared; let the resolved page settle.
+				if b.opts.Verbose {
+					log.Printf("Interstitial resolved")
+				}
+				b.waitAfterChallenge()
+				return
+			}
+		}
+	}
+}
+
+// waitAfterChallenge gives the post-challenge page a brief window to load its
+// content and settle network activity once the interstitial has cleared.
+func (b *Browser) waitAfterChallenge() {
+	settleTimeout := time.Duration(b.opts.StableTimeout) * time.Second
+	ctx, cancel := context.WithTimeout(b.ctx, settleTimeout)
+	defer cancel()
+
+	_ = chromedp.Run(ctx, chromedp.ActionFunc(func(ctx context.Context) error {
+		ch := make(chan struct{}, 1)
+		lctx, cancel := context.WithCancel(ctx)
+		defer cancel()
+		chromedp.ListenTarget(lctx, func(ev interface{}) {
+			switch ev.(type) {
+			case *network.EventLoadingFinished, *network.EventLoadingFailed,
+				*page.EventLoadEventFired, *page.EventDomContentEventFired:
+				select {
+				case ch <- struct{}{}:
+				default:
+				}
+			}
+		})
+
+		idleTimer := time.NewTimer(750 * time.Millisecond)
+		defer idleTimer.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return nil
+			case <-idleTimer.C:
+				return nil
+			case <-ch:
+				if !idleTimer.Stop() {
+					<-idleTimer.C
+				}
+				idleTimer.Reset(750 * time.Millisecond)
+			}
+		}
+	}))
 }
 
 // GetHTML returns the current page's HTML content
