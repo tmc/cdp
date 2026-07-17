@@ -847,10 +847,11 @@ func registerHARTools(server *mcp.Server, s *mcpSession) {
 		Name:        "get_har_entries",
 		Description: "Get captured HAR network entries. Filter by domain or url_pattern (substring match). Use index (1-based) to get a single entry. Returns most recent entries when limit is set.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input GetHAREntriesInput) (*mcp.CallToolResult, any, error) {
-		if s.recorder == nil {
+		rec := s.getRecorder()
+		if rec == nil {
 			return nil, nil, fmt.Errorf("get_har_entries: no recorder active")
 		}
-		h, err := s.recorder.HAR()
+		h, err := rec.HAR()
 		if err != nil {
 			return nil, nil, fmt.Errorf("get_har_entries: %w", err)
 		}

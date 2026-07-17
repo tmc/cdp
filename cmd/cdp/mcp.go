@@ -98,6 +98,27 @@ func (s *mcpSession) getCoverageStore() coverage.Store {
 	return s.coverageCollector
 }
 
+// getWebMCP returns the WebMCP collector, or nil if not enabled.
+func (s *mcpSession) getWebMCP() *webMCPCollector {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.webMCP
+}
+
+// setWebMCP records the WebMCP collector.
+func (s *mcpSession) setWebMCP(c *webMCPCollector) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.webMCP = c
+}
+
+// getRecorder returns the HAR recorder, or nil if not recording.
+func (s *mcpSession) getRecorder() *harrecorder.Recorder {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.recorder
+}
+
 // setActiveCtx sets the active tab context, canceling the previous tab context if any.
 func (s *mcpSession) setActiveCtx(ctx context.Context, cancel context.CancelFunc) {
 	s.mu.Lock()

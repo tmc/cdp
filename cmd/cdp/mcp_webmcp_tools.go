@@ -353,12 +353,13 @@ Requires the WebMCP domain to be enabled (call enable_webmcp first).
 Returns tool names, descriptions, input schemas, and annotations.`,
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input ListWebToolsInput) (*mcp.CallToolResult, any, error) {
-		if s.webMCP == nil {
+		wm := s.getWebMCP()
+		if wm == nil {
 			return nil, nil, fmt.Errorf("WebMCP not enabled — call enable_webmcp first")
 		}
 
 		// JS mode: discover tools via the page's JS API.
-		if s.webMCP.jsMode {
+		if wm.jsMode {
 			actx := s.activeCtx()
 			result, err := discoverToolsViaJS(actx)
 			if err != nil {
@@ -369,7 +370,7 @@ Returns tool names, descriptions, input schemas, and annotations.`,
 			}, nil, nil
 		}
 
-		tools := s.webMCP.listTools()
+		tools := wm.listTools()
 		if len(tools) == 0 {
 			return &mcp.CallToolResult{
 				Content: []mcp.Content{&mcp.TextContent{Text: "no web tools registered on this page"}},
@@ -420,7 +421,8 @@ The tool must have been discovered via list_web_tools. Input should be
 a JSON string matching the tool's input schema. The invocation happens
 via Runtime.evaluate calling navigator.modelContext on the page.`,
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input InvokeWebToolInput) (*mcp.CallToolResult, any, error) {
-		if s.webMCP == nil {
+		wm := s.getWebMCP()
+		if wm == nil {
 			return nil, nil, fmt.Errorf("WebMCP not enabled — call enable_webmcp first")
 		}
 		if input.Name == "" {
@@ -436,7 +438,7 @@ via Runtime.evaluate calling navigator.modelContext on the page.`,
 
 		// In JS mode, invoke directly — we can't check getTool since
 		// the CDP domain isn't providing tool discovery.
-		if s.webMCP.jsMode {
+		if wm.jsMode {
 			result, err := invokeWebToolJS(actx, input.Name, inputJSON)
 			if err != nil {
 				return nil, nil, fmt.Errorf("invoke_web_tool: %w", err)
@@ -446,7 +448,7 @@ via Runtime.evaluate calling navigator.modelContext on the page.`,
 			}, nil, nil
 		}
 
-		tool := s.webMCP.getTool(input.Name)
+		tool := wm.getTool(input.Name)
 		if tool == nil {
 			return nil, nil, fmt.Errorf("invoke_web_tool: tool %q not found — check list_web_tools", input.Name)
 		}
@@ -469,15 +471,15 @@ Once enabled, the browser reports toolsAdded/toolsRemoved events as
 pages register tools via navigator.modelContext.registerTool().
 Use list_web_tools to see discovered tools, invoke_web_tool to call them.`,
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input struct{}) (*mcp.CallToolResult, any, error) {
-		if s.webMCP != nil {
+		if wm := s.getWebMCP(); wm != nil {
 			mode := "CDP"
-			if s.webMCP.jsMode {
+			if wm.jsMode {
 				mode = "JS API"
-				if s.webMCP.hasTesting {
+				if wm.hasTesting {
 					mode = "JS API (modelContextTesting)"
 				}
 			}
-			tools := s.webMCP.listTools()
+			tools := wm.listTools()
 			return &mcp.CallToolResult{
 				Content: []mcp.Content{&mcp.TextContent{Text: fmt.Sprintf("WebMCP already enabled (%s mode, %d tools registered)", mode, len(tools))}},
 			}, nil, nil
@@ -488,7 +490,7 @@ Use list_web_tools to see discovered tools, invoke_web_tool to call them.`,
 		if err != nil {
 			return nil, nil, fmt.Errorf("enable_webmcp: %w", err)
 		}
-		s.webMCP = collector
+		s.setWebMCP(collector)
 
 		if collector.jsMode {
 			msg := "WebMCP enabled (JS API fallback — CDP domain unavailable)."
@@ -514,10 +516,11 @@ Use list_web_tools to see discovered tools, invoke_web_tool to call them.`,
 		Description: "List recent tool invocations observed via the WebMCP domain. Shows tool name, input, status, output, and timing.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input WebToolInvocationsInput) (*mcp.CallToolResult, any, error) {
-		if s.webMCP == nil {
+		wm := s.getWebMCP()
+		if wm == nil {
 			return nil, nil, fmt.Errorf("WebMCP not enabled — call enable_webmcp first")
 		}
-		if s.webMCP.jsMode {
+		if wm.jsMode {
 			return &mcp.CallToolResult{
 				Content: []mcp.Content{&mcp.TextContent{Text: "invocation observation not available in JS API mode (requires CDP WebMCP domain for passive event monitoring)"}},
 			}, nil, nil
@@ -526,7 +529,7 @@ Use list_web_tools to see discovered tools, invoke_web_tool to call them.`,
 		if last <= 0 {
 			last = 50
 		}
-		invocations := s.webMCP.listInvocations(last)
+		invocations := wm.listInvocations(last)
 		if len(invocations) == 0 {
 			return &mcp.CallToolResult{
 				Content: []mcp.Content{&mcp.TextContent{Text: "no invocations observed"}},
