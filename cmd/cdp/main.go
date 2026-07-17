@@ -454,6 +454,28 @@ func checkRunningChrome(port int) (bool, string) {
 	return true, browser
 }
 
+// browserDisplayName returns a human-friendly name for the browser at path,
+// so progress messages name the browser we actually launch (e.g. Brave)
+// rather than always saying "Chrome". It falls back to "Chrome" when the path
+// is empty or unrecognized.
+func browserDisplayName(path string) string {
+	p := strings.ToLower(path)
+	switch {
+	case p == "":
+		return "Chrome"
+	case strings.Contains(p, "brave"):
+		return "Brave"
+	case strings.Contains(p, "chromium"):
+		return "Chromium"
+	case strings.Contains(p, "edge"):
+		return "Edge"
+	case strings.Contains(p, "chrome"):
+		return "Chrome"
+	default:
+		return "Chrome"
+	}
+}
+
 // getChromeTabs gets list of available tabs from Chrome
 func getChromeTabs(port int) ([]ChromeTab, error) {
 	return getChromeTabsFrom("localhost", port)
@@ -4912,7 +4934,7 @@ func setupChromeForEnhanced(ctx context.Context, cfg fullCaptureConfig) (context
 		}
 	}
 
-	cfg.Progress.begin("Starting Chrome")
+	cfg.Progress.begin("Starting " + browserDisplayName(selectedPath))
 
 	// Check if the debug port is already in use.
 	debugPort = resolveDebugPort(ctx, debugPort, verbose)

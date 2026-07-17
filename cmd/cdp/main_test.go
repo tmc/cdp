@@ -118,6 +118,26 @@ func TestStartupProgressPlain(t *testing.T) {
 	}
 }
 
+func TestBrowserDisplayName(t *testing.T) {
+	tests := []struct {
+		path string
+		want string
+	}{
+		{"/Applications/Brave Browser.app/Contents/MacOS/Brave Browser", "Brave"},
+		{"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", "Chrome"},
+		{"/Applications/Chromium.app/Contents/MacOS/Chromium", "Chromium"},
+		{"/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge", "Edge"},
+		{"/usr/bin/brave-browser", "Brave"},
+		{"", "Chrome"},
+		{"/some/unknown/browser", "Chrome"},
+	}
+	for _, tt := range tests {
+		if got := browserDisplayName(tt.path); got != tt.want {
+			t.Errorf("browserDisplayName(%q) = %q, want %q", tt.path, got, tt.want)
+		}
+	}
+}
+
 // skipIfNoBrowser skips the test if Chrome is not available or if running in short mode
 func skipIfNoBrowser(t testing.TB) {
 	t.Helper()
