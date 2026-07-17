@@ -81,7 +81,7 @@ type Recorder struct {
 
 	// Tag tracking
 	currentTag string      // Currently active tag
-	pageDomain string      // Registrable domain of the current top-level page
+	pageDomain string      // Full hostname of the current top-level page
 	tagRanges  []*TagRange // History of tag ranges
 
 	// Secret scrubbing
@@ -243,7 +243,7 @@ func pageDomain(rawURL string) string {
 	if err != nil {
 		return "unknown_domain"
 	}
-	return sitegroup.RegistrableDomain(u.Hostname())
+	return sitegroup.Host(u.Hostname())
 }
 
 func requestDomain(rawURL string) string {
@@ -251,7 +251,7 @@ func requestDomain(rawURL string) string {
 	if err != nil {
 		return "unknown_domain"
 	}
-	return sitegroup.RegistrableDomain(u.Hostname())
+	return sitegroup.Host(u.Hostname())
 }
 
 func (r *Recorder) captureBody(body []byte) capturedBody {

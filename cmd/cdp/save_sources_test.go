@@ -76,8 +76,8 @@ func TestFullCaptureSaveSourcesNewTab(t *testing.T) {
 		t.Fatal(err)
 	}
 	parts := strings.Split(rel, string(filepath.Separator))
-	if len(parts) < 5 || parts[1] != "sources" {
-		t.Fatalf("captured source path %q is not grouped under <site>/sources", rel)
+	if len(parts) < 5 || parts[1] != "_sources" {
+		t.Fatalf("captured source path %q is not grouped under <site>/_sources", rel)
 	}
 	if stylePath, ok := fileContaining(t, outDir, styleMarker); !ok {
 		t.Fatalf("captured sources do not contain CSS marker %q\noutput:\n%s", styleMarker, output.String())

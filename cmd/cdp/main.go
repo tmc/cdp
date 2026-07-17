@@ -4677,9 +4677,9 @@ func prepareCaptureDirs(outputDir string, saveSources bool) error {
 		}
 	}
 	if saveSources {
-		sourcesDir := "sources"
+		sourcesDir := "_sources"
 		if outputDir != "" {
-			sourcesDir = filepath.Join(outputDir, "sources")
+			sourcesDir = filepath.Join(outputDir, "_sources")
 		}
 		if err := os.MkdirAll(sourcesDir, 0755); err != nil {
 			return fmt.Errorf("create sources directory %q: %w", sourcesDir, err)

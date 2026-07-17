@@ -15,9 +15,9 @@ import (
 
 func TestSourcePathUsesSiteGroup(t *testing.T) {
 	c := New(filepath.Join(t.TempDir(), "capture"), false)
-	c.pageDomain = "lesswrong.com"
+	c.pageDomain = "www.lesswrong.com"
 	got := c.sourcePath("cdn.lesswrong.com", "_compiled", "app.js")
-	want := filepath.Join(c.OutputDir(), "lesswrong.com", "sources", "cdn.lesswrong.com", "_compiled", "app.js")
+	want := filepath.Join(c.OutputDir(), "www.lesswrong.com", "_sources", "cdn.lesswrong.com", "_compiled", "app.js")
 	if got != want {
 		t.Fatalf("sourcePath = %q, want %q", got, want)
 	}
@@ -26,7 +26,7 @@ func TestSourcePathUsesSiteGroup(t *testing.T) {
 func TestSourcePathTracksNavigatedPage(t *testing.T) {
 	c := New(filepath.Join(t.TempDir(), "capture"), false)
 	c.Listener(context.Background())(&page.EventFrameNavigated{Frame: &cdp.Frame{URL: "https://www.lesswrong.com/posts/test"}})
-	want := filepath.Join(c.OutputDir(), "lesswrong.com", "sources", "cdn.lesswrong.com", "_compiled", "app.js")
+	want := filepath.Join(c.OutputDir(), "www.lesswrong.com", "_sources", "cdn.lesswrong.com", "_compiled", "app.js")
 	if got := c.sourcePath("cdn.lesswrong.com", "_compiled", "app.js"); got != want {
 		t.Fatalf("sourcePath = %q, want %q", got, want)
 	}
@@ -35,7 +35,7 @@ func TestSourcePathTracksNavigatedPage(t *testing.T) {
 func TestSourcePathCanUseRequestDomainLayout(t *testing.T) {
 	c := New(filepath.Join(t.TempDir(), "capture"), false)
 	c.SetGroupByPage(false)
-	want := filepath.Join(c.OutputDir(), "sources", "cdn.lesswrong.com", "_compiled", "app.js")
+	want := filepath.Join(c.OutputDir(), "_sources", "cdn.lesswrong.com", "_compiled", "app.js")
 	if got := c.sourcePath("cdn.lesswrong.com", "_compiled", "app.js"); got != want {
 		t.Fatalf("sourcePath = %q, want %q", got, want)
 	}

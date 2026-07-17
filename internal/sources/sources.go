@@ -79,7 +79,7 @@ type Collector struct {
 	fetchCancel    context.CancelFunc
 	incremental    bool // whether incremental mode is active
 	pageMu         sync.RWMutex
-	pageDomain     string // registrable domain of the current top-level page
+	pageDomain     string // full hostname of the current top-level page
 	groupByPage    bool
 }
 
@@ -517,8 +517,8 @@ func (c *Collector) CaptureAll(ctx context.Context) error {
 }
 
 // WriteToDisk writes all captured sources to the output directory.
-// Layout: outputDir/page-domain/sources/origin/_compiled/path for served
-// files, and outputDir/page-domain/sources/origin/... for sourcemapped
+// Layout: outputDir/page-host/_sources/origin/_compiled/path for served
+// files, and outputDir/page-host/_sources/origin/... for sourcemapped
 // originals.
 func (c *Collector) WriteToDisk() error {
 	c.mu.Lock()
@@ -665,7 +665,7 @@ func sourcePageDomain(rawURL string) string {
 	if err != nil {
 		return "unknown_domain"
 	}
-	return sitegroup.RegistrableDomain(u.Hostname())
+	return sitegroup.Host(u.Hostname())
 }
 
 func (c *Collector) sourcePath(origin string, parts ...string) string {
@@ -674,12 +674,12 @@ func (c *Collector) sourcePath(origin string, parts ...string) string {
 	groupByPage := c.groupByPage
 	c.pageMu.RUnlock()
 	if !groupByPage {
-		return filepath.Join(append([]string{c.outputDir, "sources", origin}, parts...)...)
+		return filepath.Join(append([]string{c.outputDir, "_sources", origin}, parts...)...)
 	}
 	if page == "" {
 		page = "unknown_domain"
 	}
-	path := filepath.Join(c.outputDir, page, "sources", origin)
+	path := filepath.Join(c.outputDir, page, "_sources", origin)
 	for _, part := range parts {
 		if part != "" {
 			path = filepath.Join(path, part)

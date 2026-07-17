@@ -201,8 +201,8 @@ func TestRequestSeedsPageDomainBeforeNavigationEvent(t *testing.T) {
 	r.Lock()
 	got := r.requestPages["1"]
 	r.Unlock()
-	if got != "lesswrong.com" {
-		t.Fatalf("request page = %q, want lesswrong.com", got)
+	if got != "www.lesswrong.com" {
+		t.Fatalf("request page = %q, want www.lesswrong.com", got)
 	}
 }
 

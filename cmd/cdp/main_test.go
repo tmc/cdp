@@ -36,7 +36,7 @@ func TestPrepareCaptureDirs(t *testing.T) {
 	if err := prepareCaptureDirs(out, true); err != nil {
 		t.Fatal(err)
 	}
-	for _, name := range []string{out, filepath.Join(out, "sources")} {
+	for _, name := range []string{out, filepath.Join(out, "_sources")} {
 		info, err := os.Stat(name)
 		if err != nil {
 			t.Fatalf("stat %s: %v", name, err)

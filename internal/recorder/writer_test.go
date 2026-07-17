@@ -94,12 +94,12 @@ func TestWriterGroupsRequestsByPageDomain(t *testing.T) {
 	r.Close()
 
 	for _, host := range []string{"res.cloudinary.com", "p.typekit.net"} {
-		path := filepath.Join(dir, "lesswrong.com", host+".jsonl")
+		path := filepath.Join(dir, "www.lesswrong.com", host+".jsonl")
 		if _, err := os.Stat(path); err != nil {
 			t.Fatalf("stat %s: %v", path, err)
 		}
 	}
-	for _, group := range []string{"cloudinary.com", "typekit.net"} {
+	for _, group := range []string{"cloudinary.com", "typekit.net", "res.cloudinary.com"} {
 		if _, err := os.Stat(filepath.Join(dir, group)); !os.IsNotExist(err) {
 			t.Fatalf("unexpected per-request group %s", group)
 		}
@@ -116,7 +116,7 @@ func TestWriterCanUseRequestDomainLayout(t *testing.T) {
 		t.Fatal(err)
 	}
 	r.Close()
-	path := filepath.Join(dir, "cloudinary.com", "res.cloudinary.com.jsonl")
+	path := filepath.Join(dir, "res.cloudinary.com", "res.cloudinary.com.jsonl")
 	if _, err := os.Stat(path); err != nil {
 		t.Fatalf("stat %s: %v", path, err)
 	}
