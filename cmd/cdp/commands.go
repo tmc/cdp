@@ -618,7 +618,7 @@ func (r *CommandRegistry) registerStorageCommands() {
 				return errors.New("key and value required")
 			}
 			value := strings.Join(args[1:], " ")
-			js := fmt.Sprintf(`localStorage.setItem('%s', '%s')`, args[0], value)
+			js := fmt.Sprintf(`localStorage.setItem(%q, %q)`, args[0], value)
 			return chromedp.Run(ctx, chromedp.Evaluate(js, nil))
 		},
 	})
@@ -634,7 +634,7 @@ func (r *CommandRegistry) registerStorageCommands() {
 				return errors.New("key required")
 			}
 			var result interface{}
-			js := fmt.Sprintf(`localStorage.getItem('%s')`, args[0])
+			js := fmt.Sprintf(`localStorage.getItem(%q)`, args[0])
 			if err := chromedp.Run(ctx, chromedp.Evaluate(js, &result)); err != nil {
 				return err
 			}
@@ -861,7 +861,7 @@ func (r *CommandRegistry) registerConsoleCommands() {
 				return errors.New("message required")
 			}
 			msg := strings.Join(args, " ")
-			js := fmt.Sprintf(`console.log('%s')`, msg)
+			js := fmt.Sprintf(`console.log(%q)`, msg)
 			return chromedp.Run(ctx, chromedp.Evaluate(js, nil))
 		},
 	})
@@ -877,7 +877,7 @@ func (r *CommandRegistry) registerConsoleCommands() {
 				return errors.New("message required")
 			}
 			msg := strings.Join(args, " ")
-			js := fmt.Sprintf(`console.error('%s')`, msg)
+			js := fmt.Sprintf(`console.error(%q)`, msg)
 			return chromedp.Run(ctx, chromedp.Evaluate(js, nil))
 		},
 	})
@@ -893,7 +893,7 @@ func (r *CommandRegistry) registerConsoleCommands() {
 				return errors.New("message required")
 			}
 			msg := strings.Join(args, " ")
-			js := fmt.Sprintf(`console.warn('%s')`, msg)
+			js := fmt.Sprintf(`console.warn(%q)`, msg)
 			return chromedp.Run(ctx, chromedp.Evaluate(js, nil))
 		},
 	})
