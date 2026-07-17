@@ -389,7 +389,10 @@ func (c *Collector) Listener(ctx context.Context) func(ev any) {
 // ctx. Prefer Listener(ctx) for new code so per-target session routing is
 // preserved across tab switches.
 func (c *Collector) HandleEvent(ev any) {
-	c.dispatch(c.ctx, ev)
+	c.mu.Lock()
+	ctx := c.ctx
+	c.mu.Unlock()
+	c.dispatch(ctx, ev)
 }
 
 func (c *Collector) dispatch(ctx context.Context, ev any) {
@@ -414,9 +417,10 @@ func (c *Collector) dispatch(ctx context.Context, ev any) {
 			Length:       ev.Length,
 			Hash:         ev.Hash,
 		}
-		incr := c.incremental
-		c.mu.Unlock()
-		if incr {
+		// Send while holding mu: Close closes fetchCh under the same lock,
+		// so the send can never hit a just-closed channel. The send is
+		// non-blocking, so holding the lock cannot stall event dispatch.
+		if c.incremental && c.fetchCh != nil {
 			select {
 			case c.fetchCh <- fetchItem{
 				ctx:          ctx,
@@ -428,6 +432,7 @@ func (c *Collector) dispatch(ctx context.Context, ev any) {
 				// Channel full, will be picked up by CaptureAll.
 			}
 		}
+		c.mu.Unlock()
 	case *css.EventStyleSheetAdded:
 		h := ev.Header
 		if debugEvents {
@@ -439,9 +444,7 @@ func (c *Collector) dispatch(ctx context.Context, ev any) {
 			URL:          h.SourceURL,
 			SourceMapURL: h.SourceMapURL,
 		}
-		incr := c.incremental
-		c.mu.Unlock()
-		if incr {
+		if c.incremental && c.fetchCh != nil {
 			select {
 			case c.fetchCh <- fetchItem{
 				ctx:          ctx,
@@ -453,6 +456,7 @@ func (c *Collector) dispatch(ctx context.Context, ev any) {
 			default:
 			}
 		}
+		c.mu.Unlock()
 	}
 }
 

@@ -2,8 +2,11 @@ package sources
 
 import (
 	"context"
+	"fmt"
 	"path/filepath"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/chromedp/cdproto/cdp"
 	"github.com/chromedp/cdproto/debugger"
@@ -35,6 +38,61 @@ func TestSourcePathCanUseRequestDomainLayout(t *testing.T) {
 	want := filepath.Join(c.OutputDir(), "sources", "cdn.lesswrong.com", "_compiled", "app.js")
 	if got := c.sourcePath("cdn.lesswrong.com", "_compiled", "app.js"); got != want {
 		t.Fatalf("sourcePath = %q, want %q", got, want)
+	}
+}
+
+// TestCloseDuringDispatch exercises the shutdown race: Close closing fetchCh
+// while Listener-dispatched events are still being queued from other
+// goroutines. When the non-blocking send ran outside the collector mutex,
+// a close landing between the dispatcher's unlock and its send panicked
+// (a select default does not protect a send on a closed channel). Each
+// iteration re-arms incremental mode, lets dispatchers spin, then closes
+// mid-flight.
+func TestCloseDuringDispatch(t *testing.T) {
+	c := New(t.TempDir(), false)
+
+	// Fetches fail immediately (not a chromedp context); this test only
+	// cares about queueing racing Close.
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	listener := c.Listener(ctx)
+
+	for iter := range 50 {
+		// Put the collector in incremental mode without a browser,
+		// mirroring what Enable sets up. A tiny buffer exercises both
+		// the send and the channel-full default paths.
+		c.mu.Lock()
+		c.fetchCh = make(chan fetchItem, 4)
+		c.done = make(chan struct{})
+		c.fetchContext, c.fetchCancel = context.WithCancel(context.Background())
+		c.incremental = true
+		c.mu.Unlock()
+		go c.backgroundFetcher()
+
+		stop := make(chan struct{})
+		var wg sync.WaitGroup
+		for g := range 4 {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				for i := 0; ; i++ {
+					select {
+					case <-stop:
+						return
+					default:
+					}
+					listener(&debugger.EventScriptParsed{
+						ScriptID: cdp.ScriptID(fmt.Sprintf("%d-%d-%d", iter, g, i)),
+						URL:      "https://example.com/app.js",
+					})
+				}
+			}()
+		}
+
+		time.Sleep(200 * time.Microsecond) // let dispatchers reach the send
+		c.Close()                          // must not panic mid-dispatch
+		close(stop)
+		wg.Wait()
 	}
 }
 
