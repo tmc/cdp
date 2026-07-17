@@ -13,6 +13,7 @@ import (
 
 	"github.com/gorilla/websocket"
 	"github.com/spf13/cobra"
+	"github.com/tmc/cdp/internal/wsorigin"
 )
 
 var bridgeCmd = &cobra.Command{
@@ -358,11 +359,11 @@ func runBridge(port, targetHost string, shouldOpen bool) error {
 		}()
 	}
 
-	return http.ListenAndServe(":"+port, nil)
+	return http.ListenAndServe("127.0.0.1:"+port, nil)
 }
 
 var upgrader = websocket.Upgrader{
-	CheckOrigin: func(r *http.Request) bool { return true },
+	CheckOrigin: wsorigin.Check,
 }
 
 func serveWs(bridge *Bridge, w http.ResponseWriter, r *http.Request) {

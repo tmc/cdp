@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/tmc/cdp/internal/wsorigin"
 )
 
 // CDPMessage represents a parsed CDP protocol message
@@ -97,7 +98,7 @@ func New(listenPort, targetPort int, verbose bool, logPath string) (*Proxy, erro
 		connectionToTarget: make(map[string]string),
 		clients:            make(map[*observerClient]bool),
 		upgrader: websocket.Upgrader{
-			CheckOrigin: func(r *http.Request) bool { return true },
+			CheckOrigin: wsorigin.Check,
 		},
 	}
 
@@ -592,7 +593,7 @@ func (p *Proxy) Run(ctx context.Context) error {
 	})
 
 	server := &http.Server{
-		Addr:    fmt.Sprintf(":%d", p.ListenPort),
+		Addr:    fmt.Sprintf("127.0.0.1:%d", p.ListenPort),
 		Handler: mux,
 	}
 

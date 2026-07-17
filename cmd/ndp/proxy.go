@@ -12,6 +12,7 @@ import (
 
 	"github.com/gorilla/websocket"
 	"github.com/spf13/cobra"
+	"github.com/tmc/cdp/internal/wsorigin"
 )
 
 var proxyCmd = &cobra.Command{
@@ -115,11 +116,11 @@ func runProxy() error {
 		handleWSProxy(w, r, id)
 	})
 
-	return http.ListenAndServe(":"+proxyPort, nil)
+	return http.ListenAndServe("127.0.0.1:"+proxyPort, nil)
 }
 
 var upgrader = websocket.Upgrader{
-	CheckOrigin: func(r *http.Request) bool { return true },
+	CheckOrigin: wsorigin.Check,
 }
 
 func handleWSProxy(w http.ResponseWriter, r *http.Request, targetID string) {
