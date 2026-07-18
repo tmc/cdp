@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -787,7 +788,17 @@ func (r *Recorder) streamEntryAtPage(entry *har.Entry, page, dir string) {
 func appendJSONL(file string, data []byte) error {
 	f, err := os.OpenFile(file, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
-		return err
+		// The parent directory may have been removed mid-capture; recreate it
+		// and retry once so streaming survives an rm -rf of the output dir.
+		if dir := filepath.Dir(file); dir != "." {
+			if mkErr := os.MkdirAll(dir, 0755); mkErr != nil {
+				return err
+			}
+			f, err = os.OpenFile(file, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+		}
+		if err != nil {
+			return err
+		}
 	}
 	defer f.Close()
 

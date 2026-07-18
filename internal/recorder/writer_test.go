@@ -122,6 +122,47 @@ func TestWriterCanUseRequestDomainLayout(t *testing.T) {
 	}
 }
 
+// TestWriteOneRecreatesDeletedOutput verifies that after the output directory
+// is removed mid-capture (e.g. a user runs rm -rf), writeOne recreates the
+// directory and file and keeps writing, rather than appending to an orphaned
+// inode that no longer has a path.
+func TestWriteOneRecreatesDeletedOutput(t *testing.T) {
+	dir := t.TempDir()
+	writers := make(map[string]*os.File)
+	defer func() {
+		for _, f := range writers {
+			f.Close()
+		}
+	}()
+
+	if err := writeOne(writers, "example.com", "example.com", dir, []byte(`{"n":1}`)); err != nil {
+		t.Fatalf("first write: %v", err)
+	}
+	path := filepath.Join(dir, "example.com", "example.com.jsonl")
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("stat after first write: %v", err)
+	}
+
+	// Simulate the user deleting everything under the output dir.
+	if err := os.RemoveAll(dir); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := writeOne(writers, "example.com", "example.com", dir, []byte(`{"n":2}`)); err != nil {
+		t.Fatalf("write after rm: %v", err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("output not recreated: %v", err)
+	}
+	if got := string(data); !bytes.Contains(data, []byte(`{"n":2}`)) {
+		t.Fatalf("recreated file missing post-delete write; got %q", got)
+	}
+	if bytes.Contains(data, []byte(`{"n":1}`)) {
+		t.Fatalf("recreated file unexpectedly contains pre-delete write; got %q", data)
+	}
+}
+
 func TestStreamingWritesOutputFile(t *testing.T) {
 	t.Parallel()
 	file := filepath.Join(t.TempDir(), "out.har.jsonl")

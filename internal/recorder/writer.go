@@ -89,20 +89,26 @@ func writeOne(domainWriters map[string]*os.File, hostname, pageDomain, dir strin
 	}
 
 	key := pageDomain + "\x00" + hostname
+	groupDir := filepath.Join(dir, pageDomain)
+	filename := filepath.Join(groupDir, fmt.Sprintf("%s.jsonl", hostname))
+
 	writer, ok := domainWriters[key]
 	if ok {
-		if _, statErr := writer.Stat(); statErr != nil {
+		// Stat the path, not the file descriptor: on Unix a deleted file still
+		// stats fine through an open fd, so an fd check would keep writing to a
+		// file that has been rm'd out from under us. If the path is gone (e.g.
+		// the output dir was deleted mid-capture), drop the stale writer and
+		// recreate below.
+		if _, statErr := os.Stat(filename); statErr != nil {
 			writer.Close()
-			delete(domainWriters, hostname)
+			delete(domainWriters, key)
 			ok = false
 		}
 	}
 	if !ok {
-		groupDir := filepath.Join(dir, pageDomain)
 		if err := os.MkdirAll(groupDir, 0755); err != nil {
 			return err
 		}
-		filename := filepath.Join(groupDir, fmt.Sprintf("%s.jsonl", hostname))
 		f, err := os.OpenFile(filename, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 		if err != nil {
 			return err
