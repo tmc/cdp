@@ -1581,9 +1581,31 @@ func (n *navigationProgress) wait(ctx context.Context, mode string) error {
 	select {
 	case <-ready:
 		return nil
+	case <-n.idleReady:
+		// Some single-page apps never fire the canonical DOMContentLoaded or
+		// load event for a client-side navigation, but the network still goes
+		// quiet. Treat reaching network idle as success so goto does not hang
+		// waiting for an event that will never arrive.
+		return nil
 	case <-ctx.Done():
+		// If the navigation clearly made progress (the server responded),
+		// return the page instead of failing: the content is usable even if
+		// the awaited lifecycle event never fired.
+		if n.reachedResponse() {
+			return nil
+		}
 		return ctx.Err()
 	}
+}
+
+// reachedResponse reports whether the navigation progressed at least as far as
+// receiving a response for the top-level document.
+func (n *navigationProgress) reachedResponse() bool {
+	switch n.stageName() {
+	case "response received", "DOM content loaded", "load event":
+		return true
+	}
+	return false
 }
 
 func (n *navigationProgress) setStage(stage string) {

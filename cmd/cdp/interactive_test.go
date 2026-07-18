@@ -122,6 +122,52 @@ func TestNavigationProgressWaitModes(t *testing.T) {
 	}
 }
 
+// TestNavigationProgressNetworkIdleFallback verifies that a page which never
+// fires DOMContentLoaded still completes once the network goes idle, so goto
+// does not hang on single-page apps that skip the canonical lifecycle events.
+func TestNavigationProgressNetworkIdleFallback(t *testing.T) {
+	nav := newNavigationProgress(nil, "https://spa.test", 5)
+	nav.start()
+	// DOM/load never fire; only network idle does.
+	nav.idleOnce.Do(func() { close(nav.idleReady) })
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	if err := nav.wait(ctx, "domcontentloaded"); err != nil {
+		t.Fatalf("wait did not fall back to network idle: %v", err)
+	}
+}
+
+// TestNavigationProgressSoftSuccessOnResponse verifies that a navigation which
+// received a response but never fired a lifecycle event or reached idle
+// returns the page on timeout rather than erroring.
+func TestNavigationProgressSoftSuccessOnResponse(t *testing.T) {
+	nav := newNavigationProgress(nil, "https://slow.test", 1)
+	nav.start()
+	nav.setStage("response received")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	if err := nav.wait(ctx, "domcontentloaded"); err != nil {
+		t.Fatalf("wait should soft-succeed after response received: %v", err)
+	}
+}
+
+// TestNavigationProgressFailsBeforeResponse verifies that a navigation stuck
+// before any response (only "request sent") still fails on timeout: there is
+// nothing usable to return.
+func TestNavigationProgressFailsBeforeResponse(t *testing.T) {
+	nav := newNavigationProgress(nil, "https://stuck.test", 1)
+	nav.start()
+	nav.setStage("request sent")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	if err := nav.wait(ctx, "domcontentloaded"); err == nil {
+		t.Fatal("wait should fail when navigation never received a response")
+	}
+}
+
 func TestLongestCommonPrefix(t *testing.T) {
 	tests := []struct {
 		name   string
