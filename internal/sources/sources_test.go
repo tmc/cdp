@@ -3,7 +3,9 @@ package sources
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -38,6 +40,54 @@ func TestSourcePathCanUseRequestDomainLayout(t *testing.T) {
 	want := filepath.Join(c.OutputDir(), "_sources", "cdn.lesswrong.com", "_compiled", "app.js")
 	if got := c.sourcePath("cdn.lesswrong.com", "_compiled", "app.js"); got != want {
 		t.Fatalf("sourcePath = %q, want %q", got, want)
+	}
+}
+
+func TestCapPathSegments(t *testing.T) {
+	long := strings.Repeat("a", 300)
+	other := strings.Repeat("b", 300)
+	tests := []struct {
+		name string
+		in   string
+	}{
+		{"short unchanged", "am=1/d=1/app.js"},
+		{"single long segment", long},
+		{"long segment among short", "a/" + long + "/b"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := capPathSegments(tt.in)
+			for _, seg := range strings.Split(got, "/") {
+				if len(seg) > maxPathSegment+16 {
+					t.Fatalf("segment %d bytes exceeds cap: %q", len(seg), seg)
+				}
+			}
+			if !strings.ContainsRune(tt.in, '/') && len(tt.in) <= maxPathSegment && got != tt.in {
+				t.Fatalf("short input mangled: %q -> %q", tt.in, got)
+			}
+		})
+	}
+	// Distinct overlong segments must not collide after capping.
+	if capPathSegments(long) == capPathSegments(other) {
+		t.Fatal("distinct long segments collided")
+	}
+}
+
+// TestSourcePathCapsLongURLSegments guards the write path against URLs whose
+// single path component exceeds the filesystem name limit (Google boq module
+// lists), which previously made mkdir fail with "file name too long".
+func TestSourcePathCapsLongURLSegments(t *testing.T) {
+	c := New(filepath.Join(t.TempDir(), "capture"), false)
+	c.SetGroupByPage(false)
+	relPath := "_/js/exm=" + strings.Repeat("Ab1,", 200)
+	got := c.sourcePath("www.gstatic.com", "_compiled", relPath)
+	for _, seg := range strings.Split(got, string(filepath.Separator)) {
+		if len(seg) > maxPathSegment+16 {
+			t.Fatalf("path segment too long (%d bytes): %q", len(seg), seg)
+		}
+	}
+	if err := os.MkdirAll(filepath.Dir(got), 0o755); err != nil {
+		t.Fatalf("mkdir capped path: %v", err)
 	}
 }
 

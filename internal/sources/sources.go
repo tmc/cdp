@@ -4,7 +4,9 @@ package sources
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -673,6 +675,10 @@ func (c *Collector) sourcePath(origin string, parts ...string) string {
 	page := c.pageDomain
 	groupByPage := c.groupByPage
 	c.pageMu.RUnlock()
+	origin = capPathSegments(origin)
+	for i, part := range parts {
+		parts[i] = capPathSegments(part)
+	}
 	if !groupByPage {
 		return filepath.Join(append([]string{c.outputDir, "_sources", origin}, parts...)...)
 	}
@@ -686,6 +692,30 @@ func (c *Collector) sourcePath(origin string, parts ...string) string {
 		}
 	}
 	return path
+}
+
+// maxPathSegment is a conservative cap on the byte length of a single path
+// component. Most filesystems (APFS, ext4) limit a name to 255 bytes; some URL
+// path segments (e.g. Google's boq module lists) exceed that and make mkdir
+// fail with "file name too long".
+const maxPathSegment = 200
+
+// capPathSegments truncates each slash-separated segment of p that exceeds
+// maxPathSegment, appending a short hash of the original so distinct long
+// segments keep distinct paths. Segments within the limit are returned as-is,
+// preserving the readable layout for typical URLs.
+func capPathSegments(p string) string {
+	if len(p) <= maxPathSegment && !strings.ContainsRune(p, '/') {
+		return p
+	}
+	segs := strings.Split(p, "/")
+	for i, seg := range segs {
+		if len(seg) > maxPathSegment {
+			sum := sha256.Sum256([]byte(seg))
+			segs[i] = seg[:maxPathSegment] + "-" + hex.EncodeToString(sum[:4])
+		}
+	}
+	return strings.Join(segs, "/")
 }
 
 // fetchSourceMap fetches sourcemap content. Handles inline data URIs
