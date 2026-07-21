@@ -100,6 +100,9 @@ type Recorder struct {
 	// WebSocket capture (see websocket_capture.go).
 	ws wsLockedFields
 
+	// webrtc selects which injected WebRTC streams are kept (see webrtc.go).
+	webrtc WebRTCStreams
+
 	// Writer goroutine: decouples disk I/O from the chromedp event loop.
 	// Per-host file handles live exclusively inside writerLoop; callers
 	// send commands via the writes channel. See writer.go.
@@ -133,6 +136,15 @@ func WithVerbose(verbose bool) Option {
 func WithStreaming(streaming bool) Option {
 	return func(r *Recorder) error {
 		r.streaming = streaming
+		return nil
+	}
+}
+
+// WithWebRTCStreams selects which WebRTC stream types the recorder keeps from
+// the injected capture script. Events of unselected types are dropped.
+func WithWebRTCStreams(s WebRTCStreams) Option {
+	return func(r *Recorder) error {
+		r.webrtc = s
 		return nil
 	}
 }
@@ -235,6 +247,7 @@ func New(opts ...Option) (*Recorder, error) {
 		writes:       make(chan writerCmd, writeQueueSize),
 		writerDone:   make(chan struct{}),
 		groupByPage:  true,
+		webrtc:       DefaultWebRTCStreams(),
 	}
 
 	for _, opt := range opts {

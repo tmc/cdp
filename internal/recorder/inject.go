@@ -146,8 +146,10 @@ const FetchCaptureScript = `(function() {
 })();`
 
 // WebRTCCaptureScript is injected via Page.addScriptToEvaluateOnNewDocument
-// to intercept RTCPeerConnection creation, DataChannel messages, and SDP
-// offer/answer exchange. Captured via structured console.log messages.
+// to intercept RTCPeerConnection creation, DataChannel messages, SDP
+// offer/answer exchange, and ICE candidates. Captured via structured
+// console.log messages; the recorder decides which stream types to keep (see
+// WebRTCStreams).
 const WebRTCCaptureScript = `(function() {
   if (window.__cdpWebRTCCapture) return;
   window.__cdpWebRTCCapture = true;
@@ -236,6 +238,30 @@ const WebRTCCaptureScript = `(function() {
         sdp: desc?.sdp || '',
       }));
       return origSRD(desc);
+    };
+
+    // Capture locally gathered ICE candidates. A null candidate marks the end
+    // of gathering and is not reported.
+    pc.addEventListener('icecandidate', function(e) {
+      if (!e.candidate) return;
+      console.log('CDP_DC:' + JSON.stringify({
+        type: 'ice-local',
+        candidate: e.candidate.candidate || '',
+        sdpMid: e.candidate.sdpMid || '',
+      }));
+    });
+
+    // Capture remote ICE candidates as they are applied.
+    const origAIC = pc.addIceCandidate.bind(pc);
+    pc.addIceCandidate = function(cand) {
+      if (cand && cand.candidate) {
+        console.log('CDP_DC:' + JSON.stringify({
+          type: 'ice-remote',
+          candidate: cand.candidate || '',
+          sdpMid: cand.sdpMid || '',
+        }));
+      }
+      return origAIC(cand);
     };
 
     return pc;

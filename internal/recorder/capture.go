@@ -178,13 +178,15 @@ func (r *Recorder) handleGRPCCapture(payload string) {
 
 func (r *Recorder) handleDataChannelCapture(payload string) {
 	var ev struct {
-		Type    string `json:"type"`
-		Label   string `json:"label"`
-		Dir     string `json:"dir"`
-		Data    string `json:"data"`
-		Binary  bool   `json:"binary"`
-		SDP     string `json:"sdp"`
-		SDPType string `json:"sdpType"`
+		Type      string `json:"type"`
+		Label     string `json:"label"`
+		Dir       string `json:"dir"`
+		Data      string `json:"data"`
+		Binary    bool   `json:"binary"`
+		SDP       string `json:"sdp"`
+		SDPType   string `json:"sdpType"`
+		Candidate string `json:"candidate"`
+		SDPMid    string `json:"sdpMid"`
 	}
 	if err := json.Unmarshal([]byte(payload), &ev); err != nil {
 		if r.verbose {
@@ -198,6 +200,9 @@ func (r *Recorder) handleDataChannelCapture(payload string) {
 
 	switch ev.Type {
 	case "message":
+		if !r.webrtc.DataChannel {
+			return
+		}
 		if r.verbose {
 			log.Printf("capture: DC message on %q (%s, %d bytes, binary=%v)",
 				ev.Label, ev.Dir, len(ev.Data), ev.Binary)
@@ -244,6 +249,9 @@ func (r *Recorder) handleDataChannelCapture(payload string) {
 		}
 
 	case "sdp-local", "sdp-remote":
+		if !r.webrtc.SDP {
+			return
+		}
 		if r.verbose {
 			log.Printf("capture: SDP %s (%s)", ev.Type, ev.SDPType)
 		}
@@ -273,6 +281,46 @@ func (r *Recorder) handleDataChannelCapture(payload string) {
 						MimeType: "application/sdp",
 						Size:     int64(len(ev.SDP)),
 						Text:     ev.SDP,
+					},
+				},
+			}
+			r.streamEntry(entry)
+		}
+
+	case "ice-local", "ice-remote":
+		if !r.webrtc.ICE {
+			return
+		}
+		if r.verbose {
+			log.Printf("capture: ICE %s (mid %s)", ev.Type, ev.SDPMid)
+		}
+		dir := strings.TrimPrefix(ev.Type, "ice-")
+		ce := &CaptureEvent{
+			Type:      "ice",
+			Timestamp: time.Now(),
+			Direction: dir,
+			Channel:   ev.SDPMid,
+			Data:      ev.Candidate,
+		}
+		r.writeCaptureEvent(ce)
+
+		// Synthesize a HAR entry for the ICE candidate.
+		if r.streaming {
+			entry := &har.Entry{
+				StartedDateTime: time.Now().Format(time.RFC3339),
+				Comment:         fmt.Sprintf("ice:%s:%s", dir, ev.SDPMid),
+				Request: &har.Request{
+					Method:      "ICE",
+					URL:         fmt.Sprintf("webrtc://webrtc-signaling/ice/%s/%s", dir, ev.SDPMid),
+					HTTPVersion: "webrtc",
+				},
+				Response: &har.Response{
+					Status:     200,
+					StatusText: dir,
+					Content: &har.Content{
+						MimeType: "application/candidate",
+						Size:     int64(len(ev.Candidate)),
+						Text:     ev.Candidate,
 					},
 				},
 			}
