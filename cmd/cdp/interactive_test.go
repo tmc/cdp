@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/chromedp/cdproto/network"
 )
 
 func TestRawCDPNeedsContinuation(t *testing.T) {
@@ -165,6 +167,62 @@ func TestNavigationProgressFailsBeforeResponse(t *testing.T) {
 	defer cancel()
 	if err := nav.wait(ctx, "domcontentloaded"); err == nil {
 		t.Fatal("wait should fail when navigation never received a response")
+	}
+}
+
+// TestNavigationProgressFollowsRedirect verifies that a top-level navigation
+// that redirects cross-origin (e.g. an unauthenticated app bouncing to a login
+// page) still advances past "request sent" and credits the response. A
+// redirected navigation reuses the same request ID, so tracking by ID rather
+// than by the originally requested URL is what makes this work.
+func TestNavigationProgressFollowsRedirect(t *testing.T) {
+	nav := newNavigationProgress(nil, "https://app.test/page", 5)
+	nav.start()
+
+	const reqID = network.RequestID("req-1")
+
+	// Initial document request for the requested URL latches the nav request.
+	if !nav.isNavRequest(&network.EventRequestWillBeSent{
+		RequestID: reqID,
+		Type:      network.ResourceTypeDocument,
+		Request:   &network.Request{URL: "https://app.test/page"},
+	}) {
+		t.Fatal("initial document request not recognized as navigation")
+	}
+
+	// Cross-origin redirect: same request ID, RedirectResponse set, new URL
+	// that does not match the originally requested URL.
+	redirect := &network.EventRequestWillBeSent{
+		RequestID:        reqID,
+		Type:             network.ResourceTypeDocument,
+		Request:          &network.Request{URL: "https://login.test/signin"},
+		RedirectResponse: &network.Response{URL: "https://app.test/page"},
+	}
+	if !nav.isNavRequest(redirect) {
+		t.Fatal("redirected request not recognized as navigation")
+	}
+	if e := redirect; e.RedirectResponse != nil {
+		nav.setURL(e.Request.URL)
+	}
+	if got := nav.currentURL(); got != "https://login.test/signin" {
+		t.Fatalf("nav URL not updated to redirect target: %q", got)
+	}
+
+	// Response for the redirect target must be credited even though its URL no
+	// longer matches the originally requested URL.
+	if !nav.isNavResponse(&network.EventResponseReceived{
+		RequestID: reqID,
+		Response:  &network.Response{URL: "https://login.test/signin"},
+	}) {
+		t.Fatal("redirect target response not recognized as navigation")
+	}
+
+	// An unrelated resource request must not be mistaken for the navigation.
+	if nav.isNavResponse(&network.EventResponseReceived{
+		RequestID: network.RequestID("req-2"),
+		Response:  &network.Response{URL: "https://login.test/style.css"},
+	}) {
+		t.Fatal("unrelated response wrongly credited to navigation")
 	}
 }
 

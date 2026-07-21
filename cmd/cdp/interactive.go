@@ -1461,6 +1461,7 @@ type navigationProgress struct {
 	mu        sync.Mutex
 	active    bool
 	stage     string
+	navReqID  network.RequestID // top-level document request, latched on first match
 	domReady  chan struct{}
 	loadReady chan struct{}
 	idleReady chan struct{}
@@ -1488,11 +1489,17 @@ func (n *navigationProgress) listen(ctx context.Context) {
 				n.resetIdleLocked()
 			}
 			n.mu.Unlock()
-			if e.Request != nil && sameNavigationURL(e.Request.URL, n.url) {
+			if n.isNavRequest(e) {
+				// A redirected navigation reuses the same request ID and
+				// re-fires with RedirectResponse set. Point at the new URL so a
+				// cross-origin redirect (e.g. to a login page) still tracks.
+				if e.RedirectResponse != nil && e.Request != nil {
+					n.setURL(e.Request.URL)
+				}
 				n.setStage("request sent")
 			}
 		case *network.EventResponseReceived:
-			if e.Response != nil && sameNavigationURL(e.Response.URL, n.url) {
+			if n.isNavResponse(e) {
 				n.setStage("response received")
 			}
 		case *page.EventDomContentEventFired:
@@ -1507,6 +1514,57 @@ func (n *navigationProgress) listen(ctx context.Context) {
 			n.requestDone(e.RequestID)
 		}
 	})
+}
+
+// isNavRequest reports whether a request event belongs to the top-level
+// navigation. The first document request whose URL matches the requested URL
+// latches the request ID; redirects reuse that ID, so later events are matched
+// by ID and tracked even after a cross-origin redirect changes the URL.
+func (n *navigationProgress) isNavRequest(e *network.EventRequestWillBeSent) bool {
+	if e == nil || e.Request == nil {
+		return false
+	}
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	if n.navReqID != "" {
+		return e.RequestID == n.navReqID
+	}
+	if e.Type == network.ResourceTypeDocument && sameNavigationURL(e.Request.URL, n.url) {
+		n.navReqID = e.RequestID
+		return true
+	}
+	return false
+}
+
+// isNavResponse reports whether a response event belongs to the top-level
+// navigation, matching by the latched request ID and falling back to URL for
+// the first response if no document request was observed.
+func (n *navigationProgress) isNavResponse(e *network.EventResponseReceived) bool {
+	if e == nil || e.Response == nil {
+		return false
+	}
+	n.mu.Lock()
+	id := n.navReqID
+	n.mu.Unlock()
+	if id != "" {
+		return e.RequestID == id
+	}
+	return sameNavigationURL(e.Response.URL, n.url)
+}
+
+// setURL updates the tracked navigation URL, used to follow redirects.
+func (n *navigationProgress) setURL(u string) {
+	n.mu.Lock()
+	n.url = u
+	n.mu.Unlock()
+}
+
+// currentURL returns the tracked navigation URL, which may have been updated
+// to a redirect target since the navigation started.
+func (n *navigationProgress) currentURL() string {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	return n.url
 }
 
 func sameNavigationURL(a, b string) bool {
@@ -1533,8 +1591,9 @@ func (n *navigationProgress) start() {
 	n.loadReady = make(chan struct{})
 	n.idleReady = make(chan struct{})
 	n.pending = make(map[network.RequestID]struct{})
+	url := n.url
 	n.mu.Unlock()
-	n.write("navigating " + n.url + " (requesting)")
+	n.write("navigating " + url + " (requesting)")
 }
 
 func (n *navigationProgress) beginIdle() {
@@ -1615,8 +1674,9 @@ func (n *navigationProgress) setStage(stage string) {
 		return
 	}
 	n.stage = stage
+	url := n.url
 	n.mu.Unlock()
-	n.write("navigating " + n.url + " (" + stage + ")")
+	n.write("navigating " + url + " (" + stage + ")")
 }
 
 func (n *navigationProgress) finish(err error) {
@@ -1626,12 +1686,13 @@ func (n *navigationProgress) finish(err error) {
 	n.mu.Lock()
 	n.active = false
 	elapsed := time.Since(n.started)
+	url := n.url
 	n.mu.Unlock()
 	if err == nil {
-		n.writeFinal(fmt.Sprintf("✓ loaded %s (%s)", n.url, elapsed.Round(time.Millisecond)))
+		n.writeFinal(fmt.Sprintf("✓ loaded %s (%s)", url, elapsed.Round(time.Millisecond)))
 		return
 	}
-	n.writeFinal(fmt.Sprintf("navigation failed %s (%s)", n.url, elapsed.Round(time.Millisecond)))
+	n.writeFinal(fmt.Sprintf("navigation failed %s (%s)", url, elapsed.Round(time.Millisecond)))
 }
 
 func (n *navigationProgress) stageName() string {
@@ -1666,10 +1727,11 @@ func (n *navigationProgress) wrapError(err error) error {
 	}
 	elapsed := n.elapsed().Round(time.Millisecond)
 	stage := n.stageName()
+	url := n.currentURL()
 	if errors.Is(err, context.DeadlineExceeded) {
-		return fmt.Errorf("navigate %s: timed out after %s (timeout %ds, last stage: %s): %w", n.url, elapsed, n.timeout, stage, err)
+		return fmt.Errorf("navigate %s: timed out after %s (timeout %ds, last stage: %s): %w", url, elapsed, n.timeout, stage, err)
 	}
-	return fmt.Errorf("navigate %s failed after %s (last stage: %s): %w", n.url, elapsed, stage, err)
+	return fmt.Errorf("navigate %s failed after %s (last stage: %s): %w", url, elapsed, stage, err)
 }
 
 func (im *InteractiveMode) commandContext(cmd *Command) (context.Context, context.CancelFunc) {
