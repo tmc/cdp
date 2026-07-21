@@ -64,12 +64,15 @@ func TestFullCaptureNavigationFiniteResponse(t *testing.T) {
 func TestFullCaptureNavigationWaitContract(t *testing.T) {
 	skipIfNoBrowser(t)
 
+	// The document is served in full so DOMContentLoaded fires, but a stylesheet
+	// in <head> hangs forever. A pending stylesheet blocks the load event without
+	// blocking DOMContentLoaded, so the two wait modes observably diverge.
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/dom-only":
 			w.Header().Set("Content-Type", "text/html")
-			_, _ = fmt.Fprint(w, "<!doctype html><img src='/never'>")
-		case "/never":
+			_, _ = fmt.Fprint(w, "<!doctype html><link rel='stylesheet' href='/never.css'><body>ready</body>")
+		case "/never.css":
 			<-r.Context().Done()
 		}
 	}))
@@ -78,13 +81,19 @@ func TestFullCaptureNavigationWaitContract(t *testing.T) {
 		srv.Close()
 	}()
 
-	_, domOutput, domElapsed := runFullCaptureNavigationWithWait(t, srv.URL+"/dom-only", 3, "domcontentloaded")
-	if domElapsed > 10*time.Second {
-		t.Fatalf("DOMContentLoaded navigation took %v\noutput:\n%s", domElapsed, domOutput)
+	// DOMContentLoaded fires despite the hanging stylesheet, so this returns fast.
+	_, domOutput, domElapsed := runFullCaptureNavigationWithWait(t, srv.URL+"/dom-only", 5, "domcontentloaded")
+	if domElapsed > 4*time.Second {
+		t.Fatalf("DOMContentLoaded navigation took %v, expected fast return\noutput:\n%s", domElapsed, domOutput)
 	}
-	_, loadOutput, _ := runFullCaptureNavigationWithWait(t, srv.URL+"/dom-only", 1, "load")
-	if !strings.Contains(loadOutput, "last stage: DOM content loaded") {
-		t.Fatalf("load wait did not report DOM-ready stall:\n%s", loadOutput)
+
+	// The load event never fires (the stylesheet hangs) and network idle must
+	// not substitute for an explicit load wait, so this waits out the timeout
+	// and then soft-succeeds because the document response was received.
+	const loadTimeout = 3
+	_, loadOutput, loadElapsed := runFullCaptureNavigationWithWait(t, srv.URL+"/dom-only", loadTimeout, "load")
+	if loadElapsed < time.Duration(loadTimeout)*time.Second {
+		t.Fatalf("load wait returned in %v, expected to wait ~%ds for the load event\noutput:\n%s", loadElapsed, loadTimeout, loadOutput)
 	}
 }
 

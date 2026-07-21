@@ -1629,6 +1629,13 @@ func (n *navigationProgress) resetIdleLocked() {
 
 func (n *navigationProgress) wait(ctx context.Context, mode string) error {
 	var ready <-chan struct{}
+	// idleFallback rescues waits whose awaited lifecycle event may never fire.
+	// It applies only to the default (DOMContentLoaded) wait: a single-page app
+	// can complete a client-side navigation without firing that event while the
+	// network still goes quiet. An explicit "load" or "networkidle" wait asks
+	// for a specific signal, so network idle must not silently substitute for
+	// it — those rely on the ctx.Done soft-success below instead.
+	var idleFallback <-chan struct{}
 	switch mode {
 	case "load":
 		ready = n.loadReady
@@ -1636,15 +1643,14 @@ func (n *navigationProgress) wait(ctx context.Context, mode string) error {
 		ready = n.idleReady
 	default:
 		ready = n.domReady
+		idleFallback = n.idleReady
 	}
+	// A nil idleFallback channel blocks forever, so it simply never fires for
+	// modes that opt out of the fallback.
 	select {
 	case <-ready:
 		return nil
-	case <-n.idleReady:
-		// Some single-page apps never fire the canonical DOMContentLoaded or
-		// load event for a client-side navigation, but the network still goes
-		// quiet. Treat reaching network idle as success so goto does not hang
-		// waiting for an event that will never arrive.
+	case <-idleFallback:
 		return nil
 	case <-ctx.Done():
 		// If the navigation clearly made progress (the server responded),

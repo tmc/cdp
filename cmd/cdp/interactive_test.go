@@ -170,6 +170,37 @@ func TestNavigationProgressFailsBeforeResponse(t *testing.T) {
 	}
 }
 
+// TestNavigationProgressLoadWaitIgnoresIdle verifies that network idle does not
+// substitute for an explicit "load" wait. Idle fallback exists only for the
+// default wait, where a single-page app may never fire DOMContentLoaded; an
+// explicit load wait must wait for the load event (or time out).
+func TestNavigationProgressLoadWaitIgnoresIdle(t *testing.T) {
+	nav := newNavigationProgress(nil, "https://slow.test", 1)
+	nav.start()
+	// DOM ready and network idle, but load never fires.
+	nav.setStage("DOM content loaded")
+	nav.domOnce.Do(func() { close(nav.domReady) })
+	nav.idleOnce.Do(func() { close(nav.idleReady) })
+
+	// Idle must not complete the load wait; it soft-succeeds only because the
+	// document response was already received.
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	if err := nav.wait(ctx, "load"); err != nil {
+		t.Fatalf("load wait should soft-succeed after DOM content loaded: %v", err)
+	}
+
+	// Without a response, the load wait must still fail rather than ride idle.
+	nav2 := newNavigationProgress(nil, "https://slow.test", 1)
+	nav2.start()
+	nav2.idleOnce.Do(func() { close(nav2.idleReady) })
+	ctx2, cancel2 := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel2()
+	if err := nav2.wait(ctx2, "load"); err == nil {
+		t.Fatal("load wait should not complete via network idle before any response")
+	}
+}
+
 // TestNavigationProgressFollowsRedirect verifies that a top-level navigation
 // that redirects cross-origin (e.g. an unauthenticated app bouncing to a login
 // page) still advances past "request sent" and credits the response. A
