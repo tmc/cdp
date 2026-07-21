@@ -178,7 +178,7 @@ The main `cdp` command is the broader general-purpose entry point. It goes beyon
 - navigate, evaluate JavaScript, and extract page state
 - record HAR output and stream HARL JSONL capture data to a file, or to
   stdout when `--harl-file -` is explicit
-- inject extra capture logic for traffic CDP does not expose directly, including gRPC-Web streams and WebRTC data channel events
+- inject extra capture logic for traffic CDP does not expose directly, including gRPC-Web streams and WebRTC SDP, DataChannel, and ICE candidates (under `--full-capture`, select the WebRTC streams with `--webrtc-capture`, e.g. `--webrtc-capture=sdp,datachannel` (default), `=all`, or `=none`)
 - run in interactive and MCP-oriented modes
 
 ## What `churl` Does

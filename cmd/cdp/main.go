@@ -1272,6 +1272,7 @@ func main() {
 		navigationTimeout int
 		groupByPage       bool
 		waitMode          string
+		webrtcCapture     string
 		keepOpen          bool
 		showChromeFlags   bool
 		outputDir         string // Directory to write domain-organized logs to
@@ -1373,6 +1374,7 @@ func main() {
 	flag.IntVar(&navigationTimeout, "navigation-timeout", 30, "Maximum seconds to wait for interactive navigation (0 for no timeout)")
 	flag.BoolVar(&groupByPage, "group-by-page", true, "Group capture output by navigated page domain")
 	flag.StringVar(&waitMode, "wait", "domcontentloaded", "Interactive navigation wait: domcontentloaded, load, or networkidle")
+	flag.StringVar(&webrtcCapture, "webrtc-capture", "sdp,datachannel", "WebRTC streams to capture under --full-capture: comma-separated sdp, datachannel, ice (or all/none)")
 	flag.BoolVar(&keepOpen, "keep-open", false, "Leave a launched browser running after cdp exits")
 	flag.BoolVar(&keepOpen, "no-quit", false, "Alias for --keep-open")
 	flag.BoolVar(&showChromeFlags, "show-chrome-flags", false, "Print the Chrome command-line flags used at launch")
@@ -1523,6 +1525,10 @@ func main() {
 	}
 	if waitMode != "domcontentloaded" && waitMode != "load" && waitMode != "networkidle" {
 		exitWithError(ExitUsageError, ErrorTypeUsage, "Invalid --wait value: %s (must be domcontentloaded, load, or networkidle)", waitMode)
+	}
+	webrtcStreams, err := harrecorder.ParseWebRTCStreams(webrtcCapture)
+	if err != nil {
+		exitWithError(ExitUsageError, ErrorTypeUsage, "Invalid --webrtc-capture value: %v", err)
 	}
 	runMode := cliRunMode{
 		jsCount:             len(jsScripts),
@@ -1684,6 +1690,7 @@ func main() {
 			Progress:          newStartupProgress(os.Stderr, fullCapture && !quiet && stderrIsTerminal()),
 			GroupByPage:       groupByPage,
 			WaitMode:          waitMode,
+			WebRTC:            webrtcStreams,
 			KeepOpen:          keepOpen,
 		})
 		return
@@ -4383,6 +4390,7 @@ func handleEnhancedMode(command string, interactive bool, cfg fullCaptureConfig)
 					harrecorder.WithOutputDir(cfg.OutputDir),
 					harrecorder.WithMaxBodyBytes(cfg.MaxBodyBytes),
 					harrecorder.WithGroupByPage(cfg.GroupByPage),
+					harrecorder.WithWebRTCStreams(cfg.WebRTC),
 				}
 				recOpts = appendHARLOutputOptions(recOpts, cfg.OutputDir, cfg.HarlFile)
 				if !cfg.NoScrub {
@@ -4422,10 +4430,16 @@ func handleEnhancedMode(command string, interactive bool, cfg fullCaptureConfig)
 					}
 
 					// Inject JS capture scripts for gRPC-Web streaming and WebRTC.
-					for name, script := range map[string]string{
-						"fetch-capture":  harrecorder.FetchCaptureScript,
-						"webrtc-capture": harrecorder.WebRTCCaptureScript,
-					} {
+					// The WebRTC shim is only injected when at least one WebRTC
+					// stream is selected, so it does not patch RTCPeerConnection
+					// on pages when capture is off.
+					captureScripts := map[string]string{
+						"fetch-capture": harrecorder.FetchCaptureScript,
+					}
+					if cfg.WebRTC.Any() {
+						captureScripts["webrtc-capture"] = harrecorder.WebRTCCaptureScript
+					}
+					for name, script := range captureScripts {
 						if err := chromedp.Run(ctx, chromedp.ActionFunc(func(ctx context.Context) error {
 							_, err := page.AddScriptToEvaluateOnNewDocument(script).Do(ctx)
 							return err
@@ -4628,6 +4642,7 @@ type fullCaptureConfig struct {
 	Progress          *startupProgress
 	GroupByPage       bool
 	WaitMode          string
+	WebRTC            harrecorder.WebRTCStreams
 	KeepOpen          bool
 }
 
