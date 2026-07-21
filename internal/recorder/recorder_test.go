@@ -15,6 +15,45 @@ import (
 	"github.com/chromedp/cdproto/network"
 )
 
+func TestBuildFailedEntry(t *testing.T) {
+	r, err := New()
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	const reqID = network.RequestID("req-fail-1")
+	r.requests[reqID] = &network.Request{
+		Method:  "POST",
+		URL:     "https://api.test/submit",
+		Headers: network.Headers{"content-type": "application/json"},
+	}
+	r.postData[reqID] = `{"k":"v"}`
+
+	entry := r.buildFailedEntry(reqID, &network.EventLoadingFailed{
+		RequestID: reqID,
+		ErrorText: "net::ERR_CONNECTION_RESET",
+	})
+	if entry == nil {
+		t.Fatal("buildFailedEntry returned nil for a known request")
+	}
+	if entry.Request == nil || entry.Request.URL != "https://api.test/submit" || entry.Request.Method != "POST" {
+		t.Fatalf("request not preserved: %+v", entry.Request)
+	}
+	if entry.Request.PostData == nil || entry.Request.PostData.Text != `{"k":"v"}` {
+		t.Fatalf("post data not preserved: %+v", entry.Request.PostData)
+	}
+	if entry.Response == nil || entry.Response.Status != 0 || entry.Response.StatusText != "net::ERR_CONNECTION_RESET" {
+		t.Fatalf("failed response not synthesized: %+v", entry.Response)
+	}
+	if !strings.Contains(entry.Comment, "net::ERR_CONNECTION_RESET") {
+		t.Fatalf("comment missing error text: %q", entry.Comment)
+	}
+
+	// An unknown request id yields no entry rather than a bogus one.
+	if r.buildFailedEntry(network.RequestID("nope"), &network.EventLoadingFailed{ErrorText: "x"}) != nil {
+		t.Fatal("buildFailedEntry should return nil for an unknown request")
+	}
+}
+
 func TestFetchContentLength(t *testing.T) {
 	tests := []struct {
 		name    string

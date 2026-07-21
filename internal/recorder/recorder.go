@@ -363,6 +363,18 @@ func (r *Recorder) HandleNetworkEvent(ctx context.Context) func(interface{}) {
 
 			// Streaming deferred to LoadingFinished for complete entry with body.
 
+		case *network.EventLoadingFailed:
+			// A failed request (connection reset/refused, blocked, aborted,
+			// CORS failure) never reaches LoadingFinished, so it would otherwise
+			// be dropped from the capture entirely. Write a request-only entry
+			// with the error recorded so outgoing requests are not lost.
+			if _, ok := r.fetchBodies[e.RequestID]; ok {
+				break
+			}
+			if entry := r.buildFailedEntry(e.RequestID, e); entry != nil {
+				r.streamEntryAtPage(entry, r.requestPages[e.RequestID], r.outputDir)
+			}
+
 		case *network.EventLoadingFinished:
 			r.timings[e.RequestID] = e
 
@@ -710,6 +722,52 @@ func (r *Recorder) buildStreamEntry(reqID network.RequestID, resp *network.Respo
 			HTTPVersion: resp.Protocol,
 			Headers:     convertHeaders(resp.Headers),
 			Content:     content,
+		},
+	}
+	r.scrubEntry(entry)
+	return entry
+}
+
+// buildFailedEntry creates a HAR entry for a request that failed to load and
+// so never produced a response. The request side is recorded in full; the
+// response is a synthetic status 0 carrying the error text, matching how HAR
+// tools represent failed requests. Caller must hold r.Lock.
+func (r *Recorder) buildFailedEntry(reqID network.RequestID, e *network.EventLoadingFailed) *har.Entry {
+	req, ok := r.requests[reqID]
+	if !ok || req == nil {
+		return nil
+	}
+	if r.verbose {
+		log.Printf("Loading failed: %s %s (%s)", req.Method, req.URL, e.ErrorText)
+	}
+	harReq := &har.Request{
+		Method:      req.Method,
+		URL:         req.URL,
+		HTTPVersion: "HTTP/1.1",
+		Headers:     convertHeaders(req.Headers),
+	}
+	if pd, ok := r.postData[reqID]; ok && pd != "" {
+		mimeType := ""
+		if ct, ok := req.Headers["content-type"]; ok {
+			mimeType, _ = ct.(string)
+		}
+		harReq.PostData = &har.PostData{MimeType: mimeType, Text: pd}
+	}
+	comment := "loading failed: " + e.ErrorText
+	if e.Canceled {
+		comment += " (canceled)"
+	}
+	if e.BlockedReason != "" {
+		comment += " blocked: " + e.BlockedReason.String()
+	}
+	entry := &har.Entry{
+		StartedDateTime: time.Now().Format(time.RFC3339),
+		Comment:         comment,
+		Request:         harReq,
+		Response: &har.Response{
+			Status:     0,
+			StatusText: e.ErrorText,
+			Content:    &har.Content{},
 		},
 	}
 	r.scrubEntry(entry)

@@ -97,6 +97,65 @@ func TestFullCaptureNavigationWaitContract(t *testing.T) {
 	}
 }
 
+// TestFullCaptureRecordsFailedRequest verifies that an outgoing request whose
+// response fails to load (here a connection reset) is still written to disk.
+// Failed requests never reach LoadingFinished, so without an explicit handler
+// they would be dropped from the capture entirely.
+func TestFullCaptureRecordsFailedRequest(t *testing.T) {
+	skipIfNoBrowser(t)
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/":
+			w.Header().Set("Content-Type", "text/html")
+			_, _ = fmt.Fprint(w, "<!doctype html><body><script>fetch('/reset').catch(()=>{})</script></body>")
+		case "/reset":
+			// Abort the connection so the fetch fails with ERR_CONNECTION_RESET.
+			if hj, ok := w.(http.Hijacker); ok {
+				conn, _, err := hj.Hijack()
+				if err == nil {
+					_ = conn.Close()
+				}
+			}
+		}
+	}))
+	defer func() {
+		srv.CloseClientConnections()
+		srv.Close()
+	}()
+
+	// Navigate twice so the first page's async fetch settles and flushes before
+	// the process exits.
+	outDir := t.TempDir()
+	cdpPath := buildCDP(t)
+	chromePath := testutil.FindChrome()
+	if chromePath == "" {
+		t.Skip("no Chrome-compatible browser found")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, cdpPath,
+		"--headless", "--chrome-path", chromePath,
+		"--debug-port", fmt.Sprint(freeTCPPort(t)),
+		"--full-capture", "--harl", "--verbose",
+		"--navigation-timeout", "10",
+		"--output-dir", outDir,
+	)
+	cmd.Stdin = strings.NewReader("goto " + srv.URL + "/\ngoto " + srv.URL + "/\nexit\n")
+	var output bytes.Buffer
+	cmd.Stdout, cmd.Stderr = &output, &output
+	if err := cmd.Run(); err != nil && ctx.Err() != nil {
+		t.Fatalf("cdp timed out: %v\noutput:\n%s", err, output.String())
+	}
+
+	if _, ok := fileContaining(t, outDir, "/reset"); !ok {
+		t.Fatalf("failed request not recorded to disk\noutput:\n%s", output.String())
+	}
+	if _, ok := fileContaining(t, outDir, "loading failed"); !ok {
+		t.Fatalf("failed request recorded without the loading-failed marker\noutput:\n%s", output.String())
+	}
+}
+
 func runFullCaptureNavigation(t *testing.T, url string, timeout int) (string, string, time.Duration) {
 	return runFullCaptureNavigationWithWait(t, url, timeout, "domcontentloaded")
 }
