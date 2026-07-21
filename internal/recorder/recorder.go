@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -51,6 +52,14 @@ const (
 	fetchBodyTimeout     = 10 * time.Second
 	fetchBodyGrace       = 250 * time.Millisecond
 	fetchContinueTimeout = 2 * time.Second
+
+	// fetchBodyMaxContentLength caps the declared response size for which the
+	// body is captured while the response is paused. Fetch.getResponseBody
+	// transfers the whole body over the CDP connection while the page waits,
+	// so large responses are continued immediately (metadata only) rather than
+	// holding the page paused. Bodies without a Content-Length are still
+	// captured, bounded by fetchBodyGrace.
+	fetchBodyMaxContentLength = 2 << 20 // 2 MiB
 )
 
 func (b capturedBody) truncated() bool {
@@ -463,6 +472,21 @@ func (r *Recorder) HandleNetworkEvent(ctx context.Context) func(interface{}) {
 //
 // This captures traffic that the Network domain may miss, such as gRPC-Web
 // streaming fetches and service-worker-intercepted requests.
+// fetchContentLength returns the declared Content-Length from paused-response
+// headers, or -1 when absent or unparseable (so it never trips the size gate).
+func fetchContentLength(headers []*fetch.HeaderEntry) int64 {
+	for _, h := range headers {
+		if strings.EqualFold(h.Name, "content-length") {
+			n, err := strconv.ParseInt(strings.TrimSpace(h.Value), 10, 64)
+			if err != nil {
+				return -1
+			}
+			return n
+		}
+	}
+	return -1
+}
+
 func (r *Recorder) HandleFetchEvent(ctx context.Context) func(interface{}) {
 	return func(ev interface{}) {
 		e, ok := ev.(*fetch.EventRequestPaused)
@@ -480,6 +504,22 @@ func (r *Recorder) HandleFetchEvent(ctx context.Context) func(interface{}) {
 					if r.verbose {
 						log.Printf("fetch: continue request %s: %v", e.RequestID, err)
 					}
+				}
+			}()
+			return
+		}
+
+		// Large responses are continued immediately without capturing the body:
+		// pulling a big body over CDP while the response is paused stalls the
+		// page. Small and unknown-size responses fall through to body capture.
+		if fetchContentLength(e.ResponseHeaders) > fetchBodyMaxContentLength {
+			go func() {
+				continueCtx, cancel := context.WithTimeout(ctx, fetchContinueTimeout)
+				defer cancel()
+				if err := chromedp.Run(continueCtx, chromedp.ActionFunc(func(c context.Context) error {
+					return fetch.ContinueResponse(e.RequestID).Do(c)
+				})); err != nil && r.verbose {
+					log.Printf("fetch: continue large response %s: %v", e.RequestID, err)
 				}
 			}()
 			return

@@ -4,14 +4,46 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/chromedp/cdproto/cdp"
+	"github.com/chromedp/cdproto/fetch"
 	"github.com/chromedp/cdproto/har"
 	"github.com/chromedp/cdproto/network"
 )
+
+func TestFetchContentLength(t *testing.T) {
+	tests := []struct {
+		name    string
+		headers []*fetch.HeaderEntry
+		want    int64
+	}{
+		{"absent", []*fetch.HeaderEntry{{Name: "Content-Type", Value: "text/html"}}, -1},
+		{"present", []*fetch.HeaderEntry{{Name: "Content-Length", Value: "1024"}}, 1024},
+		{"case insensitive", []*fetch.HeaderEntry{{Name: "content-length", Value: "42"}}, 42},
+		{"whitespace", []*fetch.HeaderEntry{{Name: "Content-Length", Value: " 7 "}}, 7},
+		{"unparseable", []*fetch.HeaderEntry{{Name: "Content-Length", Value: "big"}}, -1},
+		{"nil", nil, -1},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := fetchContentLength(tt.headers); got != tt.want {
+				t.Errorf("fetchContentLength = %d, want %d", got, tt.want)
+			}
+		})
+	}
+	// The gate must fire only for declared sizes over the cap.
+	if fetchContentLength([]*fetch.HeaderEntry{{Name: "Content-Length", Value: "1024"}}) > fetchBodyMaxContentLength {
+		t.Error("small response wrongly exceeds body cap")
+	}
+	huge := strconv.FormatInt(fetchBodyMaxContentLength+1, 10)
+	if fetchContentLength([]*fetch.HeaderEntry{{Name: "Content-Length", Value: huge}}) <= fetchBodyMaxContentLength {
+		t.Error("large response should exceed body cap")
+	}
+}
 
 // timeToMonotonicTime is a helper to convert time.Time to *cdp.MonotonicTime
 func timeToMonotonicTime(t time.Time) *cdp.MonotonicTime {
