@@ -12,6 +12,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	_ "net/http/pprof" // registers /debug/pprof handlers on http.DefaultServeMux
 	neturl "net/url"
 	"os"
 	"os/exec"
@@ -1260,6 +1261,7 @@ func main() {
 		listBrowsers bool
 		chromePath   string
 		autoDiscover bool
+		pprofListen  string
 
 		// New features
 		jsScripts         stringSlice // Support multiple --js flags
@@ -1360,6 +1362,7 @@ func main() {
 	flag.BoolVar(&listBrowsers, "list-browsers", false, "List all discovered browsers and exit")
 	flag.StringVar(&chromePath, "chrome-path", "", "Path to specific Chrome executable")
 	flag.BoolVar(&autoDiscover, "auto-discover", true, "Automatically discover and prefer running browsers")
+	flag.StringVar(&pprofListen, "pprof-listen", "", "Serve net/http/pprof on this address (e.g. localhost:6060) for live profiling")
 
 	// New flags
 	flag.Var(&jsScripts, "js", "JavaScript code to execute in console (can be used multiple times)")
@@ -1441,6 +1444,17 @@ func main() {
 	flag.Parse()
 	if verbose {
 		log.Printf("startup: flags parsed in %v", time.Since(processStart))
+	}
+
+	// Serve net/http/pprof for live profiling when requested. Runs in the
+	// background so it does not block startup; failures are logged, not fatal.
+	if pprofListen != "" {
+		go func() {
+			log.Printf("pprof: serving on http://%s/debug/pprof/", pprofListen)
+			if err := http.ListenAndServe(pprofListen, nil); err != nil {
+				log.Printf("pprof: listen on %s failed: %v", pprofListen, err)
+			}
+		}()
 	}
 
 	// MCP server mode — run as MCP server and exit
