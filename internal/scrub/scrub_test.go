@@ -151,3 +151,26 @@ func TestScrubberDisabled(t *testing.T) {
 		t.Errorf("disabled scrubber should pass through query param")
 	}
 }
+
+// TestScrubTextSizeGuard verifies that text above maxScrubBytes is returned
+// unscrubbed: the regex battery is too costly to run over large bundles, and
+// secrets there are not the concern. A secret just under the cap is still
+// redacted; the same secret padded past the cap is passed through untouched.
+func TestScrubTextSizeGuard(t *testing.T) {
+	s := New()
+	const secret = `aws_access_key_id = "AKIAIOSFODNN7EXAMPLE"`
+
+	under := secret + strings.Repeat(" ", maxScrubBytes-len(secret)-1)
+	if _, count := s.ScrubText(under); count == 0 {
+		t.Errorf("secret in text under the size cap should be redacted")
+	}
+
+	over := secret + strings.Repeat(" ", maxScrubBytes)
+	out, count := s.ScrubText(over)
+	if count != 0 {
+		t.Errorf("text over the size cap should not be scrubbed, got %d redactions", count)
+	}
+	if out != over {
+		t.Errorf("text over the size cap should be returned unchanged")
+	}
+}

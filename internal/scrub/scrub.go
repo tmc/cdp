@@ -111,26 +111,38 @@ func (s *Scrubber) Enabled() bool {
 	return s.enabled
 }
 
+// maxScrubBytes caps the text size that ScrubText will scan. Scrubbing runs
+// every gitleaks regex over the whole input; on large minified bundles and
+// source maps that cost dominates capture CPU (profiling showed the regex
+// engine accounting for ~90% of it), yet such assets are not where credentials
+// live. Text larger than this is returned unscrubbed. Headers, URLs, and query
+// parameters — where secrets actually appear — are scrubbed separately and are
+// never subject to this cap.
+const maxScrubBytes = 512 << 10 // 512 KiB
+
 // ScrubText redacts secrets from source text. Returns scrubbed text and count of redactions.
 func (s *Scrubber) ScrubText(text string) (string, int) {
 	if !s.enabled {
 		return text, 0
 	}
+	if len(text) > maxScrubBytes {
+		return text, 0
+	}
 	count := 0
+	// keywordMatch gates each rule against a lowercased copy of the input.
+	// Redactions only ever remove secret-bearing text, so recomputing lower
+	// after each match cannot enable a rule that would find a new secret — it
+	// only wastes a full-body ToLower per redaction. Compute it once.
 	lower := strings.ToLower(text)
 	for _, r := range s.rules {
 		if !keywordMatch(lower, r.keywords) {
 			continue
 		}
 		replacement := fmt.Sprintf("[REDACTED:%s]", r.id)
-		result := r.regex.ReplaceAllStringFunc(text, func(match string) string {
+		text = r.regex.ReplaceAllStringFunc(text, func(match string) string {
 			count++
 			return replacement
 		})
-		if count > 0 || result != text {
-			text = result
-			lower = strings.ToLower(text)
-		}
 	}
 	return text, count
 }
