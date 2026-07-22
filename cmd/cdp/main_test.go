@@ -86,6 +86,30 @@ func TestResolveDebugPortHonorsContext(t *testing.T) {
 	}
 }
 
+func TestShouldUseDefaultCaptureDir(t *testing.T) {
+	tests := []struct {
+		name             string
+		outputDir        string
+		saveSources      bool
+		harlStream       bool
+		harlFileExplicit bool
+		want             bool
+	}{
+		{name: "default"},
+		{name: "harl default output", harlStream: true, want: true},
+		{name: "saved sources", saveSources: true, want: true},
+		{name: "explicit output directory", outputDir: "captures", harlStream: true},
+		{name: "explicit harl file", harlStream: true, harlFileExplicit: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := shouldUseDefaultCaptureDir(tt.outputDir, tt.saveSources, tt.harlStream, tt.harlFileExplicit); got != tt.want {
+				t.Fatalf("shouldUseDefaultCaptureDir(%q, %v, %v, %v) = %v, want %v", tt.outputDir, tt.saveSources, tt.harlStream, tt.harlFileExplicit, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestStartupProgress(t *testing.T) {
 	var out bytes.Buffer
 	progress := newStartupProgress(&out, true)

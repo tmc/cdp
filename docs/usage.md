@@ -64,7 +64,7 @@ Common flags:
 - `-url`: starting URL
 - `-js`: JavaScript to evaluate
 - `-har`: write HAR output
-- `-harl`: stream HAR entries as JSONL to `output.har.jsonl` by default
+- `-harl`: stream HAR entries as JSONL to a temporary capture directory by default
 - `-harl-file`: set the HARL JSONL output path; use `-harl-file -` only when
   stdout streaming is intended
 - `-output-dir`: write per-host HARL files under the registrable domain of the

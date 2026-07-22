@@ -122,6 +122,10 @@ func appendHARLOutputOptions(opts []harrecorder.Option, outputDir, harlFile stri
 	return opts
 }
 
+func shouldUseDefaultCaptureDir(outputDir string, saveSources, harlStream, harlFileExplicit bool) bool {
+	return outputDir == "" && (saveSources || (harlStream && !harlFileExplicit))
+}
+
 func warnHARLStdout(outputDir, harlFile string) {
 	if outputDir == "" && harlFile == "-" {
 		fmt.Fprintln(os.Stderr, "cdp: warning: --harl-file - streams HARL NDJSON to stdout; use --harl-file output.har.jsonl to write a file")
@@ -1480,6 +1484,7 @@ func main() {
 	renderRequested := false
 	waitReadyExplicit := false
 	urlExplicit := false
+	harlFileExplicit := false
 	flag.Visit(func(f *flag.Flag) {
 		switch f.Name {
 		case "screenshot":
@@ -1490,6 +1495,8 @@ func main() {
 			waitReadyExplicit = true
 		case "url":
 			urlExplicit = true
+		case "harl-file":
+			harlFileExplicit = true
 		}
 	})
 	if screenshotRequested && screenshotSelector == "" {
@@ -1658,6 +1665,14 @@ func main() {
 		return
 	}
 
+	if shouldUseDefaultCaptureDir(outputDir, saveSources, harlStream, harlFileExplicit) {
+		var err error
+		outputDir, err = os.MkdirTemp("", "cdp-capture-")
+		if err != nil {
+			exitWithError(ExitGeneralError, ErrorTypeGeneral, "create capture output directory: %v", err)
+		}
+		fmt.Fprintf(os.Stderr, "cdp: capture output: %s\n", outputDir)
+	}
 	if err := prepareCaptureDirs(outputDir, saveSources); err != nil {
 		exitWithError(ExitGeneralError, ErrorTypeGeneral, "prepare capture directories: %v", err)
 	}
