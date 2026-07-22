@@ -1677,9 +1677,8 @@ func main() {
 		exitWithError(ExitGeneralError, ErrorTypeGeneral, "prepare capture directories: %v", err)
 	}
 
-	// Handle enhanced command mode
-	if fullCapture || command != "" {
-		handleEnhancedMode(command, fullCapture, fullCaptureConfig{
+	if requiresEnhancedMode(fullCapture, keepOpen, command) {
+		handleEnhancedMode(command, fullCapture || keepOpen, fullCaptureConfig{
 			Verbose:           verbose,
 			Headless:          headless,
 			ChromePath:        chromePath,
@@ -4317,6 +4316,13 @@ func printAliases() {
 	}
 }
 
+// requiresEnhancedMode reports whether the command needs the enhanced launcher.
+func requiresEnhancedMode(fullCapture, keepOpen bool, command string) bool {
+	// Keep-open relies on the enhanced launcher, which owns its browser process
+	// separately from chromedp and can detach without terminating it.
+	return fullCapture || keepOpen || command != ""
+}
+
 // isNonBrowserCommand checks if a command can run without browser setup
 func isNonBrowserCommand(cmdName string) bool {
 	nonBrowserCommands := map[string]bool{
@@ -4780,6 +4786,43 @@ func resolveDebugPort(ctx context.Context, port int, verbose bool) int {
 	return 0
 }
 
+// resolveLaunchDebugPort returns a port for a browser that this process will
+// launch. Unlike resolveDebugPort, it never reuses an existing DevTools
+// endpoint: doing so would make a new browser appear ready when the endpoint
+// belongs to an older browser.
+func resolveLaunchDebugPort(ctx context.Context, port int, verbose bool) int {
+	start := port
+	for attempt := 0; attempt < 10; attempt++ {
+		if err := ctx.Err(); err != nil {
+			return 0
+		}
+		candidate := port + attempt
+		ln, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", candidate))
+		if err != nil {
+			if verbose {
+				log.Printf("Port %d in use, trying %d", candidate, candidate+1)
+			}
+			continue
+		}
+		ln.Close()
+		if attempt > 0 && verbose {
+			log.Printf("Port %d in use, using %d instead", port, candidate)
+		}
+		return candidate
+	}
+
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		return 0
+	}
+	port = ln.Addr().(*net.TCPAddr).Port
+	ln.Close()
+	if verbose {
+		log.Printf("Ports %d-%d in use, using auto-selected port %d", start, start+9, port)
+	}
+	return port
+}
+
 // setupChromeForEnhanced sets up Chrome context for enhanced commands.
 // It discovers available browsers, optionally connects to a running instance
 // with a debug port, or launches a new non-headless browser.
@@ -4982,8 +5025,13 @@ func setupChromeForEnhanced(ctx context.Context, cfg fullCaptureConfig) (context
 
 	cfg.Progress.begin("Starting " + browserDisplayName(selectedPath))
 
-	// Check if the debug port is already in use.
-	debugPort = resolveDebugPort(ctx, debugPort, verbose)
+	// A keep-open launch must own its debug endpoint. Reusing an existing
+	// DevTools endpoint would attach to an unrelated browser instead.
+	if cfg.KeepOpen {
+		debugPort = resolveLaunchDebugPort(ctx, debugPort, verbose)
+	} else {
+		debugPort = resolveDebugPort(ctx, debugPort, verbose)
+	}
 	if verbose {
 		log.Printf("startup: debug port resolution took %v", time.Since(started))
 	}

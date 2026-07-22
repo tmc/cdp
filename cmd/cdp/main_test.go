@@ -86,6 +86,41 @@ func TestResolveDebugPortHonorsContext(t *testing.T) {
 	}
 }
 
+func TestResolveLaunchDebugPortSkipsUsedPort(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+
+	base := ln.Addr().(*net.TCPAddr).Port
+	if got, want := resolveLaunchDebugPort(context.Background(), base, false), base+1; got != want {
+		t.Fatalf("resolveLaunchDebugPort(%d) = %d, want %d", base, got, want)
+	}
+}
+
+func TestRequiresEnhancedMode(t *testing.T) {
+	tests := []struct {
+		name        string
+		fullCapture bool
+		keepOpen    bool
+		command     string
+		want        bool
+	}{
+		{name: "default"},
+		{name: "full capture", fullCapture: true, want: true},
+		{name: "keep open", keepOpen: true, want: true},
+		{name: "command", command: "title", want: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := requiresEnhancedMode(tt.fullCapture, tt.keepOpen, tt.command); got != tt.want {
+				t.Fatalf("requiresEnhancedMode(%v, %v, %q) = %v, want %v", tt.fullCapture, tt.keepOpen, tt.command, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestShouldUseDefaultCaptureDir(t *testing.T) {
 	tests := []struct {
 		name             string
