@@ -60,6 +60,15 @@ func (h *HelpSystem) showGeneralHelp() {
 		}
 	}
 
+	fmt.Println("\nRaw CDP Protocol:")
+	fmt.Println("─────────────────")
+	fmt.Println("  Any command in Domain.method form is dispatched directly to the")
+	fmt.Println("  browser and its JSON result is printed (including returned identifiers).")
+	fmt.Println("  Params are a JSON object; multi-line JSON is joined across lines.")
+	fmt.Println("    Page.navigate {\"url\":\"https://example.com\"}")
+	fmt.Println("    Runtime.evaluate {\"expression\":\"document.title\"}")
+	fmt.Println("    Page.addScriptToEvaluateOnNewDocument {\"source\":\"window.__x=1\"}")
+
 	fmt.Println("\nTab Management:")
 	fmt.Println("────────────────")
 	fmt.Println("  tabs / lt            List open browser tabs")
@@ -326,6 +335,7 @@ func (h *HelpSystem) ShowQuickReference() {
 	fmt.Println("│ clearcookies       │                                      │")
 	fmt.Println("├────────────────────┴──────────────────────────────────────┤")
 	fmt.Println("│ JavaScript: eval <expression> | js <code> | exec <script>  │")
+	fmt.Println("│ Raw CDP:    Domain.method {\"param\":\"value\"}                │")
 	fmt.Println("╰───────────────────────────────────────────────────────────╯")
 	fmt.Println()
 }
