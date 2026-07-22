@@ -357,3 +357,72 @@ func TestRequestSeedsPageDomainBeforeNavigationEvent(t *testing.T) {
 // 		})
 // 	}
 // }
+
+func TestBodyDedupKey(t *testing.T) {
+	tests := []struct {
+		name    string
+		resp    *network.Response
+		wantKey string
+	}{
+		{
+			name:    "nil response",
+			resp:    nil,
+			wantKey: "",
+		},
+		{
+			name: "etag preferred over last-modified",
+			resp: &network.Response{
+				URL:    "https://cdn.example/app.js",
+				Status: 200,
+				Headers: network.Headers{
+					"ETag":          `"abc123"`,
+					"Last-Modified": "Wed, 21 Oct 2025 07:28:00 GMT",
+				},
+			},
+			wantKey: "https://cdn.example/app.js\x00\"abc123\"",
+		},
+		{
+			name: "falls back to last-modified when no etag",
+			resp: &network.Response{
+				URL:     "https://www.gstatic.com/og/app.js",
+				Status:  200,
+				Headers: network.Headers{"Last-Modified": "Wed, 21 Oct 2025 07:28:00 GMT"},
+			},
+			wantKey: "https://www.gstatic.com/og/app.js\x00Wed, 21 Oct 2025 07:28:00 GMT",
+		},
+		{
+			name: "no validator is not deduplicated",
+			resp: &network.Response{
+				URL:     "https://api.example/batchexecute",
+				Status:  200,
+				Headers: network.Headers{"Content-Type": "application/json"},
+			},
+			wantKey: "",
+		},
+		{
+			name: "non-200 is not deduplicated even with validator",
+			resp: &network.Response{
+				URL:     "https://cdn.example/app.js",
+				Status:  304,
+				Headers: network.Headers{"ETag": `"abc123"`},
+			},
+			wantKey: "",
+		},
+		{
+			name: "header lookup is case-insensitive",
+			resp: &network.Response{
+				URL:     "https://cdn.example/app.js",
+				Status:  200,
+				Headers: network.Headers{"etag": `"xyz"`},
+			},
+			wantKey: "https://cdn.example/app.js\x00\"xyz\"",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := bodyDedupKey(tt.resp); got != tt.wantKey {
+				t.Errorf("bodyDedupKey() = %q, want %q", got, tt.wantKey)
+			}
+		})
+	}
+}

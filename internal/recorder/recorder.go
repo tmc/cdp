@@ -89,6 +89,12 @@ type Recorder struct {
 	// Fetch domain interception
 	fetchBodies map[network.RequestID]capturedBody // Bodies captured via Fetch domain
 
+	// capturedContent records the content identity (URL + validator) of bodies
+	// already captured, so an immutable, cache-busted asset re-requested across
+	// reloads is not re-read and re-written on every request. Reading a
+	// multi-megabyte body repeatedly over CDP is the dominant capture cost.
+	capturedContent map[string]bool
+
 	// Tag tracking
 	currentTag string      // Currently active tag
 	pageDomain string      // Full hostname of the current top-level page
@@ -234,20 +240,21 @@ func (r *Recorder) Close() {
 
 func New(opts ...Option) (*Recorder, error) {
 	r := &Recorder{
-		requests:     make(map[network.RequestID]*network.Request),
-		responses:    make(map[network.RequestID]*network.Response),
-		bodies:       make(map[network.RequestID]capturedBody),
-		postData:     make(map[network.RequestID]string),
-		timings:      make(map[network.RequestID]*network.EventLoadingFinished),
-		requestTags:  make(map[network.RequestID]string),
-		requestPages: make(map[network.RequestID]string),
-		annotations:  make([]*Annotation, 0),
-		fetchBodies:  make(map[network.RequestID]capturedBody),
-		tagRanges:    make([]*TagRange, 0),
-		writes:       make(chan writerCmd, writeQueueSize),
-		writerDone:   make(chan struct{}),
-		groupByPage:  true,
-		webrtc:       DefaultWebRTCStreams(),
+		requests:        make(map[network.RequestID]*network.Request),
+		responses:       make(map[network.RequestID]*network.Response),
+		bodies:          make(map[network.RequestID]capturedBody),
+		postData:        make(map[network.RequestID]string),
+		timings:         make(map[network.RequestID]*network.EventLoadingFinished),
+		requestTags:     make(map[network.RequestID]string),
+		requestPages:    make(map[network.RequestID]string),
+		annotations:     make([]*Annotation, 0),
+		fetchBodies:     make(map[network.RequestID]capturedBody),
+		capturedContent: make(map[string]bool),
+		tagRanges:       make([]*TagRange, 0),
+		writes:          make(chan writerCmd, writeQueueSize),
+		writerDone:      make(chan struct{}),
+		groupByPage:     true,
+		webrtc:          DefaultWebRTCStreams(),
 	}
 
 	for _, opt := range opts {
@@ -275,6 +282,41 @@ func requestDomain(rawURL string) string {
 		return "unknown_domain"
 	}
 	return sitegroup.Host(u.Hostname())
+}
+
+// bodyDedupKey returns a stable content-identity key for a response, or "" when
+// the response has no reliable validator and must not be deduplicated. A key is
+// URL joined with a cache validator — the ETag if present, otherwise the
+// Last-Modified time. Only successful (200) responses carrying such a validator
+// are keyed, so dynamic endpoints that reuse a URL without a validator (e.g. RPC
+// batches, which answer POSTs with no ETag or Last-Modified) are never
+// collapsed. Because the validator is part of the key, a changed asset served at
+// the same URL still re-captures.
+func bodyDedupKey(resp *network.Response) string {
+	if resp == nil || resp.Status != 200 {
+		return ""
+	}
+	validator := headerValue(resp.Headers, "etag")
+	if validator == "" {
+		validator = headerValue(resp.Headers, "last-modified")
+	}
+	if validator == "" {
+		return ""
+	}
+	return resp.URL + "\x00" + validator
+}
+
+// headerValue returns the value of the named header (case-insensitive) from a
+// network.Headers map, or "" if absent.
+func headerValue(headers network.Headers, name string) string {
+	for k, v := range headers {
+		if strings.EqualFold(k, name) {
+			if s, ok := v.(string); ok {
+				return s
+			}
+		}
+	}
+	return ""
 }
 
 func (r *Recorder) captureBody(body []byte) capturedBody {
@@ -436,6 +478,32 @@ func (r *Recorder) HandleNetworkEvent(ctx context.Context) func(interface{}) {
 					}
 				}
 
+				// Skip the body read for content already captured this session.
+				// Immutable, cache-busted assets (scripts, styles, fonts) are
+				// re-requested on every reload; re-reading a multi-megabyte body
+				// over CDP each time is the dominant capture cost and stalls the
+				// pump. Record the entry without re-reading the body.
+				r.Lock()
+				dedupResp := r.responses[reqID]
+				dedupKey := bodyDedupKey(dedupResp)
+				alreadyCaptured := dedupKey != "" && r.capturedContent[dedupKey]
+				r.Unlock()
+				if alreadyCaptured {
+					if r.streaming && dedupResp != nil {
+						r.Lock()
+						if snapTag != "" {
+							r.requestTags[reqID] = snapTag
+						}
+						savedDir := r.outputDir
+						r.outputDir = snapDir
+						entry := r.buildStreamEntry(reqID, dedupResp, nil)
+						r.streamEntryAtPage(entry, snapPage, snapDir)
+						r.outputDir = savedDir
+						r.Unlock()
+					}
+					return
+				}
+
 				var body []byte
 				err := chromedp.Run(fetchCtx, chromedp.ActionFunc(func(ctx context.Context) error {
 					var fetchErr error
@@ -466,6 +534,9 @@ func (r *Recorder) HandleNetworkEvent(ctx context.Context) func(interface{}) {
 				r.Lock()
 				captured := r.captureBody(body)
 				r.bodies[reqID] = captured
+				if dedupKey != "" {
+					r.capturedContent[dedupKey] = true
+				}
 				if r.verbose {
 					log.Printf("Captured response body for request %s (%d bytes)", reqID, len(body))
 				}
