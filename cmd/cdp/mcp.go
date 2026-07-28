@@ -39,6 +39,7 @@ type mcpSession struct {
 	syntheticMaps     *sourcemapManager
 	webMCP            *webMCPCollector
 	networkLog        *networkCollector
+	networkLogMonitor *AllTabsMonitor
 	activeFrameID     cdp.FrameID
 	outputDir         string
 	contextStack      []string
@@ -482,6 +483,13 @@ func runMCP(cfg mcpConfig) error {
 		}
 		if rec != nil {
 			rec.Close()
+		}
+		session.mu.Lock()
+		networkLogMonitor := session.networkLogMonitor
+		session.networkLogMonitor = nil
+		session.mu.Unlock()
+		if networkLogMonitor != nil {
+			networkLogMonitor.Stop()
 		}
 		browserCancel()
 	}()

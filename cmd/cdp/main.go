@@ -1088,7 +1088,7 @@ var enhancedCommands = map[string]func(*browser.Page, []string) error{
 // AllTabsMonitor handles monitoring network traffic from all browser tabs
 type AllTabsMonitor struct {
 	ctx             context.Context
-	recorder        *harrecorder.Recorder
+	attach          func(context.Context) error
 	verbose         bool
 	attachedTargets map[target.ID]context.CancelFunc
 	mu              sync.Mutex
@@ -1096,9 +1096,16 @@ type AllTabsMonitor struct {
 
 // NewAllTabsMonitor creates a new monitor for all tabs
 func NewAllTabsMonitor(ctx context.Context, recorder *harrecorder.Recorder, verbose bool) *AllTabsMonitor {
+	return newAllTabsMonitor(ctx, verbose, func(targetCtx context.Context) error {
+		chromedp.ListenTarget(targetCtx, recorder.HandleNetworkEvent(targetCtx))
+		return chromedp.Run(targetCtx, network.Enable())
+	})
+}
+
+func newAllTabsMonitor(ctx context.Context, verbose bool, attach func(context.Context) error) *AllTabsMonitor {
 	return &AllTabsMonitor{
 		ctx:             ctx,
-		recorder:        recorder,
+		attach:          attach,
 		verbose:         verbose,
 		attachedTargets: make(map[target.ID]context.CancelFunc),
 	}
@@ -1111,27 +1118,6 @@ func (m *AllTabsMonitor) Start() error {
 		return fmt.Errorf("failed to enable target discovery: %w", err)
 	}
 
-	// Get all current targets
-	targets, err := chromedp.Targets(m.ctx)
-	if err != nil {
-		return fmt.Errorf("failed to get targets: %w", err)
-	}
-
-	if m.verbose {
-		log.Printf("All-tabs monitoring: found %d existing targets", len(targets))
-	}
-
-	// Attach to each page target
-	for _, t := range targets {
-		if t.Type == "page" {
-			if err := m.attachToTarget(t.TargetID); err != nil {
-				if m.verbose {
-					log.Printf("Warning: failed to attach to target %s: %v", t.TargetID, err)
-				}
-			}
-		}
-	}
-
 	// Listen for new targets
 	chromedp.ListenBrowser(m.ctx, func(ev interface{}) {
 		switch e := ev.(type) {
@@ -1140,11 +1126,7 @@ func (m *AllTabsMonitor) Start() error {
 				if m.verbose {
 					log.Printf("New tab created: %s - %s", e.TargetInfo.TargetID, e.TargetInfo.URL)
 				}
-				if err := m.attachToTarget(e.TargetInfo.TargetID); err != nil {
-					if m.verbose {
-						log.Printf("Warning: failed to attach to new target %s: %v", e.TargetInfo.TargetID, err)
-					}
-				}
+				go m.attachTarget(e.TargetInfo.TargetID)
 			}
 		case *target.EventTargetDestroyed:
 			m.mu.Lock()
@@ -1159,7 +1141,31 @@ func (m *AllTabsMonitor) Start() error {
 		}
 	})
 
+	// Get all current targets after installing the listener. A target created
+	// during startup is observed by either this snapshot or the listener, and
+	// attachToTarget suppresses duplicates.
+	targets, err := chromedp.Targets(m.ctx)
+	if err != nil {
+		return fmt.Errorf("get targets: %w", err)
+	}
+
+	if m.verbose {
+		log.Printf("All-tabs monitoring: found %d existing targets", len(targets))
+	}
+
+	for _, t := range targets {
+		if t.Type == "page" {
+			m.attachTarget(t.TargetID)
+		}
+	}
+
 	return nil
+}
+
+func (m *AllTabsMonitor) attachTarget(targetID target.ID) {
+	if err := m.attachToTarget(targetID); err != nil && m.verbose {
+		log.Printf("Warning: failed to attach to target %s: %v", targetID, err)
+	}
 }
 
 // attachToTarget attaches to a target and enables network monitoring
@@ -1169,23 +1175,18 @@ func (m *AllTabsMonitor) attachToTarget(targetID target.ID) error {
 		m.mu.Unlock()
 		return nil // Already attached
 	}
-	m.mu.Unlock()
 
-	// Create a new context for this target
 	targetCtx, cancel := chromedp.NewContext(m.ctx, chromedp.WithTargetID(targetID))
-
-	// Enable network monitoring on this target
-	if err := chromedp.Run(targetCtx, network.Enable()); err != nil {
-		cancel()
-		return fmt.Errorf("failed to enable network on target: %w", err)
-	}
-
-	// Attach network event listener
-	chromedp.ListenTarget(targetCtx, m.recorder.HandleNetworkEvent(targetCtx))
-
-	m.mu.Lock()
 	m.attachedTargets[targetID] = cancel
 	m.mu.Unlock()
+
+	if err := m.attach(targetCtx); err != nil {
+		cancel()
+		m.mu.Lock()
+		delete(m.attachedTargets, targetID)
+		m.mu.Unlock()
+		return fmt.Errorf("attach to target: %w", err)
+	}
 
 	if m.verbose {
 		log.Printf("Attached to target: %s", targetID)

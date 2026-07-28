@@ -4,10 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
 
+	cdpbrowser "github.com/chromedp/cdproto/browser"
 	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/chromedp"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -71,12 +75,7 @@ func (nc *networkCollector) handleEvent(ev any) {
 		}
 		nc.entries[id] = entry
 		nc.order = append(nc.order, id)
-		// Evict oldest if over limit.
-		if len(nc.order) > nc.maxEntries {
-			old := nc.order[0]
-			nc.order = nc.order[1:]
-			delete(nc.entries, old)
-		}
+		nc.evictOldest()
 
 	case *network.EventResponseReceived:
 		id := string(e.RequestID)
@@ -103,7 +102,37 @@ func (nc *networkCollector) handleEvent(ev any) {
 				}
 			}
 		}
+
+	case *cdpbrowser.EventDownloadWillBegin:
+		id := "download:" + e.GUID
+		nc.entries[id] = &networkEntry{
+			RequestID: id,
+			URL:       e.URL,
+			Method:    http.MethodGet,
+			Timestamp: time.Now().Format(time.RFC3339Nano),
+		}
+		nc.order = append(nc.order, id)
+		nc.evictOldest()
+
+	case *cdpbrowser.EventDownloadProgress:
+		id := "download:" + e.GUID
+		entry, ok := nc.entries[id]
+		if !ok {
+			return
+		}
+		entry.Size = e.ReceivedBytes
+		entry.Finished = e.State == cdpbrowser.DownloadProgressStateCompleted ||
+			e.State == cdpbrowser.DownloadProgressStateCanceled
 	}
+}
+
+func (nc *networkCollector) evictOldest() {
+	if len(nc.order) <= nc.maxEntries {
+		return
+	}
+	old := nc.order[0]
+	nc.order = nc.order[1:]
+	delete(nc.entries, old)
 }
 
 func (nc *networkCollector) getEntries(urlFilter string, limit int) []networkEntry {
@@ -146,7 +175,7 @@ type GetNetworkLogInput struct {
 func registerNetworkTools(server *mcp.Server, s *mcpSession) {
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "start_network_log",
-		Description: `Start live network request logging via CDP Network domain. Captures URL, method, status, headers, timing. Use get_network_log to read entries.`,
+		Description: `Start live network request logging for all current and new browser tabs. Captures URL, method, status, headers, and timing, including requests started by links that open a new tab. Use get_network_log to read entries.`,
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input StartNetworkLogInput) (*mcp.CallToolResult, any, error) {
 		s.mu.Lock()
 		if s.networkLog != nil && s.networkLog.running {
@@ -160,18 +189,56 @@ func registerNetworkTools(server *mcp.Server, s *mcpSession) {
 		s.networkLog = nc
 		s.mu.Unlock()
 
-		actx := s.activeCtx()
-		if err := network.Enable().Do(actx); err != nil {
-			return nil, nil, fmt.Errorf("start_network_log: enable network: %w", err)
+		browserCtx, err := s.browserContext(ctx)
+		if err != nil {
+			return nil, nil, fmt.Errorf("start_network_log: %w", err)
 		}
 
-		chromedp.ListenTarget(actx, nc.handleEvent)
+		monitor := newAllTabsMonitor(browserCtx, false, func(targetCtx context.Context) error {
+			chromedp.ListenTarget(targetCtx, nc.handleEvent)
+			return chromedp.Run(targetCtx, network.Enable())
+		})
+		chromedp.ListenBrowser(browserCtx, nc.handleEvent)
+		s.mu.Lock()
+		outputDir := s.outputDir
+		s.mu.Unlock()
+		if outputDir == "" {
+			s.mu.Lock()
+			s.networkLog = nil
+			s.mu.Unlock()
+			return nil, nil, fmt.Errorf("start_network_log: output directory not configured")
+		}
+		downloadDir := filepath.Join(outputDir, "downloads")
+		if err := os.MkdirAll(downloadDir, 0o755); err != nil {
+			return nil, nil, fmt.Errorf("start_network_log: create download directory: %w", err)
+		}
+		if err := chromedp.Run(browserCtx,
+			cdpbrowser.SetDownloadBehavior(cdpbrowser.SetDownloadBehaviorBehaviorAllow).
+				WithDownloadPath(downloadDir).
+				WithEventsEnabled(true),
+		); err != nil {
+			s.mu.Lock()
+			s.networkLog = nil
+			s.mu.Unlock()
+			return nil, nil, fmt.Errorf("start_network_log: enable download events: %w", err)
+		}
+		if err := monitor.Start(); err != nil {
+			monitor.Stop()
+			s.mu.Lock()
+			s.networkLog = nil
+			s.mu.Unlock()
+			return nil, nil, fmt.Errorf("start_network_log: %w", err)
+		}
+
 		nc.mu.Lock()
 		nc.running = true
 		nc.mu.Unlock()
+		s.mu.Lock()
+		s.networkLogMonitor = monitor
+		s.mu.Unlock()
 
 		return &mcp.CallToolResult{
-			Content: []mcp.Content{&mcp.TextContent{Text: "network log started"}},
+			Content: []mcp.Content{&mcp.TextContent{Text: "network log started for all tabs"}},
 		}, nil, nil
 	})
 
