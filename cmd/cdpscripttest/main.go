@@ -1,15 +1,3 @@
-// Command cdpscripttest runs CDP txtar browser automation scripts.
-//
-// Usage:
-//
-//	cdpscripttest [flags] script.txt ...
-//	cdpscripttest --url https://example.com testdata/example-com.txt
-//	cdpscripttest --url http://localhost:8090 --headful testdata/login.txt
-//	cdpscripttest --interactive testdata/login.txt
-//	cdpscripttest --debug-port 9222 testdata/live.txt
-//
-// Each script is a txtar archive whose Comment section is the script body
-// and whose file sections are fixtures extracted before the script runs.
 package main
 
 import (

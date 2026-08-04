@@ -13,6 +13,7 @@ import (
 	"go/token"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -62,6 +63,36 @@ func Flags(dir string) ([]string, error) {
 	}
 	sort.Strings(names)
 	return names, nil
+}
+
+// Undocumented returns the flags registered in dir that the documentation file
+// docFile does not mention, sorted. A flag counts as documented when its name
+// appears preceded by a dash and not run together with a longer name, so that
+// -har-mode does not stand in for -har.
+func Undocumented(dir, docFile string) ([]string, error) {
+	flags, err := Flags(dir)
+	if err != nil {
+		return nil, err
+	}
+	doc, err := os.ReadFile(docFile)
+	if err != nil {
+		return nil, err
+	}
+	text := string(doc)
+
+	var missing []string
+	for _, name := range flags {
+		if !documented(text, name) {
+			missing = append(missing, name)
+		}
+	}
+	return missing, nil
+}
+
+// documented reports whether text mentions the flag name as a whole word.
+func documented(text, name string) bool {
+	re := regexp.MustCompile(regexp.QuoteMeta("-"+name) + `([^\w-]|$)`)
+	return re.MatchString(text)
 }
 
 // flagName reports the flag name registered by call, if call is a flag

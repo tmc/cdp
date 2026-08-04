@@ -1,4 +1,3 @@
-// Native messaging host for Chrome AI extension
 package main
 
 import (
