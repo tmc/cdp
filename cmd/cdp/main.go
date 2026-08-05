@@ -37,6 +37,7 @@ import (
 	"github.com/tmc/cdp/internal/browser"
 	"github.com/tmc/cdp/internal/browserprofile"
 	"github.com/tmc/cdp/internal/cdpproxy"
+	"github.com/tmc/cdp/internal/discovery"
 	"github.com/tmc/cdp/internal/htmltomd"
 	harrecorder "github.com/tmc/cdp/internal/recorder"
 	"github.com/tmc/cdp/internal/scrub"
@@ -430,6 +431,29 @@ func (nr *NetworkRecorder) SaveHAR(filename string) error {
 	}
 
 	return os.WriteFile(filename, data, 0644)
+}
+
+func saveHAR(filename, mode string, enhanced *harrecorder.Recorder, simple *NetworkRecorder) error {
+	if mode == "enhanced" && enhanced != nil {
+		if err := enhanced.WriteHAR(filename); err != nil {
+			return err
+		}
+		har, err := enhanced.HAR()
+		if err != nil {
+			return err
+		}
+		fmt.Printf("HAR file saved to: %s\n", filename)
+		fmt.Printf("Recorded %d network requests\n", len(har.Log.Entries))
+		return nil
+	}
+	if simple != nil {
+		if err := simple.SaveHAR(filename); err != nil {
+			return err
+		}
+		fmt.Printf("HAR file saved to: %s\n", filename)
+		fmt.Printf("Recorded %d network requests\n", len(simple.GetEntries()))
+	}
+	return nil
 }
 
 // checkRunningChrome checks if Chrome is running on a specific port and returns browser info
@@ -1950,7 +1974,17 @@ func main() {
 		exitWithError(ExitUsageError, ErrorTypeUsage, "Cannot use both --extract and --js flags together")
 	}
 
-	// Use enhanced browser API when connecting to remote Chrome or launching with profiles
+	// Auto-discovery prefers a running browser. When it is disabled, action
+	// flags still need an executable to launch a fresh browser.
+	hasBrowserAction := len(jsScripts) > 0 || harFile != "" || harlStream || extractSelector != "" || screenshotRequested || renderRequested
+	if !autoDiscover && remoteHost == "" && chromePath == "" && hasBrowserAction {
+		chromePath = discovery.FindBestBrowser()
+		if chromePath == "" {
+			exitWithError(ExitBrowserError, ErrorTypeBrowser, "No browser executable found")
+		}
+	}
+
+	// Use enhanced browser API when connecting to remote Chrome or launching with profiles.
 	if remoteHost != "" || useProfile != "" || profileDir != "" || chromePath != "" {
 		// Handle direct tab connection for specific operations (only when connecting to remote)
 		if remoteHost != "" && (len(jsScripts) > 0 || tabID != "" || harFile != "" || harlStream || extractSelector != "" || screenshotRequested || renderRequested) {
@@ -2386,13 +2420,10 @@ func main() {
 						}
 					}
 
-					// Save HAR file if recording and exit
-					if recorder != nil && harFile != "" {
-						if err := recorder.SaveHAR(harFile); err != nil {
+					// Save HAR file if recording and exit.
+					if harFile != "" {
+						if err := saveHAR(harFile, harMode, enhancedRecorder, recorder); err != nil {
 							log.Printf("Failed to save HAR file: %v", err)
-						} else {
-							fmt.Printf("HAR file saved to: %s\n", harFile)
-							fmt.Printf("Recorded %d network requests\n", len(recorder.GetEntries()))
 						}
 					}
 
@@ -2491,14 +2522,9 @@ func main() {
 							}
 						}
 
-						// Save HAR file if specified
-						if recorder != nil {
-							if err := recorder.SaveHAR(harFile); err != nil {
-								log.Printf("Failed to save HAR file: %v", err)
-							} else {
-								fmt.Printf("HAR file saved to: %s\n", harFile)
-								fmt.Printf("Recorded %d network requests\n", len(recorder.GetEntries()))
-							}
+						// Save HAR file if specified.
+						if err := saveHAR(harFile, harMode, enhancedRecorder, recorder); err != nil {
+							log.Printf("Failed to save HAR file: %v", err)
 						}
 
 						return
@@ -2527,6 +2553,9 @@ func main() {
 				}
 				if chromeFlags != "" {
 					browserOpts = append(browserOpts, browser.WithChromeFlags(strings.Split(chromeFlags, " ")))
+				}
+				if chromePath != "" {
+					browserOpts = append(browserOpts, browser.WithChromePath(chromePath))
 				}
 
 				if remoteHost != "" {

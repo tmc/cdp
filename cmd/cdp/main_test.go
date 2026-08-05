@@ -5,10 +5,13 @@ import (
 	"context"
 	"encoding/json"
 	"net"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -728,6 +731,120 @@ func TestCDP_JavaScriptExecution(t *testing.T) {
 				t.Errorf("stdout contains status text:\n%s", stdout.String())
 			}
 		})
+	}
+}
+
+func TestCDP_AutoDiscoverDisabledRunsAction(t *testing.T) {
+	skipIfNoBrowser(t)
+
+	cdpPath := buildCDP(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, cdpPath,
+		"--headless",
+		"--auto-discover=false",
+		"--timeout", "30",
+		"--url", "data:text/html,<title>auto discover disabled</title>",
+		"--js", "document.title",
+	)
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("cdp failed: %v\nstdout: %s\nstderr: %s", err, stdout.String(), stderr.String())
+	}
+	if got, want := stdout.String(), "auto discover disabled\n"; got != want {
+		t.Fatalf("stdout = %q, want %q\nstderr: %s", got, want, stderr.String())
+	}
+}
+
+func reserveTCPPort(t *testing.T) int {
+	t.Helper()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+	return ln.Addr().(*net.TCPAddr).Port
+}
+
+func startRemoteChrome(t *testing.T, port int) func() {
+	t.Helper()
+	chromePath := testutil.FindChrome()
+	if chromePath == "" {
+		t.Skip("No Chrome found for remote HAR recording test")
+	}
+
+	cmd := exec.Command(chromePath,
+		"--headless",
+		"--disable-gpu",
+		"--no-sandbox",
+		"--disable-dev-shm-usage",
+		"--remote-debugging-port="+strconv.Itoa(port),
+		"--user-data-dir="+t.TempDir(),
+		"about:blank",
+	)
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 30; i++ {
+		resp, err := http.Get("http://localhost:" + strconv.Itoa(port) + "/json/version")
+		if err == nil {
+			resp.Body.Close()
+			return func() {
+				_ = cmd.Process.Kill()
+				_ = cmd.Wait()
+			}
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	_ = cmd.Process.Kill()
+	_ = cmd.Wait()
+	t.Fatal("remote Chrome did not start")
+	return nil
+}
+
+func TestCDP_RemoteEnhancedHARWritesFile(t *testing.T) {
+	skipIfNoBrowser(t)
+
+	port := reserveTCPPort(t)
+	stopChrome := startRemoteChrome(t, port)
+	defer stopChrome()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("<!doctype html><title>remote enhanced HAR</title>"))
+	}))
+	defer server.Close()
+
+	harFile := filepath.Join(t.TempDir(), "capture.har")
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, buildCDP(t),
+		"--remote-host", "localhost",
+		"--remote-port", strconv.Itoa(port),
+		"--timeout", "2",
+		"--url", server.URL,
+		"--har", harFile,
+	)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("cdp failed: %v\n%s", err, output)
+	}
+	data, err := os.ReadFile(harFile)
+	if err != nil {
+		t.Fatalf("HAR file was not written: %v\n%s", err, output)
+	}
+	var capture struct {
+		Log struct {
+			Entries []json.RawMessage `json:"entries"`
+		} `json:"log"`
+	}
+	if err := json.Unmarshal(data, &capture); err != nil {
+		t.Fatalf("HAR file is not valid JSON: %v\n%s", err, data)
+	}
+	if len(capture.Log.Entries) == 0 {
+		t.Fatalf("HAR file has no entries\n%s", output)
 	}
 }
 
