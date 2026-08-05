@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -16,6 +17,7 @@ import (
 	"time"
 
 	"github.com/chromedp/cdproto/fetch"
+	"github.com/chromedp/cdproto/har"
 	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/cdproto/runtime"
 	"github.com/chromedp/chromedp"
@@ -283,6 +285,9 @@ func main() {
 	}
 
 	// Handle differential mode operations
+	if opts.differential {
+		opts.diffMode = true
+	}
 	if opts.diffMode || opts.listCaptures || opts.deleteCapture != "" || opts.compareWith != "" {
 		if err := runDifferentialMode(opts); err != nil {
 			log.Fatal(err)
@@ -1096,40 +1101,60 @@ func runDifferentialMode(opts options) error {
 
 	// Handle differential mode (normal capture with differential features)
 	if opts.diffMode {
-		fmt.Println("Differential mode enabled")
-
-		// Parse labels
-		labels := make(map[string]string)
-		if opts.captureLabels != "" {
-			pairs := strings.Split(opts.captureLabels, ",")
-			for _, pair := range pairs {
-				kv := strings.Split(pair, "=")
-				if len(kv) == 2 {
-					labels[strings.TrimSpace(kv[0])] = strings.TrimSpace(kv[1])
-				}
-			}
-		}
-
-		// Create capture name if not provided
-		captureName := opts.captureName
-		if captureName == "" {
-			captureName = fmt.Sprintf("capture-%s", time.Now().Format("20060102-150405"))
-		}
-
-		// Create a new capture
-		capture, err := controller.CreateBaselineCapture(context.Background(), captureName, opts.startURL, "Differential mode capture", labels)
-		if err != nil {
-			return fmt.Errorf("creating capture: %w", err)
-		}
-
-		fmt.Printf("Created capture: %s (ID: %s)\n", capture.Name, capture.ID)
-		fmt.Printf("Capture will be completed by the normal HAR recording process\n")
-		fmt.Printf("To compare with another capture, use: -compare-with <capture-id> -baseline %s\n", capture.ID)
-
-		return nil
+		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(opts.timeout)*time.Second)
+		defer cancel()
+		return captureDifferential(ctx, opts, controller, run)
 	}
 
 	return fmt.Errorf("no differential operation specified")
+}
+
+func captureDifferential(ctx context.Context, opts options, controller *differential.DifferentialController, capture func(context.Context, browserprofile.ProfileManager, options) error) error {
+	labels := make(map[string]string)
+	for _, pair := range strings.Split(opts.captureLabels, ",") {
+		key, value, ok := strings.Cut(pair, "=")
+		if ok && strings.TrimSpace(key) != "" {
+			labels[strings.TrimSpace(key)] = strings.TrimSpace(value)
+		}
+	}
+
+	name := opts.captureName
+	if name == "" {
+		name = fmt.Sprintf("capture-%s", time.Now().Format("20060102-150405"))
+	}
+	captureMetadata, err := controller.CreateBaselineCapture(ctx, name, opts.startURL, "Differential mode capture", labels)
+	if err != nil {
+		return fmt.Errorf("creating capture: %w", err)
+	}
+
+	// The regular capture path owns Chrome setup and writes a complete HAR when
+	// stdin closes or the user interrupts it. Differential mode stores that HAR
+	// at the capture manager's path, then finalizes its metadata below.
+	opts.outputFile = captureMetadata.FilePath
+	opts.streaming = false
+	pm, err := browserprofile.NewProfileManager(browserprofile.WithVerbose(opts.verbose))
+	if err != nil {
+		return fmt.Errorf("creating profile manager: %w", err)
+	}
+	if err := capture(ctx, pm, opts); err != nil {
+		return fmt.Errorf("recording capture: %w", err)
+	}
+
+	data, err := os.ReadFile(captureMetadata.FilePath)
+	if err != nil {
+		return fmt.Errorf("reading captured HAR: %w", err)
+	}
+	var capturedHAR har.HAR
+	if err := json.Unmarshal(data, &capturedHAR); err != nil {
+		return fmt.Errorf("parsing captured HAR: %w", err)
+	}
+	if err := controller.CompleteCapture(captureMetadata.ID, &capturedHAR); err != nil {
+		return fmt.Errorf("completing capture: %w", err)
+	}
+
+	fmt.Printf("Completed capture: %s (ID: %s)\n", captureMetadata.Name, captureMetadata.ID)
+	fmt.Printf("To compare with another capture, use: -compare-with <capture-id> -baseline %s\n", captureMetadata.ID)
+	return nil
 }
 
 // formatBytes formats bytes into a human-readable string

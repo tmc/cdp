@@ -3,16 +3,21 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/chromedp/cdproto/har"
+	"github.com/tmc/cdp/internal/browserprofile"
+	"github.com/tmc/cdp/internal/differential"
 	"github.com/tmc/cdp/internal/testutil"
 )
 
@@ -28,6 +33,61 @@ func TestMain(m *testing.M) {
 	testutil.CleanupOrphanedBrowsers(&testing.T{})
 
 	os.Exit(code)
+}
+
+func TestCaptureDifferentialCompletesCapture(t *testing.T) {
+	workDir := t.TempDir()
+	controller, err := differential.NewDifferentialController(&differential.DifferentialOptions{WorkDir: workDir})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	captured := &har.HAR{Log: &har.Log{
+		Version: "1.2",
+		Creator: &har.Creator{Name: "test", Version: "1"},
+		Entries: []*har.Entry{{
+			Request:  &har.Request{Method: "GET", URL: "https://example.com/"},
+			Response: &har.Response{Status: 200, StatusText: "OK", Content: &har.Content{}},
+		}},
+	}}
+	runCapture := func(ctx context.Context, pm browserprofile.ProfileManager, opts options) error {
+		if opts.streaming {
+			t.Fatal("differential capture left streaming enabled")
+		}
+		data, err := json.Marshal(captured)
+		if err != nil {
+			return err
+		}
+		return os.WriteFile(opts.outputFile, data, 0644)
+	}
+
+	opts := options{
+		captureName:   "baseline",
+		captureLabels: "suite=smoke",
+		startURL:      "https://example.com/",
+		streaming:     true,
+	}
+	if err := captureDifferential(context.Background(), opts, controller, runCapture); err != nil {
+		t.Fatal(err)
+	}
+
+	captures := controller.ListCaptures()
+	if len(captures) != 1 {
+		t.Fatalf("capture count = %d, want 1", len(captures))
+	}
+	metadata := captures[0]
+	if metadata.Status != differential.CaptureStatusCompleted {
+		t.Fatalf("capture status = %q, want %q", metadata.Status, differential.CaptureStatusCompleted)
+	}
+	if metadata.EntryCount != 1 {
+		t.Fatalf("entry count = %d, want 1", metadata.EntryCount)
+	}
+	if _, err := os.Stat(filepath.Join(workDir, metadata.ID+".har")); err != nil {
+		t.Fatalf("capture HAR was not written: %v", err)
+	}
+	if _, err := controller.CompareCapturesByID(metadata.ID, metadata.ID); err != nil {
+		t.Fatalf("completed capture is not comparison-ready: %v", err)
+	}
 }
 
 func TestBasicRun(t *testing.T) {
