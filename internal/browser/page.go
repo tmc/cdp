@@ -350,28 +350,79 @@ func (p *Page) Screenshot(opts ...ScreenshotOption) ([]byte, error) {
 	return buf, nil
 }
 
-// PDF generates a PDF
+// PDF generates a PDF of the current page.
+//
+// The zero margin values mean Chrome's default of 0.4in; pass WithPDFMargins
+// to change them, including to zero.
 func (p *Page) PDF(opts ...PDFOption) ([]byte, error) {
+	const defaultMargin = 0.4 // inches, matching Chrome
+
 	options := &PDFOptions{
-		Format:          "A4",
+		Format:          "letter",
 		Landscape:       false,
 		Scale:           1.0,
 		PrintBackground: true,
+		MarginTop:       defaultMargin,
+		MarginBottom:    defaultMargin,
+		MarginLeft:      defaultMargin,
+		MarginRight:     defaultMargin,
 	}
 
 	for _, opt := range opts {
 		opt(options)
 	}
 
+	var size PaperSize
+	if options.Format != "" {
+		var err error
+		size, err = ParsePaperSize(options.Format)
+		if err != nil {
+			return nil, fmt.Errorf("generating PDF: %w", err)
+		}
+	}
+
 	var buf []byte
 	if err := chromedp.Run(p.ctx, chromedp.ActionFunc(func(ctx context.Context) error {
-		params := page.PrintToPDF()
-		params = params.WithPrintBackground(options.PrintBackground).
+		params := page.PrintToPDF().
+			WithPrintBackground(options.PrintBackground).
 			WithScale(options.Scale).
-			WithLandscape(options.Landscape)
+			WithLandscape(options.Landscape).
+			WithMarginTop(options.MarginTop).
+			WithMarginBottom(options.MarginBottom).
+			WithMarginLeft(options.MarginLeft).
+			WithMarginRight(options.MarginRight)
 
-		if options.Format != "" {
-			params = params.WithPaperWidth(8.5).WithPaperHeight(11) // A4 default
+		if size.Width > 0 && size.Height > 0 {
+			params = params.WithPaperWidth(size.Width).WithPaperHeight(size.Height)
+		}
+		if options.PreferCSSPageSize {
+			params = params.WithPreferCSSPageSize(true)
+		}
+		if options.PageRanges != "" {
+			params = params.WithPageRanges(options.PageRanges)
+		}
+		if options.GenerateDocumentOutline {
+			// Chrome builds the outline from the tagged structure tree, so
+			// asking for bookmarks without tagging silently produces none.
+			params = params.WithGenerateDocumentOutline(true).WithGenerateTaggedPDF(true)
+		} else if options.GenerateTaggedPDF {
+			params = params.WithGenerateTaggedPDF(true)
+		}
+
+		if options.HeaderTemplate != "" || options.FooterTemplate != "" {
+			// Chrome renders nothing for an empty template, but it also
+			// substitutes its own default when the string is empty, so send a
+			// blank element for the side the caller left out.
+			header, footer := options.HeaderTemplate, options.FooterTemplate
+			if header == "" {
+				header = "<span></span>"
+			}
+			if footer == "" {
+				footer = "<span></span>"
+			}
+			params = params.WithDisplayHeaderFooter(true).
+				WithHeaderTemplate(header).
+				WithFooterTemplate(footer)
 		}
 
 		data, _, err := params.Do(ctx)

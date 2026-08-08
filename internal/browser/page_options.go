@@ -206,9 +206,12 @@ func ScreenshotSelector(selector string) ScreenshotOption {
 	return WithScreenshotSelector(selector)
 }
 
-// PDFOptions configures PDF generation
+// PDFOptions configures PDF generation. Lengths are in inches, the unit
+// Page.printToPDF uses.
 type PDFOptions struct {
-	Format          string // A4, Letter, etc
+	// Format is a named paper size (see PaperSizeNames) or explicit
+	// dimensions as WxH. Empty means Chrome's own default.
+	Format          string
 	Landscape       bool
 	Scale           float64
 	PrintBackground bool
@@ -216,6 +219,29 @@ type PDFOptions struct {
 	MarginBottom    float64
 	MarginLeft      float64
 	MarginRight     float64
+
+	// HeaderTemplate and FooterTemplate are the HTML templates
+	// Page.printToPDF renders in the page margins. They support the classes
+	// date, title, url, pageNumber, and totalPages. Setting either enables
+	// header/footer display; the margin on that edge must be large enough to
+	// show it.
+	HeaderTemplate string
+	FooterTemplate string
+
+	// PreferCSSPageSize honours @page size declarations in the document's own
+	// CSS instead of scaling content to Format.
+	PreferCSSPageSize bool
+
+	// PageRanges limits output to the given one-based pages, e.g. "1-5, 8".
+	PageRanges string
+
+	// GenerateDocumentOutline embeds PDF bookmarks built from the document's
+	// heading structure. Chrome derives them from the tag tree, so this
+	// implies GenerateTaggedPDF.
+	GenerateDocumentOutline bool
+
+	// GenerateTaggedPDF emits a tagged (accessible) PDF.
+	GenerateTaggedPDF bool
 }
 
 // PDFOption is a function that modifies PDFOptions
@@ -249,12 +275,55 @@ func WithPDFBackground() PDFOption {
 	}
 }
 
-// WithPDFMargins sets margins
+// WithPDFMargins sets margins, in inches.
 func WithPDFMargins(top, bottom, left, right float64) PDFOption {
 	return func(o *PDFOptions) {
 		o.MarginTop = top
 		o.MarginBottom = bottom
 		o.MarginLeft = left
 		o.MarginRight = right
+	}
+}
+
+// WithPDFHeader sets the header template rendered in the top margin.
+func WithPDFHeader(tmpl string) PDFOption {
+	return func(o *PDFOptions) {
+		o.HeaderTemplate = tmpl
+	}
+}
+
+// WithPDFFooter sets the footer template rendered in the bottom margin.
+func WithPDFFooter(tmpl string) PDFOption {
+	return func(o *PDFOptions) {
+		o.FooterTemplate = tmpl
+	}
+}
+
+// WithPDFPreferCSSPageSize honours @page size from the document's CSS.
+func WithPDFPreferCSSPageSize() PDFOption {
+	return func(o *PDFOptions) {
+		o.PreferCSSPageSize = true
+	}
+}
+
+// WithPDFPageRanges limits output to the given one-based pages, e.g. "1-5, 8".
+func WithPDFPageRanges(ranges string) PDFOption {
+	return func(o *PDFOptions) {
+		o.PageRanges = ranges
+	}
+}
+
+// WithPDFOutline embeds bookmarks built from the document's headings. It
+// implies WithPDFTagged, without which Chrome emits no outline at all.
+func WithPDFOutline() PDFOption {
+	return func(o *PDFOptions) {
+		o.GenerateDocumentOutline = true
+	}
+}
+
+// WithPDFTagged emits a tagged (accessible) PDF.
+func WithPDFTagged() PDFOption {
+	return func(o *PDFOptions) {
+		o.GenerateTaggedPDF = true
 	}
 }
