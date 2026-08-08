@@ -1,0 +1,7 @@
+# Cleanup writes a recording when the script fails.
+
+set-base-url ${BASE_URL}
+navigate /screenrecord-basic.html
+screenrecord start cleanup.gif
+sleep 500ms
+stdout 'this assertion fails'

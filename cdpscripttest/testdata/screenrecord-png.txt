@@ -1,0 +1,11 @@
+# Record a selector crop as a PNG artifact.
+
+set-base-url ${BASE_URL}
+navigate /screenrecord-basic.html
+wait-visible '#box'
+screenrecord start --selector '#box' --format png recording.png
+sleep 500ms
+screenrecord stop
+stdout 'recording.png'
+stdout 'format: png'
+stdout 'selector: #box'

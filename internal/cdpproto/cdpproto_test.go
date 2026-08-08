@@ -131,11 +131,6 @@ func TestNoUnknownProtocolMethods(t *testing.T) {
 //
 // Removing an entry should make the test pass, because the call is gone.
 var knownDead = map[string]bool{
-	// Chrome has no video-encoding command. Recording is Page.startScreencast
-	// plus local encoding of the frames.
-	"Page.startScreenRecording": true,
-	"Page.stopScreenRecording":  true,
-
 	// Removed from the protocol; type profiling was dropped from V8.
 	"Profiler.startTypeProfile": true,
 	"Profiler.stopTypeProfile":  true,

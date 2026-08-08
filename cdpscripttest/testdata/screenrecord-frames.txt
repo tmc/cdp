@@ -1,0 +1,11 @@
+# Record a selector crop as numbered PNG frames.
+
+set-base-url ${BASE_URL}
+navigate /screenrecord-basic.html
+wait-visible '#box'
+screenrecord start --selector '#box' --format frames recording-frames
+sleep 500ms
+screenrecord stop
+stdout 'recording-frames'
+stdout 'format: frames'
+stdout 'selector: #box'

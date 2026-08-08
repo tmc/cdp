@@ -124,16 +124,16 @@ func DefaultCmds() map[string]script.Cmd {
 	return cmds
 }
 
-// Screenrecord returns a command that records the current tab to an animated
-// GIF artifact using the Chrome DevTools screencast stream.
+// Screenrecord returns a command that records the current tab using the
+// Chrome DevTools screencast stream.
 //
-// Usage: screenrecord start [filename.gif]
+// Usage: screenrecord start [options] [filename]
 // Usage: screenrecord stop
 func Screenrecord() script.Cmd {
 	return script.Command(
 		script.CmdUsage{
-			Summary: "start or stop recording the current tab to an animated GIF",
-			Args:    "start [filename.gif] | stop",
+			Summary: "start or stop recording the current tab",
+			Args:    "start [--format format] [--selector selector] [filename] | stop",
 		},
 		func(s *script.State, args ...string) (script.WaitFunc, error) {
 			if len(args) < 1 {
@@ -145,15 +145,12 @@ func Screenrecord() script.Cmd {
 			}
 			switch args[0] {
 			case "start":
-				if len(args) > 2 {
+				opts, err := parseScreenRecordArgs(args[1:])
+				if err != nil {
 					return nil, script.ErrUsage
 				}
-				filename := ""
-				if len(args) == 2 {
-					filename = args[1]
-				}
 				return func(s *script.State) (stdout, stderr string, err error) {
-					path, err := cs.StartScreenRecording(filename)
+					path, err := cs.StartScreenRecordingWithOptions(opts)
 					if err != nil {
 						return "", "", err
 					}
@@ -164,17 +161,64 @@ func Screenrecord() script.Cmd {
 					return nil, script.ErrUsage
 				}
 				return func(s *script.State) (stdout, stderr string, err error) {
-					path, frames, err := cs.StopScreenRecording()
+					result, err := cs.StopScreenRecordingResult()
 					if err != nil {
 						return "", "", err
 					}
-					return fmt.Sprintf("%s\nframes: %d\n", path, frames), "", nil
+					out := fmt.Sprintf("%s\nformat: %s\nframes: %d\nduration: %s\n", result.Path, result.Format, result.Frames, result.Duration.Round(time.Millisecond))
+					if result.Selector != "" {
+						out += "selector: " + result.Selector + "\n"
+					}
+					if result.Truncated {
+						out += "truncated: true\n"
+					}
+					return out, "", nil
 				}, nil
 			default:
 				return nil, script.ErrUsage
 			}
 		},
 	)
+}
+
+func parseScreenRecordArgs(args []string) (ScreenRecordOptions, error) {
+	var opts ScreenRecordOptions
+	for len(args) > 0 {
+		arg := args[0]
+		args = args[1:]
+		switch arg {
+		case "--format", "--selector", "--quality", "--every-nth-frame", "--max-frames":
+			if len(args) == 0 {
+				return ScreenRecordOptions{}, fmt.Errorf("screenrecord: missing value for %s", arg)
+			}
+			value := args[0]
+			args = args[1:]
+			switch arg {
+			case "--format":
+				opts.Format = ScreenRecordFormat(value)
+			case "--selector":
+				opts.Selector = value
+			case "--quality":
+				if _, err := fmt.Sscan(value, &opts.Quality); err != nil {
+					return ScreenRecordOptions{}, err
+				}
+			case "--every-nth-frame":
+				if _, err := fmt.Sscan(value, &opts.EveryNthFrame); err != nil {
+					return ScreenRecordOptions{}, err
+				}
+			case "--max-frames":
+				if _, err := fmt.Sscan(value, &opts.MaxFrames); err != nil {
+					return ScreenRecordOptions{}, err
+				}
+			}
+		default:
+			if strings.HasPrefix(arg, "--") || opts.Filename != "" {
+				return ScreenRecordOptions{}, fmt.Errorf("screenrecord: invalid start argument %q", arg)
+			}
+			opts.Filename = arg
+		}
+	}
+	return opts, nil
 }
 
 // Navigate returns a command that navigates to baseURL+path and waits for body.

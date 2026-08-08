@@ -119,20 +119,21 @@
 //	screenshot [--blur <sel>]... [filename]                    full-page PNG
 //	screenshot-sel [--padding N] [--blur <sel>]... <sel> [fn]  element PNG
 //	screenshot-compare [opts] [--blur <sel>]... <sel> [fn]     diff vs baseline
-//	screenrecord start [filename.gif]                          begin tab recording
-//	screenrecord stop                                          write animated GIF
-//	screen-record start [filename.gif]                         alias for screenrecord
-//	video start [filename.gif]                                 alias for screenrecord
+//	screenrecord start [options] [filename]                    begin tab recording
+//	screenrecord stop                                          write recording artifact
+//	screen-record start [options] [filename]                   alias for screenrecord
+//	video start [options] [filename]                           alias for screenrecord
 //
 // All screenshot commands support --blur <selector> to mask dynamic content
 // before capture. Blurred elements have their text replaced with a fixed
 // placeholder and a mild CSS blur applied, producing identical pixels across
 // runs while still showing that content was present. Repeatable.
 //
-// screenrecord captures Chrome screencast frames from the active tab and writes
-// an animated GIF to the artifact directory. If a script fails while recording,
-// cdpscripttest stops the recording during cleanup and leaves the GIF path in
-// the command log for reports.
+// screenrecord captures Chrome screencast frames from the active tab. It writes
+// GIF, PNG, or numbered PNG frame artifacts. --selector crops every frame to a
+// fixed element border box. If a script fails while recording, cdpscripttest
+// stops the recording during cleanup and leaves the artifact path in the command
+// log for reports.
 //
 // screenshot-compare options:
 //

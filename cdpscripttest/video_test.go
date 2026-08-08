@@ -1,13 +1,19 @@
 package cdpscripttest
 
 import (
+	"bytes"
+	"encoding/base64"
+	"encoding/json"
 	"image"
 	"image/color"
 	"image/gif"
+	"image/jpeg"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/chromedp/cdproto/page"
 )
 
 func TestWriteGIF(t *testing.T) {
@@ -48,6 +54,113 @@ func TestScreenrecordCommandRegistered(t *testing.T) {
 	}
 	if cmds["video"] == nil {
 		t.Fatal("video alias missing")
+	}
+}
+
+func TestNormalizeScreenRecordOptions(t *testing.T) {
+	tests := []struct {
+		name    string
+		opts    ScreenRecordOptions
+		want    ScreenRecordOptions
+		wantErr bool
+	}{
+		{"gif default", ScreenRecordOptions{}, ScreenRecordOptions{Filename: "screenrecord.gif", Format: ScreenRecordGIF, Quality: 80, EveryNthFrame: 1, MaxFrames: DefaultScreenRecordMaxFrames}, false},
+		{"png extension", ScreenRecordOptions{Filename: "final.png"}, ScreenRecordOptions{Filename: "final.png", Format: ScreenRecordPNG, Quality: 80, EveryNthFrame: 1, MaxFrames: DefaultScreenRecordMaxFrames}, false},
+		{"frames", ScreenRecordOptions{Filename: "capture", Format: ScreenRecordFrames}, ScreenRecordOptions{Filename: "capture", Format: ScreenRecordFrames, Quality: 80, EveryNthFrame: 1, MaxFrames: DefaultScreenRecordMaxFrames}, false},
+		{"conflict", ScreenRecordOptions{Filename: "final.gif", Format: ScreenRecordPNG}, ScreenRecordOptions{}, true},
+		{"max frames", ScreenRecordOptions{MaxFrames: DefaultScreenRecordMaxFrames + 1}, ScreenRecordOptions{}, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			opts := tt.opts
+			err := normalizeScreenRecordOptions(&opts)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatal("normalizeScreenRecordOptions succeeded")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if opts != tt.want {
+				t.Fatalf("options = %#v, want %#v", opts, tt.want)
+			}
+		})
+	}
+}
+
+func TestCropScreencast(t *testing.T) {
+	img := image.NewRGBA(image.Rect(0, 0, 100, 80))
+	cropped, err := cropScreencast(img, &screenCrop{X: 10, Y: 20, Width: 30, Height: 20}, &page.ScreencastFrameMetadata{DeviceWidth: 100, DeviceHeight: 80})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := cropped.Bounds().Size(), (image.Point{X: 30, Y: 20}); got != want {
+		t.Fatalf("crop size = %v, want %v", got, want)
+	}
+	if _, err := cropScreencast(img, &screenCrop{X: 200, Y: 0, Width: 1, Height: 1}, &page.ScreencastFrameMetadata{DeviceWidth: 100, DeviceHeight: 80}); err == nil {
+		t.Fatal("out of bounds crop succeeded")
+	}
+}
+
+func TestWriteFrameManifest(t *testing.T) {
+	dir := t.TempDir()
+	result := ScreenRecordResult{Path: dir, Format: ScreenRecordFrames, Frames: 2, Duration: time.Second, Selector: "#box"}
+	if err := writeFrameManifest(dir, result); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(filepath.Join(dir, "manifest.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got struct {
+		Format   string `json:"format"`
+		Frames   int    `json:"frames"`
+		Selector string `json:"selector"`
+	}
+	if err := json.Unmarshal(data, &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Format != "frames" || got.Frames != 2 || got.Selector != "#box" {
+		t.Fatalf("manifest = %#v", got)
+	}
+}
+
+func TestFramesRecorderStreamsFrames(t *testing.T) {
+	dir := t.TempDir()
+	r := &screenRecorder{path: dir, opts: ScreenRecordOptions{Format: ScreenRecordFrames, MaxFrames: 2, EveryNthFrame: 1}}
+	var data bytes.Buffer
+	if err := jpeg.Encode(&data, solidImage(color.Black), nil); err != nil {
+		t.Fatal(err)
+	}
+	event := &page.EventScreencastFrame{Data: base64.StdEncoding.EncodeToString(data.Bytes()), Metadata: &page.ScreencastFrameMetadata{DeviceWidth: 2, DeviceHeight: 2}}
+	r.addFrame(event)
+	r.addFrame(event)
+	r.addFrame(event)
+	if r.count != 2 || len(r.frames) != 0 || !r.truncated {
+		t.Fatalf("count=%d retained=%d truncated=%v", r.count, len(r.frames), r.truncated)
+	}
+	for _, name := range []string{"frame-000001.png", "frame-000002.png"} {
+		if _, err := os.Stat(filepath.Join(dir, name)); err != nil {
+			t.Errorf("frame %q: %v", name, err)
+		}
+	}
+}
+
+func TestFramesRecorderEveryNthFrame(t *testing.T) {
+	dir := t.TempDir()
+	r := &screenRecorder{path: dir, opts: ScreenRecordOptions{Format: ScreenRecordFrames, MaxFrames: 3, EveryNthFrame: 2}}
+	var data bytes.Buffer
+	if err := jpeg.Encode(&data, solidImage(color.Black), nil); err != nil {
+		t.Fatal(err)
+	}
+	event := &page.EventScreencastFrame{Data: base64.StdEncoding.EncodeToString(data.Bytes()), Metadata: &page.ScreencastFrameMetadata{DeviceWidth: 2, DeviceHeight: 2}}
+	for range 5 {
+		r.addFrame(event)
+	}
+	if r.count != 2 {
+		t.Fatalf("stored frames = %d, want 2", r.count)
 	}
 }
 
