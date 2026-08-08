@@ -24,3 +24,4 @@ Use this skill when the task is about HAR output, streamed request logs, or reco
 
 - HAR and HARL details: [references/har.md](references/har.md)
 - Script-level artifact capture: [../writing-cdp-scripts/SKILL.md](../writing-cdp-scripts/SKILL.md)
+- Browser tests under `go test`: [../testing-with-cdpscripttest/SKILL.md](../testing-with-cdpscripttest/SKILL.md)

@@ -24,3 +24,4 @@ Use this skill when the output is visual: screenshots, PDFs, or screenshot-backe
 
 - Screenshot and PDF details: [references/screenshots.md](references/screenshots.md)
 - Script authoring details: [../writing-cdp-scripts/SKILL.md](../writing-cdp-scripts/SKILL.md)
+- Browser tests under `go test`: [../testing-with-cdpscripttest/SKILL.md](../testing-with-cdpscripttest/SKILL.md)
