@@ -110,6 +110,22 @@ func TestCDPScriptUnixNativeFixtures(t *testing.T) {
 		}
 	})
 
+	t.Run("cdpscript-input-primitives.txtar", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+		t.Cleanup(cancel)
+
+		err := cdpscripttest.RunCDPScript(ctx, "testdata/cdpscript/cdpscript-input-primitives.txtar", cdpscripttest.CDPScriptRunOptions{
+			Headless: true,
+			Timeout:  20 * time.Second,
+			Env: []string{
+				"FIXTURE_BASE_URL=" + startTestServer(t),
+			},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+	})
+
 	t.Run("cdpscript-observe-act-verify.txtar", func(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 		t.Cleanup(cancel)

@@ -116,6 +116,11 @@ fill <selector> <text>        # Fill input field
 fill @e5 Hello World          # Fill by accessibility ref
 type <selector> <text>        # Alias for fill
 drag <source> <target> [n]    # Drag between selectors or coord:x,y points
+dblclick <selector>           # Real double click (not a synthetic event)
+set-range <selector> <value>  # Set an input[type=range] and fire input/change
+mouse down <sel|coord:x,y>    # Press and hold
+mouse move <sel|coord:x,y>    # Move; carries the button while held
+mouse up [<sel|coord:x,y>]    # Release; defaults to the last position
 select <selector> <option>    # Select option by value or text
 upload <selector> <file>...   # Set file input files
 hover <selector>              # Hover over element
@@ -161,6 +166,27 @@ url                           # Print current URL, set ${URL}
 render [selector]             # Render page/element as markdown, set ${RENDERED}
 render --term [selector]      # Render as terminal-formatted text
 ```
+
+### Gestures and mid-gesture assertions
+
+`drag` is atomic — press, interpolate, release — which cannot express an
+assertion taken partway through. The `mouse` primitives can:
+
+```
+mouse down '#node'
+assert visible '.drag-ghost'
+mouse move coord:400,120
+assert text '#preview' 'Stage 2'
+mouse up
+```
+
+A move issued while the button is held carries the button, so the page sees a
+drag rather than a hover. `mouse up` with no target releases wherever the
+pointer last was.
+
+Quote any argument that contains `#`: an unquoted `#` begins a comment, so
+`wait #main` parses as a bare `wait`. Single quotes are removed before the
+command sees its arguments.
 
 ### Assertions
 ```

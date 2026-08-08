@@ -54,6 +54,12 @@ type Engine struct {
 	remotePort      int
 	externalBrowser bool
 
+	// Mouse gesture state, so "mouse move" can carry the button while it is
+	// held and "mouse up" can default to the last position.
+	mousePos     cdpinput.ViewportPoint
+	mouseDown    bool
+	mouseTracked bool
+
 	// Sourced commands (dynamically loaded from source command)
 	sourcedCmds map[string]script.Cmd
 
@@ -464,15 +470,18 @@ func (e *Engine) commands() map[string]script.Cmd {
 		"wait": e.cmdWait(),
 
 		// Interaction
-		"click":  e.cmdClick(),
-		"fill":   e.cmdFill(),
-		"type":   e.cmdType(),
-		"drag":   e.cmdDrag(),
-		"hover":  e.cmdHover(),
-		"press":  e.cmdPress(),
-		"scroll": e.cmdScroll(),
-		"select": e.cmdSelect(),
-		"upload": e.cmdUpload(),
+		"click":     e.cmdClick(),
+		"dblclick":  e.cmdDblclick(),
+		"fill":      e.cmdFill(),
+		"type":      e.cmdType(),
+		"drag":      e.cmdDrag(),
+		"mouse":     e.cmdMouse(),
+		"set-range": e.cmdSetRange(),
+		"hover":     e.cmdHover(),
+		"press":     e.cmdPress(),
+		"scroll":    e.cmdScroll(),
+		"select":    e.cmdSelect(),
+		"upload":    e.cmdUpload(),
 
 		// Dialogs
 		"dialog": e.cmdDialog(),

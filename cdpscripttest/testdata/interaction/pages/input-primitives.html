@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Input primitives</title>
+<style>
+  body { margin: 0; font: 14px system-ui, sans-serif; }
+  #box { width: 240px; height: 160px; background: #dde; display: grid; place-items: center; }
+  output { display: block; padding: 2px 0; }
+</style>
+</head>
+<body>
+<div id="box">drag / double-click target</div>
+
+<input type="range" id="slider" min="0" max="100" step="1" value="10">
+<output id="slider-value">10</output>
+
+<output id="dbl">none</output>
+<output id="state">idle</output>
+
+<script>
+// Record what the input path actually delivered, so assertions read the page's
+// own account of events rather than a coordinate that layout may have moved.
+const dbl = document.getElementById('dbl');
+const state = document.getElementById('state');
+const box = document.getElementById('box');
+const slider = document.getElementById('slider');
+const sliderValue = document.getElementById('slider-value');
+
+box.addEventListener('dblclick', () => { dbl.textContent = 'double'; });
+
+box.addEventListener('mousedown', () => { state.textContent = 'pressed'; });
+document.addEventListener('mousemove', () => {
+  if (state.textContent === 'pressed') state.textContent = 'moved';
+});
+document.addEventListener('mouseup', () => { state.textContent = 'released'; });
+
+slider.addEventListener('input', () => { sliderValue.textContent = slider.value; });
+</script>
+</body>
+</html>

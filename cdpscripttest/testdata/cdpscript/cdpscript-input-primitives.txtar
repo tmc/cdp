@@ -1,0 +1,26 @@
+# Purpose: cover dblclick, set-range, and the mouse press/move/release primitives.
+# Usage: FIXTURE_BASE_URL=http://127.0.0.1:PORT cdpscript cdpscript-input-primitives.txtar
+# Inputs: FIXTURE_BASE_URL from the local cdpscripttest server.
+# Verification: local fixture; asserts the page's own record of the events it saw.
+#
+# Selectors beginning with # must be quoted: an unquoted # starts a comment.
+
+-- main.cdp --
+goto $FIXTURE_BASE_URL/interaction/pages/input-primitives.html
+wait '#box'
+
+# A real double click, not a synthetic dblclick event.
+dblclick '#box'
+assert text '#dbl' 'double'
+
+# Range inputs cannot be driven by fill or type.
+set-range '#slider' 75
+assert text '#slider-value' '75'
+
+# Press, assert mid-gesture, move, assert again, then release.
+mouse down '#box'
+assert text '#state' 'pressed'
+mouse move coord:400,120
+assert text '#state' 'moved'
+mouse up
+assert text '#state' 'released'

@@ -7,7 +7,8 @@
 // Common commands:
 //
 //	goto, back, forward, reload, wait
-//	click, fill, type, drag, hover, press, scroll, select, upload
+//	click, dblclick, fill, type, drag, mouse, set-range, hover, press,
+//	scroll, select, upload
 //	dialog, viewport
 //	js, jsfile
 //	extract, title, url, render, snapshot
