@@ -17,7 +17,51 @@ Short and long spellings of the same flag are listed together; either works.
 	-o file
 	    Write to this file rather than stdout.
 	-output-format format
-	    One of html, har, text, or json. (default "html")
+	    One of html, har, text, json, or pdf. (default "html")
+	    pdf renders the loaded page with Page.printToPDF. It is binary, so
+	    churl refuses to write it to a terminal: pass -o or redirect.
+
+# PDF settings
+
+The -pdf flag carries the print settings as one comma-separated string, so the
+whole of printToPDF is reachable without a flag each:
+
+	-pdf settings
+	    page=<name|WxH>   letter (default), legal, tabloid, ledger, a0..a6,
+	                      or explicit dimensions such as 8.5x11 or 210mmx297mm
+	    margin=<lengths>  1, 2, or 4 space-separated lengths, in CSS order
+	                      (default 0.4in, Chrome's own default)
+	    scale=<n>         render scale (default 1)
+	    ranges=<pages>    print only these one-based pages, e.g. ranges=1-5 8
+	    landscape         landscape orientation
+	    outline           embed PDF bookmarks built from the document headings;
+	                      implies tagged, which Chrome needs to derive them
+	    tagged            emit a tagged (accessible) PDF
+	    css-page-size     honour @page size from the document's own CSS
+
+	    Lengths accept in, mm, cm, or px suffixes and are inches when
+	    unsuffixed. Values may not contain commas, which is why margin and
+	    ranges take space-separated lists.
+
+	    For example:
+	        -pdf 'page=a4,margin=0.75,landscape'
+	        -pdf 'page=210mmx297mm,margin=20mm 15mm,outline'
+
+	-pdf-header html
+	-pdf-footer html
+	    HTML templates rendered in the top and bottom margins. Elements with
+	    class date, title, url, pageNumber, or totalPages are substituted.
+	    The margin on that edge must be large enough to show the template.
+	    These stay separate flags because the templates are HTML and would
+	    not survive a comma-separated list.
+
+A document that declares @page size in its own CSS overrides page= and
+landscape even without css-page-size.
+
+There is no image-quality or resampling parameter: Page.printToPDF does not
+expose one, and deviceScaleFactor does not affect its output. Images are
+embedded at their source resolution, so the lever is the resolution of the
+images the page loads.
 	-har file
 	    Also write a HAR to this path. Works with any output format.
 	-verbose

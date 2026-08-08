@@ -116,3 +116,67 @@ func TestParseMargins(t *testing.T) {
 }
 
 func nearly(a, b float64) bool { return math.Abs(a-b) < 0.0001 }
+
+func TestParsePDFSpec(t *testing.T) {
+	tests := []struct {
+		name string
+		in   string
+		want PDFOptions
+		bad  bool
+	}{
+		{name: "empty", in: "", want: PDFOptions{}},
+		{name: "page", in: "page=a4", want: PDFOptions{Format: "a4"}},
+		{name: "explicit size", in: "page=8.5x11", want: PDFOptions{Format: "8.5x11"}},
+		{name: "landscape", in: "landscape", want: PDFOptions{Landscape: true}},
+		{name: "scale", in: "scale=0.8", want: PDFOptions{Scale: 0.8}},
+		{
+			name: "margin one value",
+			in:   "margin=0.75",
+			want: PDFOptions{MarginTop: 0.75, MarginBottom: 0.75, MarginLeft: 0.75, MarginRight: 0.75},
+		},
+		{
+			name: "margin space separated",
+			in:   "margin=1 2",
+			want: PDFOptions{MarginTop: 1, MarginBottom: 1, MarginLeft: 2, MarginRight: 2},
+		},
+		{name: "ranges normalised to commas", in: "ranges=1-5 8", want: PDFOptions{PageRanges: "1-5,8"}},
+		{name: "outline", in: "outline", want: PDFOptions{GenerateDocumentOutline: true}},
+		{name: "tagged", in: "tagged", want: PDFOptions{GenerateTaggedPDF: true}},
+		{name: "css page size", in: "css-page-size", want: PDFOptions{PreferCSSPageSize: true}},
+		{
+			name: "combined",
+			in:   "page=a4,margin=0.5,landscape,outline",
+			want: PDFOptions{Format: "a4", Landscape: true, GenerateDocumentOutline: true,
+				MarginTop: 0.5, MarginBottom: 0.5, MarginLeft: 0.5, MarginRight: 0.5},
+		},
+		{name: "spaces around fields", in: " page=a4 , landscape ", want: PDFOptions{Format: "a4", Landscape: true}},
+		{name: "unknown key", in: "papersize=a4", bad: true},
+		{name: "bad page", in: "page=foolscap", bad: true},
+		{name: "bad margin", in: "margin=1 2 3", bad: true},
+		{name: "zero scale", in: "scale=0", bad: true},
+		{name: "nan scale", in: "scale=NaN", bad: true},
+		{name: "page without value", in: "page", bad: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			opts, err := ParsePDFSpec(tt.in)
+			if tt.bad {
+				if err == nil {
+					t.Fatalf("ParsePDFSpec(%q) = %v, want error", tt.in, opts)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("ParsePDFSpec(%q): %v", tt.in, err)
+			}
+			var got PDFOptions
+			for _, o := range opts {
+				o(&got)
+			}
+			if got != tt.want {
+				t.Errorf("ParsePDFSpec(%q) = %+v, want %+v", tt.in, got, tt.want)
+			}
+		})
+	}
+}

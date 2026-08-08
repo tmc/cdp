@@ -19,6 +19,7 @@ import (
 
 	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/chromedp"
+	"golang.org/x/term"
 
 	"github.com/tmc/cdp/internal/browser"
 	"github.com/tmc/cdp/internal/browserprofile"
@@ -30,8 +31,13 @@ import (
 type options struct {
 	// Output options
 	outputFile   string
-	outputFormat string // html, har, text, json
+	outputFormat string // html, har, text, json, pdf
 	harFile      string // Optional HAR file to write alongside main output
+
+	// PDF print settings, used only when outputFormat is "pdf"
+	pdfSpec   string // comma-separated settings; see browser.ParsePDFSpec
+	pdfHeader string // CDP header template
+	pdfFooter string // CDP footer template
 
 	// Chrome options
 	profileDir string
@@ -158,9 +164,34 @@ var (
 	errInvalidHeader     = errors.New("invalid header")
 	errInvalidScript     = errors.New("invalid script")
 	errUnsupportedOutput = errors.New("unsupported output format")
+	errBinaryToTerminal  = errors.New("binary output to terminal")
+	errPDFOptions        = errors.New("invalid pdf option")
 	errAuthentication    = errors.New("authentication error")
 	errInternal          = errors.New("internal error")
 )
+
+// pdfOptions translates the -pdf-* flags into browser PDF options. It
+// validates here rather than at flag-parse time so a bad value reports the
+// same way as other churl usage errors.
+func pdfOptions(opts options) ([]browser.PDFOption, error) {
+	out, err := browser.ParsePDFSpec(opts.pdfSpec)
+	if err != nil {
+		return nil, fmt.Errorf("%w: -pdf: %w", errPDFOptions, err)
+	}
+	if opts.pdfHeader != "" {
+		out = append(out, browser.WithPDFHeader(opts.pdfHeader))
+	}
+	if opts.pdfFooter != "" {
+		out = append(out, browser.WithPDFFooter(opts.pdfFooter))
+	}
+	return out, nil
+}
+
+// stdoutIsTerminal reports whether stdout is attached to a terminal, which is
+// how binary output decides to refuse rather than corrupt the display.
+func stdoutIsTerminal() bool {
+	return term.IsTerminal(int(os.Stdout.Fd()))
+}
 
 func printRunError(err error, verbose bool) {
 	message := err.Error()
@@ -190,6 +221,19 @@ func printRunError(err error, verbose bool) {
 		message = "Network capture failed. Please check Chrome connectivity and retry."
 	case errors.Is(err, errAuthentication):
 		message = "Authentication setup failed. Please check the provided credentials."
+	case errors.Is(err, errPDFOptions):
+		message = err.Error()
+		suggestions = []string{
+			"Example: -pdf 'page=a4,margin=0.75,landscape'",
+			"page takes a name (letter, a4, legal, tabloid, a3, a5) or WxH such as 8.5x11 or 210mmx297mm",
+			"margin takes 1, 2, or 4 space-separated lengths; units in, mm, cm, px, inches by default",
+		}
+	case errors.Is(err, errBinaryToTerminal):
+		message = "PDF output is binary and would corrupt your terminal."
+		suggestions = []string{
+			"Write to a file: -o page.pdf",
+			"Or redirect stdout: churl -output-format pdf URL > page.pdf",
+		}
 	case errors.Is(err, errUnsupportedOutput):
 		message = "The requested output format is not supported."
 	case errors.Is(err, errInternal):
@@ -217,7 +261,10 @@ func main() {
 
 	// Output options
 	flag.StringVar(&opts.outputFile, "o", "", "Output file (default: stdout)")
-	flag.StringVar(&opts.outputFormat, "output-format", "html", "Output format: html, har, text, json")
+	flag.StringVar(&opts.outputFormat, "output-format", "html", "Output format: html, har, text, json, pdf")
+	flag.StringVar(&opts.pdfSpec, "pdf", "", "PDF settings, comma-separated: page=a4|letter|WxH, margin=<lengths>, scale=N, ranges=<pages>, landscape, outline, tagged, css-page-size")
+	flag.StringVar(&opts.pdfHeader, "pdf-header", "", "HTML template for the PDF header; classes date, title, url, pageNumber, totalPages")
+	flag.StringVar(&opts.pdfFooter, "pdf-footer", "", "HTML template for the PDF footer; classes date, title, url, pageNumber, totalPages")
 	flag.StringVar(&opts.harFile, "har", "", "Write HAR file to this path (can be used with any output format)")
 
 	// Chrome options
@@ -877,6 +924,17 @@ func run(ctx context.Context, pm browserprofile.ProfileManager, url string, opts
 			output = []byte(sb.String())
 		}
 
+	case "pdf":
+		p := b.GetCurrentPage()
+		if p == nil {
+			return fmt.Errorf("%w: browser not launched", errInternal)
+		}
+		pdfOpts, err := pdfOptions(opts)
+		if err != nil {
+			return err
+		}
+		output, outputErr = p.PDF(pdfOpts...)
+
 	case "json":
 		type PageInfo struct {
 			URL     string `json:"url"`
@@ -926,7 +984,11 @@ func run(ctx context.Context, pm browserprofile.ProfileManager, url string, opts
 		}
 	}
 
-	// Write the output
+	// Write the output. PDF is binary, so refuse to spray it at a terminal.
+	if opts.outputFormat == "pdf" && opts.outputFile == "" && stdoutIsTerminal() {
+		return fmt.Errorf("%w: use -o file or redirect stdout", errBinaryToTerminal)
+	}
+
 	var outWriter io.Writer = os.Stdout
 	if opts.outputFile != "" {
 		file, err := os.Create(opts.outputFile)

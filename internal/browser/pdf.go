@@ -128,3 +128,72 @@ func parseLength(s string) (float64, error) {
 	}
 	return n * factor, nil
 }
+
+// ParsePDFSpec interprets a comma-separated PDF settings string, the form the
+// churl -pdf flag takes:
+//
+//	page=a4,margin=0.75,landscape
+//	page=210mmx297mm,margin=20mm 15mm,outline
+//
+// Settings are either key=value or a bare flag. Values may not contain commas;
+// margin and ranges take space-separated lists instead. Header and footer
+// templates are not settable here because they are HTML.
+func ParsePDFSpec(spec string) ([]PDFOption, error) {
+	var opts []PDFOption
+	for _, field := range strings.Split(spec, ",") {
+		field = strings.TrimSpace(field)
+		if field == "" {
+			continue
+		}
+		key, value, hasValue := strings.Cut(field, "=")
+		key = strings.ToLower(strings.TrimSpace(key))
+		value = strings.TrimSpace(value)
+
+		switch key {
+		case "page":
+			if !hasValue {
+				return nil, fmt.Errorf("page needs a value, e.g. page=a4")
+			}
+			if _, err := ParsePaperSize(value); err != nil {
+				return nil, err
+			}
+			opts = append(opts, WithPDFFormat(value))
+		case "margin":
+			if !hasValue {
+				return nil, fmt.Errorf("margin needs a value, e.g. margin=0.75")
+			}
+			top, right, bottom, left, err := ParseMargins(value)
+			if err != nil {
+				return nil, err
+			}
+			opts = append(opts, WithPDFMargins(top, bottom, left, right))
+		case "scale":
+			if !hasValue {
+				return nil, fmt.Errorf("scale needs a value, e.g. scale=0.8")
+			}
+			n, err := strconv.ParseFloat(value, 64)
+			if err != nil || math.IsNaN(n) || math.IsInf(n, 0) || n <= 0 {
+				return nil, fmt.Errorf("scale %q: want a number greater than zero", value)
+			}
+			opts = append(opts, WithPDFScale(n))
+		case "ranges":
+			if !hasValue {
+				return nil, fmt.Errorf("ranges needs a value, e.g. ranges=1-5")
+			}
+			// printToPDF wants "1-5, 8"; accept space separation so the value
+			// carries no comma of its own.
+			opts = append(opts, WithPDFPageRanges(strings.Join(strings.Fields(value), ",")))
+		case "landscape":
+			opts = append(opts, WithPDFLandscape())
+		case "outline":
+			opts = append(opts, WithPDFOutline())
+		case "tagged":
+			opts = append(opts, WithPDFTagged())
+		case "css-page-size":
+			opts = append(opts, WithPDFPreferCSSPageSize())
+		default:
+			return nil, fmt.Errorf("unknown pdf setting %q: want page, margin, scale, ranges, landscape, outline, tagged, or css-page-size", key)
+		}
+	}
+	return opts, nil
+}
