@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	reportpkg "github.com/tmc/cdp/cdpscripttest/report"
 )
 
 // reportSection groups commands under a comment heading.
@@ -453,33 +455,18 @@ func relImage(reportDir, imgPath string) string {
 // GenerateReport writes a GFM markdown report to reportPath from the script
 // execution log.
 func GenerateReport(reportPath, scriptName string, scriptSource []byte, log string) error {
-	sections := ParseLog(log)
-	preamble := ExtractPreamble(scriptSource)
-	reportDir := filepath.Dir(reportPath)
-
-	if err := os.MkdirAll(reportDir, 0o777); err != nil {
-		return fmt.Errorf("report mkdir: %w", err)
-	}
-
-	f, err := os.Create(reportPath)
-	if err != nil {
-		return fmt.Errorf("report create: %w", err)
-	}
-	defer f.Close()
-
-	RenderReport(f, scriptName, preamble, sections, reportDir)
-	return nil
+	return reportpkg.WriteMarkdown(reportPath, reportpkg.Script{
+		Name:        scriptName,
+		Source:      scriptSource,
+		Log:         log,
+		ArtifactDir: filepath.Dir(reportPath),
+	})
 }
 
-// ScriptReport holds the data needed to render one script's report. Collect
-// these from parallel subtests and pass them to GenerateCombinedReport.
-type ScriptReport struct {
-	Name        string // script name (used as heading)
-	Source      []byte // raw script source (for preamble)
-	Log         string // engine log output
-	ArtifactDir string // per-script artifact directory
-	Failed      bool   // true if the script failed
-}
+// ScriptReport holds the data needed to render one script's report.
+//
+// Deprecated: use report.Script.
+type ScriptReport = reportpkg.Script
 
 // scriptEntry is a TOC entry for the combined report. It tracks metadata
 // from the script source (available upfront) and the result (available

@@ -185,7 +185,9 @@ When a comparison fails, the runner writes `<name>.fail.png` beside the
 baseline. Two flags diagnose it: `-cdp-emit-unblurred` saves an unmasked copy
 alongside each capture (this is how you find the element you forgot to blur),
 and `-cdp-skip-blur` disables masking entirely. Reports come from
-`-emit-cdp-report` and `-emit-cdp-report-combined`.
+`-emit-cdp-report` and `-emit-cdp-report-combined`. For native HTML reports in
+a stable root, use `-cdp-report-dir=<dir> -emit-cdp-report-html
+-emit-cdp-report-combined`.
 
 Native execution also starts CDP coverage by default and writes
 `coverage.json` into each artifact directory — that is why the file appears

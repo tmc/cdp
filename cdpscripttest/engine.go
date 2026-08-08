@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/chromedp/chromedp"
+	reportpkg "github.com/tmc/cdp/cdpscripttest/report"
 	"golang.org/x/tools/txtar"
 	"rsc.io/script"
 )
@@ -61,6 +62,10 @@ var flagEmitUnblurred = flag.Bool("cdp-emit-unblurred", false, "save unblurred c
 //
 // Usage: go test -emit-cdp-report -tags cdp ./...
 var flagEmitReport = flag.Bool("emit-cdp-report", false, "generate report.md in the artifact directory")
+
+var flagReportDir = flag.String("cdp-report-dir", "", "write reports to this directory")
+
+var flagEmitReportHTML = flag.Bool("emit-cdp-report-html", false, "write HTML alongside Markdown reports")
 
 // flagCombinedReport writes all script reports into one combined report.md
 // at the artifact root. Each script gets a top-level heading. The file builds
@@ -278,12 +283,49 @@ func Test(t *testing.T, e *Engine, allocCtx context.Context, baseURL, pattern st
 		artRoot = filepath.Join(filepath.Dir(files[0]), "artifacts")
 	}
 
-	emitReport := *flagEmitReport || *flagCombinedReport
+	if *flagReportDir != "" {
+		artRoot = *flagReportDir
+	}
+	emitReport := *flagEmitReport || *flagReportDir != "" || *flagCombinedReport
+
+	// A path-bearing report request uses the public report writer. The writer
+	// receives the complete manifest before parallel subtests begin.
+	var reportWriter *reportpkg.Writer
+	if *flagReportDir != "" {
+		scripts := make([]reportpkg.Script, 0, len(files))
+		for _, file := range files {
+			a, err := txtar.ParseFile(file)
+			if err != nil {
+				t.Fatal(err)
+			}
+			name := strings.TrimSuffix(filepath.Base(file), ".txt")
+			scripts = append(scripts, reportpkg.Script{
+				Name:        name,
+				Source:      a.Comment,
+				ArtifactDir: filepath.Join(artRoot, name),
+			})
+		}
+		w, err := reportpkg.NewWriter(reportpkg.Options{
+			Dir:      artRoot,
+			HTML:     *flagEmitReportHTML,
+			Combined: *flagCombinedReport,
+		}, scripts)
+		if err != nil {
+			t.Logf("create report writer: %v", err)
+		} else {
+			reportWriter = w
+			t.Cleanup(func() {
+				if err := w.Close(); err != nil {
+					t.Logf("close report writer: %v", err)
+				}
+			})
+		}
+	}
 
 	// Combined report: live-updating file rewritten as each script finishes.
 	var combinedMu sync.Mutex
 	var combinedWriter *CombinedReportWriter
-	wantCombined := *flagCombinedReport && artRoot != ""
+	wantCombined := *flagCombinedReport && artRoot != "" && reportWriter == nil
 	if wantCombined {
 		// Build the full manifest from script files.
 		names := make([]string, len(files))
@@ -361,7 +403,7 @@ func Test(t *testing.T, e *Engine, allocCtx context.Context, baseURL, pattern st
 			}
 
 			var opts *runCaptureOpts
-			if emitReport {
+			if reportWriter == nil && emitReport {
 				opts = &runCaptureOpts{
 					ReportWriter: t.Output(),
 					ReportName:   name,
@@ -372,12 +414,31 @@ func Test(t *testing.T, e *Engine, allocCtx context.Context, baseURL, pattern st
 
 			captured := runCapture(t, e, s, file, bytes.NewReader(a.Comment), opts)
 
-			if emitReport {
+			if reportWriter != nil {
+				combinedMu.Lock()
+				err := reportWriter.Update(reportpkg.Script{
+					Name:        name,
+					Source:      a.Comment,
+					Log:         captured,
+					ArtifactDir: artDir,
+					Failed:      t.Failed(),
+				})
+				combinedMu.Unlock()
+				if err != nil {
+					t.Logf("report generation failed: %v", err)
+				}
+			} else if emitReport {
 				reportPath := filepath.Join(artDir, "report.md")
 				if err := GenerateReport(reportPath, name, a.Comment, captured); err != nil {
 					t.Logf("report generation failed: %v", err)
 				} else {
 					t.Attr("cdp.report", reportPath)
+				}
+				if *flagEmitReportHTML {
+					htmlPath := filepath.Join(artDir, "report.html")
+					if err := reportpkg.WriteHTML(htmlPath, reportpkg.Script{Name: name, Source: a.Comment, Log: captured, ArtifactDir: artDir, Failed: t.Failed()}); err != nil {
+						t.Logf("html report generation failed: %v", err)
+					}
 				}
 			}
 

@@ -5,7 +5,16 @@ import (
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/tmc/cdp/cdpscripttest/report"
 )
+
+func TestScriptReportAlias(t *testing.T) {
+	var script report.Script = ScriptReport{Name: "compatibility"}
+	if script.Name != "compatibility" {
+		t.Fatalf("ScriptReport alias lost name: %q", script.Name)
+	}
+}
 
 func TestParseLog(t *testing.T) {
 	log := `

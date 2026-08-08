@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/chromedp/chromedp"
+	"github.com/tmc/cdp/cdpscripttest/report"
 	"golang.org/x/tools/txtar"
 )
 
@@ -64,6 +65,9 @@ type RunOptions struct {
 
 	// EmitReport generates a report.md in the artifact directory.
 	EmitReport bool
+
+	// Report enables detailed and optional combined reports.
+	Report *report.Options
 }
 
 // RunFiles runs each txtar script file in files using the given engine and
@@ -71,6 +75,30 @@ type RunOptions struct {
 //
 // RunFiles manages the allocator lifecycle internally.
 func RunFiles(ctx context.Context, e *Engine, files []string, opts RunOptions) (RunResult, error) {
+	var reporter *report.Writer
+	sources := make(map[string][]byte)
+	if opts.Report != nil {
+		scripts := make([]report.Script, 0, len(files))
+		for _, file := range files {
+			source, err := scriptSource(file)
+			if err != nil {
+				return RunResult{}, err
+			}
+			name := strings.TrimSuffix(filepath.Base(file), ".txt")
+			sources[file] = source
+			scripts = append(scripts, report.Script{
+				Name:        name,
+				Source:      source,
+				ArtifactDir: filepath.Join(opts.Report.Dir, name),
+			})
+		}
+		var err error
+		reporter, err = report.NewWriter(*opts.Report, scripts)
+		if err != nil {
+			return RunResult{}, fmt.Errorf("create report writer: %w", err)
+		}
+	}
+
 	allocOpts := opts.AllocatorOpts
 	if allocOpts == nil {
 		allocOpts = append(chromedp.DefaultExecAllocatorOptions[:],
@@ -82,13 +110,36 @@ func RunFiles(ctx context.Context, e *Engine, files []string, opts RunOptions) (
 	defer allocCancel()
 
 	var result RunResult
+	var reportErr error
 
 	for _, file := range files {
 		sr := runFile(allocCtx, e, file, opts)
 		result.Results = append(result.Results, sr)
+		if reporter != nil {
+			name := strings.TrimSuffix(filepath.Base(file), ".txt")
+			if err := reporter.Update(report.Script{
+				Name:        name,
+				Source:      sources[file],
+				Log:         sr.Log,
+				ArtifactDir: filepath.Join(opts.Report.Dir, name),
+				Failed:      sr.Err != nil,
+			}); err != nil {
+				if reportErr == nil {
+					reportErr = fmt.Errorf("update report for %q: %w", file, err)
+				}
+			}
+		}
 		if opts.OnResult != nil {
 			opts.OnResult(sr)
 		}
+	}
+	if reporter != nil {
+		if err := reporter.Close(); err != nil && reportErr == nil {
+			reportErr = fmt.Errorf("close report: %w", err)
+		}
+	}
+	if reportErr != nil {
+		return result, reportErr
 	}
 
 	return result, nil
@@ -104,7 +155,11 @@ func runFile(allocCtx context.Context, e *Engine, file string, opts RunOptions) 
 	}
 	defer os.RemoveAll(workdir)
 
-	s, err := NewStateWithArtifactDir(tabCtx, workdir, opts.BaseURL, opts.ArtifactDir, opts.Env)
+	artifactDir := opts.ArtifactDir
+	if opts.Report != nil {
+		artifactDir = filepath.Join(opts.Report.Dir, strings.TrimSuffix(filepath.Base(file), ".txt"))
+	}
+	s, err := NewStateWithArtifactDir(tabCtx, workdir, opts.BaseURL, artifactDir, opts.Env)
 	if err != nil {
 		return ScriptResult{File: file, Err: err}
 	}
@@ -158,6 +213,14 @@ func runFile(allocCtx context.Context, e *Engine, file string, opts RunOptions) 
 		Err:  runErr,
 		Log:  log,
 	}
+}
+
+func scriptSource(file string) ([]byte, error) {
+	a, err := txtar.ParseFile(file)
+	if err != nil {
+		return nil, fmt.Errorf("parse txtar %q: %w", file, err)
+	}
+	return a.Comment, nil
 }
 
 // ExpandGlobs expands patterns into script file paths. Supports:

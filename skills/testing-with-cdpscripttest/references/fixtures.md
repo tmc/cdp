@@ -57,6 +57,8 @@ believing it.
 | `-cdp-emit-unblurred` | save an unmasked copy alongside each blurred capture |
 | `-emit-cdp-report` | write `report.md` into the artifact directory |
 | `-emit-cdp-report-combined` | merge all reports into one file |
+| `-cdp-report-dir=<dir>` | write detailed reports and optional indexes below `<dir>` |
+| `-emit-cdp-report-html` | write `report.html` and, with combined output, `index.html`; requires `-cdp-report-dir` |
 | `CDPSCRIPTTEST_COVERAGE` | `0`/`false`/`off` disables coverage (on by default) |
 
 Environment variables take precedence over their flag counterparts. Register
@@ -195,8 +197,10 @@ that is what makes the `skip` and `stop` commands mean what they say.
 **Reports.** `GenerateReport(path, name, a.Comment, log)` per script;
 `NewCombinedReportWriter(path, names, sources)` plus `Update(ScriptReport{...})`
 for one merged report updated as each script finishes, so a crashed run still
-leaves something readable. `md2html -html <out> -index report.md <reportRoot>`
-renders it, with non-`.md`/`.txt` artifacts copied alongside so images resolve.
+leaves something readable. For native Markdown and HTML reports, set
+`RunOptions.Report` to `&report.Options{Dir: root, HTML: true, Combined: true}`.
+The writer emits `index.md`, `index.html`, and per-script reports beside the
+existing artifacts; no converter or asset-copy step is needed.
 
 **Redact for shared reports.** `GenerateReport` embeds the script source and
 the execution **log**, not the environment — but anything a fixture prints lands
