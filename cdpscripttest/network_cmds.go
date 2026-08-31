@@ -129,7 +129,7 @@ func NetworkEmulate() script.Cmd {
 					conditions.PacketQueueLength = queue
 				}
 				err = chromedp.Run(cs.cdpCtx, chromedp.ActionFunc(func(ctx context.Context) error {
-					if _, err := network.EmulateNetworkConditionsByRule(false, []*network.Conditions{conditions}).Do(ctx); err != nil {
+					if _, err := network.EmulateNetworkConditionsByRule([]*network.Conditions{conditions}).Do(ctx); err != nil {
 						return err
 					}
 					return network.OverrideNetworkState(false, latency, down, up).Do(ctx)
@@ -166,7 +166,7 @@ func NetworkEmulateClear() script.Cmd {
 						DownloadThroughput: -1,
 						UploadThroughput:   -1,
 					}
-					if _, err := network.EmulateNetworkConditionsByRule(false, []*network.Conditions{reset}).Do(ctx); err != nil {
+					if _, err := network.EmulateNetworkConditionsByRule([]*network.Conditions{reset}).Do(ctx); err != nil {
 						return err
 					}
 					return network.OverrideNetworkState(false, 0, -1, -1).Do(ctx)

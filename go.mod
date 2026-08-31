@@ -5,10 +5,10 @@ go 1.26
 require (
 	github.com/BurntSushi/toml v1.6.0
 	github.com/JohannesKaufmann/html-to-markdown v1.6.0
-	github.com/chromedp/cdproto v0.0.0-20260328224638-b7b298a31867
-	github.com/chromedp/chromedp v0.15.1
+	github.com/chromedp/cdproto v0.0.0-20260804232424-e85f50dbfd32
+	github.com/chromedp/chromedp v0.16.0
 	github.com/fsnotify/fsnotify v1.9.0
-	github.com/go-json-experiment/json v0.0.0-20260214004413-d219187c3433
+	github.com/go-json-experiment/json v0.0.0-20260623181947-01eb4420fa68
 	github.com/go-sourcemap/sourcemap v2.1.4+incompatible
 	github.com/gorilla/websocket v1.5.3
 	github.com/itchyny/gojq v0.12.17
@@ -39,6 +39,6 @@ require (
 	github.com/spf13/pflag v1.0.9 // indirect
 	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect
 	golang.org/x/oauth2 v0.34.0 // indirect
-	golang.org/x/sys v0.42.0 // indirect
+	golang.org/x/sys v0.47.0 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 )

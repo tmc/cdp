@@ -57,7 +57,7 @@ func TestWebMCPCollector_ToolsAddedRemoved(t *testing.T) {
 
 	// Simulate toolsRemoved.
 	c.handleEvent(&webmcp.EventToolsRemoved{
-		Tools: []*webmcp.Tool{
+		Tools: []*webmcp.RemovedTool{
 			{Name: "get_weather", FrameID: cdp.FrameID("frame1")},
 		},
 	})
@@ -102,13 +102,13 @@ func TestWebMCPCollector_Invocations(t *testing.T) {
 	// Simulate response.
 	c.handleEvent(&webmcp.EventToolResponded{
 		InvocationID: "inv-001",
-		Status:       webmcp.InvocationStatusSuccess,
+		Status:       webmcp.InvocationStatusCompleted,
 		Output:       jsontext.Value(`{"temp":18,"unit":"celsius"}`),
 	})
 
 	invocations = c.listInvocations(0)
-	if invocations[0].Status != "Success" {
-		t.Errorf("status = %q, want Success", invocations[0].Status)
+	if invocations[0].Status != "Completed" {
+		t.Errorf("status = %q, want Completed", invocations[0].Status)
 	}
 	if invocations[0].Output != `{"temp":18,"unit":"celsius"}` {
 		t.Errorf("output = %q", invocations[0].Output)
@@ -276,7 +276,7 @@ func TestWebMCPCollector_JSONSerialization(t *testing.T) {
 	})
 	c.handleEvent(&webmcp.EventToolResponded{
 		InvocationID: "inv-json",
-		Status:       webmcp.InvocationStatusSuccess,
+		Status:       webmcp.InvocationStatusCompleted,
 		Output:       jsontext.Value(`{"result":"ok"}`),
 	})
 
@@ -293,7 +293,7 @@ func TestWebMCPCollector_JSONSerialization(t *testing.T) {
 	if parsed["tool_name"] != "test_tool" {
 		t.Errorf("tool_name = %v", parsed["tool_name"])
 	}
-	if parsed["status"] != "Success" {
+	if parsed["status"] != "Completed" {
 		t.Errorf("status = %v", parsed["status"])
 	}
 }
