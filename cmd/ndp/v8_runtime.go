@@ -189,14 +189,6 @@ type CallArgument struct {
 	ObjectID            string      `json:"objectId,omitempty"`
 }
 
-// ExecutionContextDescription describes an execution context.
-type ExecutionContextDescription struct {
-	ID      int                    `json:"id"`
-	Origin  string                 `json:"origin"`
-	Name    string                 `json:"name"`
-	AuxData map[string]interface{} `json:"auxData,omitempty"`
-}
-
 // CallFunctionOn calls a function on a remote object.
 func (r *V8Runtime) CallFunctionOn(objectID, functionDeclaration string, arguments []CallArgument, silent bool) (*EvaluationResult, error) {
 	params := map[string]interface{}{
@@ -240,23 +232,6 @@ func (r *V8Runtime) ReleaseObject(objectID string) error {
 func (r *V8Runtime) ReleaseObjectGroup(objectGroup string) error {
 	_, err := r.client.SendCommand("Runtime.releaseObjectGroup", map[string]interface{}{"objectGroup": objectGroup})
 	return err
-}
-
-// GetExecutionContexts retrieves available execution contexts.
-func (r *V8Runtime) GetExecutionContexts() ([]ExecutionContextDescription, error) {
-	result, err := r.client.SendCommand("Runtime.getExecutionContexts", nil)
-	if err != nil {
-		return nil, err
-	}
-	var contexts []ExecutionContextDescription
-	if ctxs, ok := result["contexts"].([]interface{}); ok {
-		for _, ctx := range ctxs {
-			if ctxMap, ok := ctx.(map[string]interface{}); ok {
-				contexts = append(contexts, r.parseExecutionContext(ctxMap))
-			}
-		}
-	}
-	return contexts, nil
 }
 
 // CompileScript compiles a script and returns its script ID.
@@ -428,23 +403,6 @@ func (r *V8Runtime) parsePropertyDescriptor(prop map[string]interface{}) Propert
 		desc.Symbol = r.parseRemoteObject(symbol)
 	}
 
-	return desc
-}
-
-func (r *V8Runtime) parseExecutionContext(ctx map[string]interface{}) ExecutionContextDescription {
-	desc := ExecutionContextDescription{}
-	if id, ok := ctx["id"].(float64); ok {
-		desc.ID = int(id)
-	}
-	if origin, ok := ctx["origin"].(string); ok {
-		desc.Origin = origin
-	}
-	if name, ok := ctx["name"].(string); ok {
-		desc.Name = name
-	}
-	if auxData, ok := ctx["auxData"].(map[string]interface{}); ok {
-		desc.AuxData = auxData
-	}
 	return desc
 }
 

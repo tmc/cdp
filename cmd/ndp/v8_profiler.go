@@ -230,71 +230,6 @@ func (p *V8Profiler) GetBestEffortCoverage() ([]ScriptCoverage, error) {
 	return coverage, nil
 }
 
-// StartTypeProfile starts type profiling
-func (p *V8Profiler) StartTypeProfile() error {
-	_, err := p.client.SendCommand("Profiler.startTypeProfile", nil)
-	if err != nil {
-		return err
-	}
-
-	if p.client.verbose {
-		fmt.Println("Type profiling started")
-	}
-
-	return nil
-}
-
-// StopTypeProfile stops type profiling
-func (p *V8Profiler) StopTypeProfile() error {
-	_, err := p.client.SendCommand("Profiler.stopTypeProfile", nil)
-	if err != nil {
-		return err
-	}
-
-	if p.client.verbose {
-		fmt.Println("Type profiling stopped")
-	}
-
-	return nil
-}
-
-// TakeTypeProfile retrieves type profile data
-func (p *V8Profiler) TakeTypeProfile() ([]ScriptTypeProfile, error) {
-	result, err := p.client.SendCommand("Profiler.takeTypeProfile", nil)
-	if err != nil {
-		return nil, err
-	}
-
-	var profiles []ScriptTypeProfile
-	if resultArray, ok := result["result"].([]interface{}); ok {
-		for _, item := range resultArray {
-			if itemMap, ok := item.(map[string]interface{}); ok {
-				profiles = append(profiles, p.parseScriptTypeProfile(itemMap))
-			}
-		}
-	}
-
-	return profiles, nil
-}
-
-// ScriptTypeProfile represents type profiling data for a script
-type ScriptTypeProfile struct {
-	ScriptID string             `json:"scriptId"`
-	URL      string             `json:"url"`
-	Entries  []TypeProfileEntry `json:"entries"`
-}
-
-// TypeProfileEntry represents a type profile entry
-type TypeProfileEntry struct {
-	Offset int          `json:"offset"`
-	Types  []TypeObject `json:"types"`
-}
-
-// TypeObject represents a type in the type profile
-type TypeObject struct {
-	Name string `json:"name"`
-}
-
 // Heap Profiler Methods (using HeapProfiler domain)
 
 // EnableHeapProfiler enables the HeapProfiler domain
@@ -553,47 +488,6 @@ func (p *V8Profiler) parseCoverageRange(rangeItem map[string]interface{}) Covera
 	}
 
 	return coverageRange
-}
-
-func (p *V8Profiler) parseScriptTypeProfile(profile map[string]interface{}) ScriptTypeProfile {
-	scriptTypeProfile := ScriptTypeProfile{}
-
-	if scriptID, ok := profile["scriptId"].(string); ok {
-		scriptTypeProfile.ScriptID = scriptID
-	}
-	if url, ok := profile["url"].(string); ok {
-		scriptTypeProfile.URL = url
-	}
-
-	if entries, ok := profile["entries"].([]interface{}); ok {
-		for _, entry := range entries {
-			if entryMap, ok := entry.(map[string]interface{}); ok {
-				scriptTypeProfile.Entries = append(scriptTypeProfile.Entries, p.parseTypeProfileEntry(entryMap))
-			}
-		}
-	}
-
-	return scriptTypeProfile
-}
-
-func (p *V8Profiler) parseTypeProfileEntry(entry map[string]interface{}) TypeProfileEntry {
-	typeProfileEntry := TypeProfileEntry{}
-
-	if offset, ok := entry["offset"].(float64); ok {
-		typeProfileEntry.Offset = int(offset)
-	}
-
-	if types, ok := entry["types"].([]interface{}); ok {
-		for _, typeItem := range types {
-			if typeMap, ok := typeItem.(map[string]interface{}); ok {
-				if name, ok := typeMap["name"].(string); ok {
-					typeProfileEntry.Types = append(typeProfileEntry.Types, TypeObject{Name: name})
-				}
-			}
-		}
-	}
-
-	return typeProfileEntry
 }
 
 func (p *V8Profiler) parseSamplingHeapProfile(result map[string]interface{}) *SamplingHeapProfile {

@@ -104,7 +104,7 @@ func TestNoUnknownProtocolMethods(t *testing.T) {
 			return nil // not a Go package, or does not parse on its own
 		}
 		for _, r := range refs {
-			if !Valid(r.Name) && !knownDead[r.Name] {
+			if !Valid(r.Name) {
 				rel, _ := filepath.Rel(root, path)
 				r.File = filepath.Join(rel, r.File)
 				bad = append(bad, r)
@@ -121,26 +121,6 @@ func TestNoUnknownProtocolMethods(t *testing.T) {
 			"\tIf it never existed, the call fails at run time with -32601; delete it.",
 			r.File, r.Line, r.Name)
 	}
-}
-
-// knownDead quarantines calls that name a method the protocol does not have.
-// Every one of them fails at run time with -32601 against every browser; they
-// are listed here only so that this test can enforce the rule going forward
-// instead of failing on debt it did not create. The fix is to delete the call,
-// not to add a line here.
-//
-// Removing an entry should make the test pass, because the call is gone.
-var knownDead = map[string]bool{
-	// Removed from the protocol; type profiling was dropped from V8.
-	"Profiler.startTypeProfile": true,
-	"Profiler.stopTypeProfile":  true,
-	"Profiler.takeTypeProfile":  true,
-
-	// Never existed. Runtime reports contexts by event, not by query.
-	"Runtime.getExecutionContexts": true,
-
-	// Removed; Debugger.scriptParsed now carries resolvedBreakpoints.
-	"Debugger.breakpointResolved": true,
 }
 
 func moduleRoot(t *testing.T) string {

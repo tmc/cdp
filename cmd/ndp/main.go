@@ -159,37 +159,6 @@ var runtimeCmd = &cobra.Command{
 	Short: "Runtime domain commands",
 }
 
-var runtimeContextsCmd = &cobra.Command{
-	Use:   "contexts <port>",
-	Short: "List runtime execution contexts",
-	Args:  cobra.ExactArgs(1),
-	Run: func(cmd *cobra.Command, args []string) {
-		ctx := createContext()
-		port := args[0]
-
-		client := NewV8InspectorClient("127.0.0.1", port, verbose)
-		if err := client.ConnectByPort(ctx, port); err != nil {
-			log.Fatalf("Failed to connect: %v", err)
-		}
-		rt := NewV8Runtime(client)
-		if err := rt.EnableRuntime(); err != nil {
-			log.Fatalf("Failed to enable runtime: %v", err)
-		}
-
-		contexts, err := rt.GetExecutionContexts()
-		if err != nil {
-			log.Fatalf("Failed to get contexts: %v", err)
-		}
-		if len(contexts) == 0 {
-			fmt.Println("No execution contexts reported")
-			return
-		}
-		for _, execCtx := range contexts {
-			fmt.Printf("%d\t%s\t%s\n", execCtx.ID, execCtx.Name, execCtx.Origin)
-		}
-	},
-}
-
 var runtimeDisableCmd = &cobra.Command{
 	Use:   "disable <port>",
 	Short: "Disable the runtime domain for a target",
@@ -390,7 +359,6 @@ func init() {
 
 	// Runtime subcommands
 	runtimeCmd.AddCommand(runtimeEvalCmd)
-	runtimeCmd.AddCommand(runtimeContextsCmd)
 	runtimeCmd.AddCommand(runtimeDisableCmd)
 	runtimeCmd.AddCommand(runtimeReleaseObjectCmd)
 	runtimeCmd.AddCommand(runtimeReleaseGroupCmd)

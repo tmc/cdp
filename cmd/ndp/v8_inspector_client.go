@@ -360,8 +360,6 @@ func (c *V8InspectorClient) handleEvent(method string, params map[string]interfa
 		c.handleDebuggerPaused(params)
 	case "Debugger.resumed":
 		c.handleDebuggerResumed(params)
-	case "Debugger.breakpointResolved":
-		c.handleBreakpointResolved(params)
 	}
 
 	// Call registered event handlers
@@ -391,6 +389,13 @@ func (c *V8InspectorClient) handleScriptParsed(params map[string]interface{}) {
 		c.scripts[script.ScriptID] = script
 		c.mu.Unlock()
 	}
+	if resolved, ok := params["resolvedBreakpoints"].([]interface{}); ok {
+		for _, item := range resolved {
+			if breakpoint, ok := item.(map[string]interface{}); ok {
+				c.resolveBreakpoint(breakpoint)
+			}
+		}
+	}
 }
 
 func (c *V8InspectorClient) handleDebuggerPaused(params map[string]interface{}) {
@@ -419,7 +424,7 @@ func (c *V8InspectorClient) handleDebuggerResumed(params map[string]interface{})
 	c.callFrames = nil
 }
 
-func (c *V8InspectorClient) handleBreakpointResolved(params map[string]interface{}) {
+func (c *V8InspectorClient) resolveBreakpoint(params map[string]interface{}) {
 	if breakpointID, ok := params["breakpointId"].(string); ok {
 		c.mu.Lock()
 		defer c.mu.Unlock()

@@ -44,7 +44,6 @@ Every command has its own flags and help text:
 	v8 [command]                         Advanced V8 Inspector debugging,
 	                                     compatible with Chrome DevTools
 	runtime evaluate <expr>              Evaluate an expression
-	runtime contexts <port>              List execution contexts
 	runtime compile <port> <expr>        Compile a script and print its ID
 	runtime run <port> <script-id>       Run a compiled script
 	runtime call <port> <object-id> <fn> Call a function on a remote object
