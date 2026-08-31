@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -232,7 +233,12 @@ func runCapture(t testing.TB, e *Engine, s *State, filename string, r io.Reader,
 		return e.Execute(s.State, filename, bufio.NewReader(r), logW)
 	}()
 
-	if err != nil {
+	switch {
+	case err == nil || errors.Is(err, ErrStop):
+		// stop ends the script early; that is not a failure.
+	case errors.Is(err, ErrSkip):
+		t.Skip(err)
+	default:
 		t.Errorf("FAIL: %v", err)
 	}
 	return captured
