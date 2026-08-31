@@ -130,10 +130,11 @@
 // runs while still showing that content was present. Repeatable.
 //
 // screenrecord captures Chrome screencast frames from the active tab. It writes
-// GIF, PNG, or numbered PNG frame artifacts. --selector crops every frame to a
-// fixed element border box. If a script fails while recording, cdpscripttest
-// stops the recording during cleanup and leaves the artifact path in the command
-// log for reports.
+// GIF, PNG, WebM, or numbered PNG frame artifacts. WebM uses ffmpeg found in
+// PATH; the other formats do not need an external encoder. --selector crops
+// every frame to a fixed element border box. If a script fails while recording,
+// cdpscripttest stops the recording during cleanup and leaves the artifact path
+// in the command log for reports.
 //
 // screenshot-compare options:
 //

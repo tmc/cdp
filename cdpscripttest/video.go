@@ -14,6 +14,7 @@ import (
 	"image/png"
 	"math"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -31,6 +32,7 @@ const (
 	ScreenRecordGIF    ScreenRecordFormat = "gif"
 	ScreenRecordFrames ScreenRecordFormat = "frames"
 	ScreenRecordPNG    ScreenRecordFormat = "png"
+	ScreenRecordWebM   ScreenRecordFormat = "webm"
 )
 
 // DefaultScreenRecordMaxFrames bounds retained recording frames.
@@ -59,10 +61,11 @@ type ScreenRecordResult struct {
 type screenCrop struct{ X, Y, Width, Height float64 }
 
 type screenRecorder struct {
-	ctx  context.Context
-	path string
-	opts ScreenRecordOptions
-	crop *screenCrop
+	ctx    context.Context
+	path   string
+	opts   ScreenRecordOptions
+	crop   *screenCrop
+	ffmpeg string
 
 	mu        sync.Mutex
 	frames    []screenFrame
@@ -92,6 +95,14 @@ func (s *State) StartScreenRecordingWithOptions(opts ScreenRecordOptions) (strin
 	if err := normalizeScreenRecordOptions(&opts); err != nil {
 		return "", err
 	}
+	ffmpeg := ""
+	if opts.Format == ScreenRecordWebM {
+		var err error
+		ffmpeg, err = findWebMEncoder(exec.LookPath)
+		if err != nil {
+			return "", err
+		}
+	}
 	path := filepath.Join(s.artifactDirFn(), opts.Filename)
 	if opts.Format == ScreenRecordFrames {
 		if err := os.MkdirAll(path, 0o777); err != nil {
@@ -112,7 +123,7 @@ func (s *State) StartScreenRecordingWithOptions(opts ScreenRecordOptions) (strin
 		}
 		crop = &box
 	}
-	r := &screenRecorder{ctx: s.cdpCtx, path: path, opts: opts, crop: crop, started: time.Now()}
+	r := &screenRecorder{ctx: s.cdpCtx, path: path, opts: opts, crop: crop, ffmpeg: ffmpeg, started: time.Now()}
 	chromedp.ListenTarget(s.cdpCtx, func(ev any) {
 		if f, ok := ev.(*page.EventScreencastFrame); ok {
 			r.addFrame(f)
@@ -133,7 +144,7 @@ func normalizeScreenRecordOptions(opts *ScreenRecordOptions) error {
 	if opts.Format == "" {
 		opts.Format = ScreenRecordGIF
 	}
-	if opts.Format != ScreenRecordGIF && opts.Format != ScreenRecordFrames && opts.Format != ScreenRecordPNG {
+	if opts.Format != ScreenRecordGIF && opts.Format != ScreenRecordFrames && opts.Format != ScreenRecordPNG && opts.Format != ScreenRecordWebM {
 		return fmt.Errorf("screenrecord: unsupported format %q", opts.Format)
 	}
 	if opts.Filename == "" {
@@ -142,6 +153,8 @@ func normalizeScreenRecordOptions(opts *ScreenRecordOptions) error {
 			opts.Filename = "screenrecord.gif"
 		case ScreenRecordPNG:
 			opts.Filename = "screenrecord.png"
+		case ScreenRecordWebM:
+			opts.Filename = "screenrecord.webm"
 		case ScreenRecordFrames:
 			opts.Filename = "screenrecord"
 		}
@@ -153,6 +166,8 @@ func normalizeScreenRecordOptions(opts *ScreenRecordOptions) error {
 			opts.Filename += ".gif"
 		case ScreenRecordPNG:
 			opts.Filename += ".png"
+		case ScreenRecordWebM:
+			opts.Filename += ".webm"
 		}
 		ext = filepath.Ext(opts.Filename)
 	}
@@ -192,6 +207,8 @@ func formatFromFilename(name string) ScreenRecordFormat {
 		return ScreenRecordGIF
 	case ".png":
 		return ScreenRecordPNG
+	case ".webm":
+		return ScreenRecordWebM
 	}
 	return ""
 }
@@ -305,11 +322,54 @@ func (r *screenRecorder) stop() (ScreenRecordResult, error) {
 		err = writePNG(r.path, frames[len(frames)-1].img)
 	case ScreenRecordFrames:
 		err = writeFrameManifest(r.path, result)
+	case ScreenRecordWebM:
+		err = writeWebM(r.ctx, r.ffmpeg, r.path, frames)
 	}
 	if err != nil {
 		return result, err
 	}
 	return result, nil
+}
+
+func findWebMEncoder(lookPath func(string) (string, error)) (string, error) {
+	path, err := lookPath("ffmpeg")
+	if err != nil {
+		return "", fmt.Errorf("screenrecord: webm requires ffmpeg: %w", err)
+	}
+	return path, nil
+}
+
+func writeWebM(ctx context.Context, encoder, path string, frames []screenFrame) error {
+	cmd := exec.CommandContext(ctx, encoder,
+		"-f", "image2pipe", "-vcodec", "png", "-framerate", "10", "-i", "pipe:0",
+		"-c:v", "libvpx-vp9", "-pix_fmt", "yuv420p", "-y", path)
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		return fmt.Errorf("screenrecord: create webm input: %w", err)
+	}
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("screenrecord: start ffmpeg: %w", err)
+	}
+	for _, frame := range frames {
+		if err := png.Encode(stdin, frame.img); err != nil {
+			stdin.Close()
+			cmd.Wait()
+			return fmt.Errorf("screenrecord: write webm frame: %w", err)
+		}
+	}
+	if err := stdin.Close(); err != nil {
+		cmd.Wait()
+		return fmt.Errorf("screenrecord: close webm input: %w", err)
+	}
+	if err := cmd.Wait(); err != nil {
+		if message := strings.TrimSpace(stderr.String()); message != "" {
+			return fmt.Errorf("screenrecord: encode webm: %w: %s", err, message)
+		}
+		return fmt.Errorf("screenrecord: encode webm: %w", err)
+	}
+	return nil
 }
 
 func runCDP(ctx context.Context, method string, params, result any) error {

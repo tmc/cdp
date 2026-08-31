@@ -1,0 +1,12 @@
+# Record a tab as a WebM artifact. Requires ffmpeg in PATH.
+
+[!exec:ffmpeg] skip
+
+set-base-url ${BASE_URL}
+navigate /screenrecord-basic.html
+wait-visible '#box'
+screenrecord start --format webm recording.webm
+sleep 500ms
+screenrecord stop
+stdout 'recording.webm'
+stdout 'format: webm'

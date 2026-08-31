@@ -78,9 +78,10 @@ screenshot-compare --threshold 3 --blur '.timestamp' '#main' main.png
   Repeatable.
 - `--threshold N` is max allowed diff percent (default 5). Raising it to absorb
   churn also absorbs regressions — blur the churn instead.
-- `screenshot-sel` captures one element; `screenrecord start|stop` writes an
-  animated GIF, and a script that fails mid-recording still leaves the GIF path
-  in the command log.
+- `screenshot-sel` captures one element; `screenrecord start|stop` writes GIF,
+  PNG, numbered PNG frames, or WebM. WebM requires `ffmpeg` in `PATH`; the
+  other formats have no external dependency. A script that fails mid-recording
+  still leaves the artifact path in the command log.
 
 ## Network emulation
 

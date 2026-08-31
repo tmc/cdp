@@ -3,9 +3,11 @@
 package cdpscripttest_test
 
 import (
+	"bytes"
 	"encoding/json"
 	"image/png"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
 
@@ -104,8 +106,14 @@ func TestRunFilesWritesScreenrecordFormats(t *testing.T) {
 	for _, tt := range []struct{ name, file, path string }{
 		{"png", "testdata/screenrecord-png.txt", "recording.png"},
 		{"frames", "testdata/screenrecord-frames.txt", "recording-frames/manifest.json"},
+		{"webm", "testdata/screenrecord-webm.txt", "recording.webm"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
+			if tt.name == "webm" {
+				if _, err := exec.LookPath("ffmpeg"); err != nil {
+					t.Skip("ffmpeg not installed")
+				}
+			}
 			dir := t.TempDir()
 			res, err := cdpscripttest.RunFiles(t.Context(), cdpscripttest.NewEngine(), []string{tt.file}, cdpscripttest.RunOptions{BaseURL: baseURL, ArtifactDir: dir, AllocatorOpts: opts})
 			if err != nil {
@@ -133,6 +141,16 @@ func TestRunFilesWritesScreenrecordFormats(t *testing.T) {
 				}
 				if got, want := img.Bounds().Size().Y, 80; got != want {
 					t.Fatalf("PNG height = %d, want %d", got, want)
+				}
+			}
+			if tt.name == "webm" {
+				data, err := os.ReadFile(path)
+				if err != nil {
+					t.Fatal(err)
+				}
+				// Every Matroska and WebM file starts with the EBML header.
+				if len(data) < 4 || !bytes.Equal(data[:4], []byte{0x1a, 0x45, 0xdf, 0xa3}) {
+					t.Fatalf("artifact is not a webm file: %d bytes", len(data))
 				}
 			}
 		})

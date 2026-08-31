@@ -9,7 +9,9 @@ import (
 	"image/gif"
 	"image/jpeg"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -67,6 +69,7 @@ func TestNormalizeScreenRecordOptions(t *testing.T) {
 		{"gif default", ScreenRecordOptions{}, ScreenRecordOptions{Filename: "screenrecord.gif", Format: ScreenRecordGIF, Quality: 80, EveryNthFrame: 1, MaxFrames: DefaultScreenRecordMaxFrames}, false},
 		{"png extension", ScreenRecordOptions{Filename: "final.png"}, ScreenRecordOptions{Filename: "final.png", Format: ScreenRecordPNG, Quality: 80, EveryNthFrame: 1, MaxFrames: DefaultScreenRecordMaxFrames}, false},
 		{"frames", ScreenRecordOptions{Filename: "capture", Format: ScreenRecordFrames}, ScreenRecordOptions{Filename: "capture", Format: ScreenRecordFrames, Quality: 80, EveryNthFrame: 1, MaxFrames: DefaultScreenRecordMaxFrames}, false},
+		{"webm extension", ScreenRecordOptions{Filename: "final.webm"}, ScreenRecordOptions{Filename: "final.webm", Format: ScreenRecordWebM, Quality: 80, EveryNthFrame: 1, MaxFrames: DefaultScreenRecordMaxFrames}, false},
 		{"conflict", ScreenRecordOptions{Filename: "final.gif", Format: ScreenRecordPNG}, ScreenRecordOptions{}, true},
 		{"max frames", ScreenRecordOptions{MaxFrames: DefaultScreenRecordMaxFrames + 1}, ScreenRecordOptions{}, true},
 	}
@@ -87,6 +90,43 @@ func TestNormalizeScreenRecordOptions(t *testing.T) {
 				t.Fatalf("options = %#v, want %#v", opts, tt.want)
 			}
 		})
+	}
+}
+
+func TestFindWebMEncoder(t *testing.T) {
+	const encoder = "/test/ffmpeg"
+	got, err := findWebMEncoder(func(name string) (string, error) {
+		if name != "ffmpeg" {
+			t.Fatalf("lookPath(%q), want ffmpeg", name)
+		}
+		return encoder, nil
+	})
+	if err != nil || got != encoder {
+		t.Fatalf("findWebMEncoder() = %q, %v", got, err)
+	}
+	_, err = findWebMEncoder(func(string) (string, error) { return "", exec.ErrNotFound })
+	if err == nil || !strings.Contains(err.Error(), "ffmpeg") {
+		t.Fatalf("missing encoder error = %v", err)
+	}
+}
+
+func TestWriteWebM(t *testing.T) {
+	encoder, err := exec.LookPath("ffmpeg")
+	if err != nil {
+		t.Skip("ffmpeg not installed")
+	}
+	path := filepath.Join(t.TempDir(), "recording.webm")
+	frames := []screenFrame{{img: solidImage(color.RGBA{R: 0xff, A: 0xff})}, {img: solidImage(color.RGBA{G: 0xff, A: 0xff})}}
+	if err := writeWebM(t.Context(), encoder, path, frames); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 0x1a45dfa3 is the EBML header every Matroska and WebM file starts with.
+	if len(data) < 4 || !bytes.Equal(data[:4], []byte{0x1a, 0x45, 0xdf, 0xa3}) {
+		t.Fatalf("output is not a webm file: %d bytes, first bytes %x", len(data), data[:min(4, len(data))])
 	}
 }
 
