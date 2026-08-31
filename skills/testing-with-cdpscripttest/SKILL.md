@@ -15,15 +15,14 @@ test's working directory, and each script runs as a subtest with its own tab.
 
 ## Hard rules
 
-1. **Browser-backed fixtures run behind the `cdp` build tag, one package at a
-   time:** `go test -tags cdp -p 1 ./cdpscripttest`. *Why:* without the tag the
+1. **Browser-backed fixtures run behind the `cdp` build tag, one fixture at a
+   time:** `go test -tags cdp -p 1 -parallel 1 ./cdpscripttest`. *Why:* without the tag the
    fixtures do not run at all — a green `go test ./...` proves nothing about
-   them — and full package parallelism makes independent browser instances
+   them — and parallel fixture subtests make independent browser instances
    contend, producing failures that are local resource contention, not
-   regressions. *Escape:* none for the tag. For `-p 1`, if you must parallelize,
-   re-run any failure serially before believing it. **`-p 1` is not fixture
-   isolation:** `Test` calls `t.Parallel()` per fixture, so scripts inside one
-   package still run concurrently. Use `RunFiles` when they share state.
+   regressions. *Escape:* none for the tag. **`-parallel 1` is fixture
+   isolation:** `Test` calls `t.Parallel()` per fixture; `-p 1` only serializes
+   packages. Use `RunFiles` when scripts share state.
 
 2. **Fixtures must not depend on third-party network.** Serve a local fixture,
    or use `testdata/*.html` extracted from the archive. *Why:* a test that fails
@@ -145,7 +144,7 @@ at page load.
 **Gate:**
 
 ```bash
-go test -tags cdp -p 1 -run TestCDP ./cdpscripttest
+go test -tags cdp -p 1 -parallel 1 -run TestCDP ./cdpscripttest
 ```
 
 passes, and `-v` shows one subtest per fixture — not zero.
@@ -168,7 +167,7 @@ Restore it.
 ## Phase 5 — Artifacts and baselines
 
 ```bash
-CDPSCRIPTTEST_ARTIFACTS=./out go test -tags cdp -p 1 ./cdpscripttest
+CDPSCRIPTTEST_ARTIFACTS=./out go test -tags cdp -p 1 -parallel 1 ./cdpscripttest
 ```
 
 writes `./out/<script-name>/*.png` with no hash nesting — the readable layout
@@ -245,7 +244,7 @@ pull request.
   on.
 - A test needs a real logged-in account or a third-party service — it does not
   belong in the default suite (rule 2). Report it as a live-only example.
-- Fixtures fail only under full parallelism — re-run with `-p 1` before
+- Fixtures fail only under full parallelism — re-run with `-parallel 1` before
   reporting a regression (rule 1).
 - `NewEngine` panics outside a test binary — that is `DefaultConds` calling
   `testing.Short()`. Use `NewCLIEngine`; do not work around the panic.

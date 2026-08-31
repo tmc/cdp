@@ -3,7 +3,7 @@
 //
 // Browser-backed fixture tests use the cdp build tag:
 //
-//	go test -tags cdp -p 1 ./cdpscripttest
+//	go test -tags cdp -p 1 -parallel 1 ./cdpscripttest
 //
 // Scripts are plain-text txtar archives: the archive comment section is the
 // script body, and any -- filename -- sections are files extracted to the

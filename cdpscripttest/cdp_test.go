@@ -25,7 +25,7 @@ func TestCDP(t *testing.T) {
 		}
 	}
 	if len(matched) == 0 {
-		t.Log("run browser fixtures with: go test -tags cdp -p 1 ./cdpscripttest")
+		t.Log("run browser fixtures with: go test -tags cdp -p 1 -parallel 1 ./cdpscripttest")
 		t.Skip("no cdp fixtures found")
 	}
 
@@ -39,11 +39,13 @@ func TestCDP(t *testing.T) {
 
 	allocCtx, cancel := chromedp.NewExecAllocator(t.Context(), opts...)
 	t.Cleanup(cancel)
+	browserCtx, cancelBrowser := chromedp.NewContext(allocCtx)
+	t.Cleanup(cancelBrowser)
 
 	baseURL := startTestServer(t)
 	e := cdpscripttest.NewEngine()
 
 	for _, pattern := range matched {
-		cdpscripttest.Test(t, e, allocCtx, baseURL, pattern, nil)
+		cdpscripttest.Test(t, e, browserCtx, baseURL, pattern, nil)
 	}
 }

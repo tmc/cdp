@@ -28,17 +28,17 @@ assertion and comparison surface.
 ## Running
 
 ```bash
-go test -tags cdp -p 1 ./cdpscripttest              # all browser fixtures
-go test -tags cdp -p 1 -run TestCDP/login ./cdpscripttest
-go test -tags cdp -p 1 -v ./cdpscripttest           # one subtest line per fixture
+go test -tags cdp -p 1 -parallel 1 ./cdpscripttest              # all browser fixtures
+go test -tags cdp -p 1 -parallel 1 -run TestCDP/login ./cdpscripttest
+go test -tags cdp -p 1 -parallel 1 -v ./cdpscripttest           # one subtest line per fixture
 ```
 
 Without `-tags cdp` the browser-backed fixtures are compiled out. A green run
 without the tag says nothing about them.
 
-`-p 1` matters: independent browser instances contend for resources, and the
-resulting failures look like regressions. Re-run any failure serially before
-believing it.
+`-parallel 1` matters: independent browser instances contend for resources,
+and the resulting failures look like regressions. `-p 1` serializes packages,
+not fixture subtests.
 
 ## Environment and flags
 
@@ -181,10 +181,10 @@ opts = append(opts,
 Chrome's localhost requests through a proxy that cannot reach the test server,
 and the failure looks like the server never started.
 
-**Run scripts sequentially.** `Test` calls `t.Parallel()` per fixture, and
-`-p 1` serializes packages, not subtests. Prefer `RunFiles(ctx, eng, files,
-RunOptions{...})` with `ExpandGlobs` — it runs files in order, owns the
-allocator, and reports per-file results through `OnResult`. Roll your own loop
+**Run scripts sequentially.** `Test` calls `t.Parallel()` per fixture; use
+`-parallel 1` because `-p 1` serializes packages, not subtests. Prefer
+`RunFiles(ctx, eng, files, RunOptions{...})` with `ExpandGlobs` — it runs files
+in order, owns the allocator, and reports per-file results through `OnResult`. Roll your own loop
 only for something `RunOptions` does not expose:
 one `chromedp.NewContext(browserCtx)` tab per script, `t.TempDir()` as the
 workdir, `NewStateWithArtifactDir(tabCtx, workdir, baseURL, artifacts, env)`,
@@ -223,9 +223,9 @@ coverage by default and writes `coverage.json` into each artifact directory.
 |---|---|
 | Suite passes, nothing ran | glob matched no files, or `-tags cdp` missing. `Test` fails on an empty glob — check the tag first |
 | Passes locally, fails in CI | headed/headless rendering difference, or missing fonts; compare the artifact images, do not raise the threshold |
-| Flaky only in a full-repo run | package parallelism; re-run with `-p 1` |
+| Flaky only in a full-repo run | package parallelism; re-run with `-p 1`, and add `-parallel 1` for fixtures |
 | `coverage.json` appears unbidden | coverage is on by default; `CDPSCRIPTTEST_COVERAGE=0` |
 | Every navigate fails against a local server | `HTTP_PROXY` is exported; add `chromedp.Flag("no-proxy-server", true)` |
-| Scripts interfere with each other | `Test` runs fixtures in parallel and `-p 1` does not change that; switch to `RunFiles`, or reset server state per script |
+| Scripts interfere with each other | `Test` runs fixtures in parallel; use `-parallel 1`, or switch to `RunFiles` and reset server state per script |
 | `rtc-*` commands fail | `rtc-inject` was never called, or ran after `navigate` |
 | Baseline drift after an intentional UI change | update deliberately with `-update-golden`, then look at every changed image before committing |

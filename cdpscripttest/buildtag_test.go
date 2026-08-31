@@ -6,7 +6,7 @@ import (
 )
 
 func TestBrowserFixtureBuildTagGuidance(t *testing.T) {
-	t.Log("browser-backed fixtures are behind the cdp build tag; run: go test -tags cdp -p 1 ./cdpscripttest")
+	t.Log("browser-backed fixtures are behind the cdp build tag; run: go test -tags cdp -p 1 -parallel 1 ./cdpscripttest")
 
 	for _, pattern := range []string{
 		"testdata/interaction/*.txtar",
