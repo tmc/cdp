@@ -18,6 +18,10 @@ type Script struct {
 	Log         string
 	ArtifactDir string
 	Failed      bool
+
+	// Detail excludes the script from the combined report. It still gets a
+	// report of its own.
+	Detail bool
 }
 
 // Options configures a Writer.
@@ -61,6 +65,9 @@ func (w *Writer) Update(script Script) error {
 	}
 	if script.ArtifactDir == "" {
 		script.ArtifactDir = filepath.Join(w.opts.Dir, script.Name)
+	}
+	if manifest, ok := w.scripts[script.Name]; ok && manifest.Detail {
+		script.Detail = true
 	}
 	if err := WriteMarkdown(filepath.Join(script.ArtifactDir, "report.md"), script); err != nil {
 		return fmt.Errorf("write markdown report: %w", err)
@@ -112,22 +119,30 @@ func WriteHTML(path string, script Script) error {
 
 func (w *Writer) writeCombined() error {
 	names := make([]string, 0, len(w.scripts))
-	for name := range w.scripts {
+	for name, script := range w.scripts {
+		if script.Detail {
+			continue
+		}
 		names = append(names, name)
 	}
 	sort.Strings(names)
 	var markdown bytes.Buffer
 	fmt.Fprintln(&markdown, "# CDP Script Test Report")
 	fmt.Fprintln(&markdown)
-	passed, failed := 0, 0
-	for _, script := range w.results {
+	passed, failed, done := 0, 0, 0
+	for _, name := range names {
+		script, ok := w.results[name]
+		if !ok {
+			continue
+		}
+		done++
 		if script.Failed {
 			failed++
 		} else {
 			passed++
 		}
 	}
-	pending := len(names) - len(w.results)
+	pending := len(names) - done
 	if pending > 0 {
 		fmt.Fprintf(&markdown, "%d scripts: %d passed, %d failed, %d pending\n\n", len(names), passed, failed, pending)
 	} else {

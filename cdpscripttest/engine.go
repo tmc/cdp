@@ -303,6 +303,7 @@ func Test(t *testing.T, e *Engine, allocCtx context.Context, baseURL, pattern st
 				Name:        name,
 				Source:      a.Comment,
 				ArtifactDir: filepath.Join(artRoot, name),
+				Detail:      ExtractReportLevel(a.Comment) == ReportDetail,
 			})
 		}
 		w, err := reportpkg.NewWriter(reportpkg.Options{

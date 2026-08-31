@@ -53,7 +53,11 @@ Usage:
 	    Display screenshots inline, using the iTerm2 or Kitty protocol when
 	    the terminal supports it.
 	-emit-cdp-report
-	    Write report.md into the artifact directory.
+	    Write a report for each script. Defaults to the artifact directory.
+	-cdp-report-dir dir
+	    Write reports and their artifacts to dir.
+	-emit-cdp-report-html
+	    Write HTML alongside Markdown reports.
 	-emit-cdp-report-combined
 	    Write every report into one file. Implies -emit-cdp-report.
 

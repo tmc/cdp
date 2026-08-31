@@ -106,6 +106,42 @@ func TestWriter(t *testing.T) {
 	}
 }
 
+// TestWriterDetailExcludedFromCombined checks that a script marked detail gets
+// its own report but stays out of the combined index, including out of the
+// script counts.
+func TestWriterDetailExcludedFromCombined(t *testing.T) {
+	dir := t.TempDir()
+	w, err := NewWriter(Options{Dir: dir, Combined: true}, []Script{
+		{Name: "overview", Source: []byte("# Overview\n")},
+		{Name: "deep", Source: []byte("# Deep\n"), Detail: true},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"overview", "deep"} {
+		// The manifest carries Detail; an Update need not repeat it.
+		if err := w.Update(Script{Name: name, Log: "> navigate /\n"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+	index, err := os.ReadFile(filepath.Join(dir, "index.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(index), "[deep]") {
+		t.Errorf("detail script appears in combined index:\n%s", index)
+	}
+	if !strings.Contains(string(index), "1 scripts: 1 passed, 0 failed\n") {
+		t.Errorf("detail script counted in combined index:\n%s", index)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "deep", "report.md")); err != nil {
+		t.Errorf("detail script has no report of its own: %v", err)
+	}
+}
+
 func TestWriteHTMLEscapesOutput(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "report.html")
 	if err := WriteHTML(path, Script{Name: "<script>", Log: "# <section>\n> echo '<output>'\n"}); err != nil {

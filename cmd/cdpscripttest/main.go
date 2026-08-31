@@ -20,6 +20,7 @@ import (
 
 	"github.com/chromedp/chromedp"
 	"github.com/tmc/cdp/cdpscripttest"
+	"github.com/tmc/cdp/cdpscripttest/report"
 	"github.com/tmc/cdp/internal/browser"
 	"golang.org/x/term"
 	"golang.org/x/tools/txtar"
@@ -51,6 +52,8 @@ func runArgs(args []string, stdout, stderr io.Writer) int {
 	windowSize := fs.String("window-size", "", "browser window size as WxH (e.g. 1280x900); defaults to terminal size")
 	inlineImages := fs.Bool("images", false, "display screenshots inline in the terminal (auto-detects iTerm2/Kitty protocol)")
 	emitReport := fs.Bool("emit-cdp-report", false, "generate report.md in the artifact directory")
+	reportDir := fs.String("cdp-report-dir", "", "write reports to this directory")
+	emitReportHTML := fs.Bool("emit-cdp-report-html", false, "write HTML alongside Markdown reports")
 	combinedReport := fs.Bool("emit-cdp-report-combined", false, "write all reports into one combined file (implies --emit-cdp-report)")
 
 	if err := fs.Parse(args); err != nil {
@@ -118,14 +121,25 @@ func runArgs(args []string, stdout, stderr io.Writer) int {
 	}
 	defer allocCancel()
 
-	if *combinedReport {
-		*emitReport = true
-	}
+	reportOpts := reportOptions(*emitReport, *emitReportHTML, *combinedReport, *reportDir, *artifacts, files)
 
 	if *watch {
-		return runWatch(ctx, allocCtx, e, files, *baseURL, *artifacts, *timeout, *updateGolden, *emitReport, *combinedReport, out)
+		return runWatch(ctx, allocCtx, e, files, *baseURL, *artifacts, *timeout, *updateGolden, reportOpts, out)
 	}
-	return runOnce(ctx, allocCtx, e, files, *baseURL, *artifacts, *timeout, *updateGolden, *interactive, *emitReport, *combinedReport, out)
+	return runOnce(ctx, allocCtx, e, files, *baseURL, *artifacts, *timeout, *updateGolden, *interactive, reportOpts, out)
+}
+
+func reportOptions(emit, html, combined bool, dir, artifacts string, files []string) *report.Options {
+	if !emit && !html && !combined && dir == "" {
+		return nil
+	}
+	if dir == "" {
+		dir = artifacts
+	}
+	if dir == "" && len(files) > 0 {
+		dir = filepath.Join(filepath.Dir(files[0]), "screenshots")
+	}
+	return &report.Options{Dir: dir, HTML: html, Combined: combined}
 }
 
 // resolveWindowSize parses an optional "WxH" string; if empty it uses the
@@ -220,33 +234,30 @@ func browserCandidates() []string {
 
 func runOnce(ctx context.Context, allocCtx context.Context, e *cdpscripttest.Engine,
 	files []string, baseURL, artifactDir string, timeout time.Duration,
-	updateGolden, interactive, emitReport, combinedReport bool, out *printer) int {
+	updateGolden, interactive bool, reportOpts *report.Options, out *printer) int {
 
 	exitCode := 0
-
-	// Live-updating combined report.
-	var combinedWriter *cdpscripttest.CombinedReportWriter
-	if combinedReport && artifactDir != "" {
-		names := make([]string, 0, len(files))
-		sources := make(map[string][]byte, len(files))
+	var reporter *report.Writer
+	if reportOpts != nil {
+		scripts := make([]report.Script, 0, len(files))
 		for _, file := range files {
-			name := strings.TrimSuffix(filepath.Base(file), ".txt")
 			a, err := txtar.ParseFile(file)
 			if err != nil {
+				out.info(fmt.Sprintf("report: parse %s: %v", file, err))
 				continue
 			}
-			if cdpscripttest.ExtractReportLevel(a.Comment) == cdpscripttest.ReportOverview {
-				names = append(names, name)
-				sources[name] = a.Comment
-			}
+			name := strings.TrimSuffix(filepath.Base(file), ".txt")
+			scripts = append(scripts, report.Script{
+				Name:        name,
+				Source:      a.Comment,
+				ArtifactDir: filepath.Join(reportOpts.Dir, name),
+				Detail:      cdpscripttest.ExtractReportLevel(a.Comment) == cdpscripttest.ReportDetail,
+			})
 		}
-		reportPath := filepath.Join(artifactDir, "report.md")
-		w, err := cdpscripttest.NewCombinedReportWriter(reportPath, names, sources)
+		var err error
+		reporter, err = report.NewWriter(*reportOpts, scripts)
 		if err != nil {
-			out.info(fmt.Sprintf("combined report: %v", err))
-		} else {
-			combinedWriter = w
-			out.info(fmt.Sprintf("combined report: %s", reportPath))
+			out.info(fmt.Sprintf("report: %v", err))
 		}
 	}
 
@@ -260,7 +271,9 @@ func runOnce(ctx context.Context, allocCtx context.Context, e *cdpscripttest.Eng
 
 		// Default artifact dir: screenshots/ next to the script file.
 		artDir := artifactDir
-		if artDir == "" {
+		if reporter != nil {
+			artDir = filepath.Join(reportOpts.Dir, strings.TrimSuffix(filepath.Base(file), ".txt"))
+		} else if artDir == "" {
 			artDir = filepath.Join(filepath.Dir(file), "screenshots")
 		}
 
@@ -328,27 +341,16 @@ func runOnce(ctx context.Context, allocCtx context.Context, e *cdpscripttest.Eng
 			exitCode = 1
 		}
 
-		if emitReport && artDir != "" {
-			scriptArtDir := filepath.Join(artDir, name)
-			reportPath := filepath.Join(scriptArtDir, "report.md")
-			if err := cdpscripttest.GenerateReport(reportPath, name, a.Comment, logBuf.String()); err != nil {
-				out.info(fmt.Sprintf("report generation failed: %v", err))
-			} else {
-				out.info(fmt.Sprintf("report: %s", reportPath))
-			}
-		}
-
-		// Update combined report (skip detail-only scripts).
-		if combinedWriter != nil && cdpscripttest.ExtractReportLevel(a.Comment) == cdpscripttest.ReportOverview {
+		if reporter != nil {
 			scriptFailed := runErr != nil && !errors.Is(runErr, cdpscripttest.ErrSkip) && !errors.Is(runErr, cdpscripttest.ErrStop)
-			if err := combinedWriter.Update(cdpscripttest.ScriptReport{
+			if err := reporter.Update(report.Script{
 				Name:        name,
 				Source:      a.Comment,
 				Log:         logBuf.String(),
-				ArtifactDir: filepath.Join(artDir, name),
+				ArtifactDir: artDir,
 				Failed:      scriptFailed,
 			}); err != nil {
-				out.info(fmt.Sprintf("combined report update: %v", err))
+				out.info(fmt.Sprintf("report: %v", err))
 			}
 		}
 
@@ -356,12 +358,17 @@ func runOnce(ctx context.Context, allocCtx context.Context, e *cdpscripttest.Eng
 		tcancel()
 		os.RemoveAll(workdir)
 	}
+	if reporter != nil {
+		if err := reporter.Close(); err != nil {
+			out.info(fmt.Sprintf("report: %v", err))
+		}
+	}
 
 	return exitCode
 }
 
 func runWatch(ctx context.Context, allocCtx context.Context, e *cdpscripttest.Engine,
-	files []string, baseURL, artifactDir string, timeout time.Duration, updateGolden, emitReport, combinedReport bool, out *printer) int {
+	files []string, baseURL, artifactDir string, timeout time.Duration, updateGolden bool, reportOpts *report.Options, out *printer) int {
 
 	mtimes := make(map[string]time.Time)
 	updateMtimes := func() {
@@ -374,7 +381,7 @@ func runWatch(ctx context.Context, allocCtx context.Context, e *cdpscripttest.En
 	updateMtimes()
 
 	fmt.Fprintf(os.Stderr, "watching %d file(s), Ctrl-C to stop\n", len(files))
-	runOnce(ctx, allocCtx, e, files, baseURL, artifactDir, timeout, updateGolden, false, emitReport, combinedReport, out)
+	runOnce(ctx, allocCtx, e, files, baseURL, artifactDir, timeout, updateGolden, false, reportOpts, out)
 
 	for {
 		select {
@@ -393,7 +400,7 @@ func runWatch(ctx context.Context, allocCtx context.Context, e *cdpscripttest.En
 		if len(changed) > 0 {
 			fmt.Print("\033[H\033[2J")
 			out.info(fmt.Sprintf("re-running %d changed file(s)...", len(changed)))
-			runOnce(ctx, allocCtx, e, changed, baseURL, artifactDir, timeout, updateGolden, false, emitReport, combinedReport, out)
+			runOnce(ctx, allocCtx, e, changed, baseURL, artifactDir, timeout, updateGolden, false, reportOpts, out)
 		}
 	}
 }

@@ -66,3 +66,31 @@ func TestRunArgsBadGlob(t *testing.T) {
 		t.Fatalf("stderr missing %q:\n%s", want, stderr.String())
 	}
 }
+
+func TestReportOptions(t *testing.T) {
+	tests := []struct {
+		name                            string
+		emit, html, combined            bool
+		dir, artifacts, want            string
+		wantHTML, wantCombined, wantNil bool
+	}{
+		{"disabled", false, false, false, "", "", "", false, false, true},
+		{"explicit", true, true, true, "reports", "artifacts", "reports", true, true, false},
+		{"artifacts", true, false, false, "", "artifacts", "artifacts", false, false, false},
+		{"default", true, false, false, "", "", "testdata/screenshots", false, false, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := reportOptions(tt.emit, tt.html, tt.combined, tt.dir, tt.artifacts, []string{"testdata/example.txt"})
+			if tt.wantNil {
+				if got != nil {
+					t.Fatalf("reportOptions() = %#v, want nil", got)
+				}
+				return
+			}
+			if got == nil || got.Dir != tt.want || got.HTML != tt.wantHTML || got.Combined != tt.wantCombined {
+				t.Fatalf("reportOptions() = %#v", got)
+			}
+		})
+	}
+}
