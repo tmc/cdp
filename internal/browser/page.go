@@ -13,11 +13,12 @@ import (
 	"github.com/chromedp/cdproto/page"
 	"github.com/chromedp/cdproto/runtime"
 	"github.com/chromedp/cdproto/target"
-	"github.com/chromedp/chromedp"
+	"github.com/tmc/cdp/internal/chromedp"
 )
 
 // Page represents a browser page/tab with high-level interaction methods
 type Page struct {
+	owned             bool
 	ctx               context.Context
 	cancel            context.CancelFunc
 	targetID          target.ID
@@ -37,6 +38,7 @@ func (b *Browser) NewPage() (*Page, error) {
 	newCtx, cancel := chromedp.NewContext(b.ctx)
 
 	p := &Page{
+		owned:   true,
 		ctx:     newCtx,
 		cancel:  cancel,
 		browser: b,
@@ -81,7 +83,7 @@ func (b *Browser) AttachToTarget(targetID string) (*Page, error) {
 	}
 
 	// Create context for the target
-	ctx, cancel := chromedp.NewContext(b.ctx, chromedp.WithTargetID(target.ID(targetID)))
+	ctx, cancel := chromedp.NewContext(b.ctx, chromedp.WithExistingTarget(target.ID(targetID)))
 
 	p := &Page{
 		ctx:      ctx,
@@ -141,10 +143,24 @@ func (p *Page) Context() context.Context {
 	return p.ctx
 }
 
-// Close closes the page
+// Close closes the page, including a page attached from an existing browser.
+// Canceling the attachment context alone only detaches a borrowed page.
 func (p *Page) Close() error {
-	if p.cancel != nil {
-		p.cancel()
+	if p.cancel == nil {
+		return nil
+	}
+	if p.owned {
+		return chromedp.Cancel(p.ctx)
+	}
+	defer p.cancel()
+	c := chromedp.FromContext(p.ctx)
+	if c == nil || c.Target == nil || c.Browser == nil {
+		return errors.New("page is not attached")
+	}
+	ctx, cancel := context.WithTimeout(p.ctx, 5*time.Second)
+	defer cancel()
+	if err := target.CloseTarget(c.Target.TargetID).Do(cdp.WithExecutor(ctx, c.Browser)); err != nil {
+		return fmt.Errorf("close page: %w", err)
 	}
 	return nil
 }

@@ -17,8 +17,8 @@ import (
 
 	"github.com/chromedp/cdproto/debugger"
 	"github.com/chromedp/cdproto/runtime"
-	"github.com/chromedp/chromedp"
 	"github.com/gorilla/websocket"
+	"github.com/tmc/cdp/internal/chromedp"
 )
 
 // NodeProcess represents a Node.js process with debugging enabled

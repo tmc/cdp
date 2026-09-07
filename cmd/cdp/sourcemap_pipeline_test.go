@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/chromedp/chromedp"
+	"github.com/tmc/cdp/internal/chromedp"
 	"github.com/tmc/cdp/internal/coverage"
 	"github.com/tmc/cdp/internal/sourcemap"
 	"github.com/tmc/cdp/internal/testutil"

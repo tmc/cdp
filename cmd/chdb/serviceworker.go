@@ -9,7 +9,7 @@ import (
 
 	"github.com/chromedp/cdproto/runtime"
 	"github.com/chromedp/cdproto/serviceworker"
-	"github.com/chromedp/chromedp"
+	"github.com/tmc/cdp/internal/chromedp"
 )
 
 // ServiceWorkerController handles service worker operations

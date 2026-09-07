@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/chromedp/cdproto/audits"
-	"github.com/chromedp/chromedp"
 	"github.com/spf13/cobra"
+	"github.com/tmc/cdp/internal/chromedp"
 )
 
 var auditDuration time.Duration

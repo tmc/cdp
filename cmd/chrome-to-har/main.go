@@ -20,7 +20,7 @@ import (
 	"github.com/chromedp/cdproto/har"
 	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/cdproto/runtime"
-	"github.com/chromedp/chromedp"
+	"github.com/tmc/cdp/internal/chromedp"
 
 	"github.com/tmc/cdp/internal/blocking"
 	"github.com/tmc/cdp/internal/browser"

@@ -23,8 +23,8 @@ import (
 	"github.com/chromedp/cdproto/domdebugger"
 	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/cdproto/runtime"
-	"github.com/chromedp/chromedp"
 	"github.com/gorilla/websocket"
+	"github.com/tmc/cdp/internal/chromedp"
 	"golang.org/x/tools/txtar"
 
 	"github.com/fsnotify/fsnotify"

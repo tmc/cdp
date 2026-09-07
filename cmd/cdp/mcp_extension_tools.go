@@ -13,8 +13,8 @@ import (
 	"github.com/chromedp/cdproto/extensions"
 	"github.com/chromedp/cdproto/runtime"
 	"github.com/chromedp/cdproto/target"
-	"github.com/chromedp/chromedp"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/tmc/cdp/internal/chromedp"
 )
 
 // extensionInfo describes an installed extension found via CDP target enumeration.
@@ -369,7 +369,7 @@ func registerExtensionTools(server *mcp.Server, s *mcpSession) {
 			if err != nil {
 				return nil, nil, fmt.Errorf("extension_console: %w", err)
 			}
-			swCtx, swCancel := chromedp.NewContext(s.browserCtx, chromedp.WithTargetID(tid))
+			swCtx, swCancel := chromedp.NewContext(s.browserCtx, chromedp.WithExistingTarget(tid))
 			if err := chromedp.Run(swCtx); err != nil {
 				swCancel()
 				return nil, nil, fmt.Errorf("extension_console: attach: %w", err)
@@ -593,7 +593,7 @@ func findExtensionSW(browserCtx context.Context, extID string) (target.ID, error
 // evalInExtensionSW evaluates JS in an extension's service worker context.
 // Returns the JSON-stringified result.
 func evalInExtensionSW(browserCtx context.Context, tid target.ID, expr string) (string, error) {
-	swCtx, swCancel := chromedp.NewContext(browserCtx, chromedp.WithTargetID(tid))
+	swCtx, swCancel := chromedp.NewContext(browserCtx, chromedp.WithExistingTarget(tid))
 	defer swCancel()
 
 	var result string

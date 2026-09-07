@@ -8,8 +8,8 @@ import (
 	"sync"
 
 	"github.com/chromedp/cdproto/accessibility"
-	"github.com/chromedp/chromedp"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/tmc/cdp/internal/chromedp"
 )
 
 // --- DOM snapshot / diff tools ---

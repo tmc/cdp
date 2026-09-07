@@ -21,7 +21,7 @@ import (
 	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/cdproto/page"
 	"github.com/chromedp/cdproto/target"
-	"github.com/chromedp/chromedp"
+	"github.com/tmc/cdp/internal/chromedp"
 	"github.com/tmc/cdp/internal/coverage"
 	"github.com/tmc/cdp/internal/sourcemap"
 	"github.com/tmc/cdp/internal/sources"
@@ -1236,7 +1236,7 @@ func (im *InteractiveMode) switchTab(selector string) {
 		return
 	}
 
-	tabCtx, _ := chromedp.NewContext(im.browserCtx, chromedp.WithTargetID(targetInfo.TargetID))
+	tabCtx, _ := chromedp.NewContext(im.browserCtx, chromedp.WithExistingTarget(targetInfo.TargetID))
 	// Run a no-op to attach to the target.
 	if err := chromedp.Run(tabCtx); err != nil {
 		fmt.Printf("Error switching to tab: %v\n", err)

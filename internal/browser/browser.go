@@ -17,9 +17,9 @@ import (
 	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/cdproto/page"
 	"github.com/chromedp/cdproto/runtime"
-	"github.com/chromedp/chromedp"
 	"github.com/tmc/cdp/internal/blocking"
 	"github.com/tmc/cdp/internal/browserprofile"
+	"github.com/tmc/cdp/internal/chromedp"
 )
 
 // filteredErrorf filters out noisy chromedp error messages
@@ -478,10 +478,10 @@ func (b *Browser) Navigate(url string) error {
 // while they verify the client. They are matched case-insensitively as
 // substrings of the page title.
 var challengeTitles = []string{
-	"just a moment",       // Cloudflare
-	"attention required",  // Cloudflare block/challenge
+	"just a moment",         // Cloudflare
+	"attention required",    // Cloudflare block/challenge
 	"checking your browser", // Cloudflare legacy IUAM, DDoS-Guard
-	"please wait",         // generic JS interstitials
+	"please wait",           // generic JS interstitials
 	"verifying you are human",
 	"one more step",
 }
@@ -655,17 +655,13 @@ func (b *Browser) Context() context.Context {
 	return b.ctx
 }
 
-// Close shuts down the browser
+// Close shuts down an owned browser or disconnects an attached browser.
 func (b *Browser) Close() error {
-	// If we're attached to an existing tab, don't cancel (which would close the tab)
-	// Just disconnect gracefully
-	if b.attachedToTab {
-		// Don't call cancelFunc - let the tab continue running
-		return nil
-	}
-
 	if b.cancelFunc != nil {
 		b.cancelFunc()
+	}
+	if b.attachedToTab {
+		return nil
 	}
 
 	if b.profileMgr != nil {

@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/chromedp/chromedp"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/tmc/cdp/internal/chromedp"
 )
 
 // --- Storage tools (localStorage / sessionStorage) ---

@@ -10,8 +10,8 @@ import (
 	"github.com/chromedp/cdproto/accessibility"
 	"github.com/chromedp/cdproto/cdp"
 	"github.com/chromedp/cdproto/dom"
-	"github.com/chromedp/chromedp"
 	"github.com/tmc/cdp/internal/cdpinput"
+	"github.com/tmc/cdp/internal/chromedp"
 )
 
 // refEntry maps a @ref number to a DOM backend node.

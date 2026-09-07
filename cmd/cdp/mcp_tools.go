@@ -15,8 +15,8 @@ import (
 	"github.com/chromedp/cdproto/page"
 	"github.com/chromedp/cdproto/runtime"
 	"github.com/chromedp/cdproto/target"
-	"github.com/chromedp/chromedp"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/tmc/cdp/internal/chromedp"
 )
 
 // registerMCPTools registers all MCP tool handlers on the given server.
@@ -622,7 +622,7 @@ func registerTabTools(server *mcp.Server, s *mcpSession) {
 				}},
 			}, TabOutput{ID: input.ID}, nil
 		}
-		tabCtx, tabCancel := chromedp.NewContext(browserCtx, chromedp.WithTargetID(target.ID(input.ID)))
+		tabCtx, tabCancel := chromedp.NewContext(browserCtx, chromedp.WithExistingTarget(target.ID(input.ID)))
 		// Attach and enable Page+Runtime domains so subsequent navigate/screenshot
 		// calls work reliably. A bare no-op Run attaches but doesn't enable the
 		// domains on the new session, causing timeouts on the next tool call.

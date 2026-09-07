@@ -12,7 +12,7 @@ import (
 	"errors"
 
 	"github.com/chromedp/cdproto/network"
-	"github.com/chromedp/chromedp"
+	"github.com/tmc/cdp/internal/chromedp"
 )
 
 // WebSocketFrame represents a WebSocket frame

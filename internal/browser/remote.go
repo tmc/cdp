@@ -8,12 +8,13 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"errors"
 
 	"github.com/chromedp/cdproto/target"
-	"github.com/chromedp/chromedp"
+	"github.com/tmc/cdp/internal/chromedp"
 )
 
 // RemoteDebuggingInfo represents information about Chrome's remote debugging endpoint
@@ -131,7 +132,7 @@ func (b *Browser) ConnectToExistingTab(ctx context.Context, browserWSURL string,
 	var browserCancel context.CancelFunc
 
 	opts := []chromedp.ContextOption{
-		chromedp.WithTargetID(target.ID(tabID)),
+		chromedp.WithExistingTarget(target.ID(tabID)),
 	}
 
 	opts = append(opts, chromedp.WithErrorf(filteredErrorf))
@@ -142,11 +143,7 @@ func (b *Browser) ConnectToExistingTab(ctx context.Context, browserWSURL string,
 	browserCtx, browserCancel = chromedp.NewContext(allocCtx, opts...)
 
 	// Store context and cancel functions
-	b.ctx = browserCtx
-	b.cancelFunc = func() {
-		browserCancel()
-		allocCancel()
-	}
+	b.setRemoteContext(browserCtx, browserCancel, allocCancel)
 
 	// Mark that we're attached to an existing tab (don't close on cleanup)
 	b.attachedToTab = true
@@ -155,7 +152,7 @@ func (b *Browser) ConnectToExistingTab(ctx context.Context, browserWSURL string,
 }
 
 // ConnectToTabWebSocket connects to a specific tab via its WebSocket URL
-// Uses WithTargetID to attach to the existing tab instead of creating a new one
+// Uses WithExistingTarget to attach to the existing tab instead of creating a new one
 func (b *Browser) ConnectToTabWebSocket(ctx context.Context, tabWSURL string) error {
 	// Extract the target ID from the WebSocket URL
 	// URL format: ws://localhost:9222/devtools/page/{targetID}
@@ -205,19 +202,19 @@ func (b *Browser) ConnectToTabWebSocket(ctx context.Context, tabWSURL string) er
 		log.Printf("Created remote allocator")
 	}
 
-	// Create a context directly with WithTargetID from the allocator
+	// Create a context directly with WithExistingTarget from the allocator
 	// Don't initialize a parent context first - that would create a new tab
 	var tabCtx context.Context
 	var tabCancel context.CancelFunc
 
 	if b.opts.Verbose {
 		tabCtx, tabCancel = chromedp.NewContext(allocCtx,
-			chromedp.WithTargetID(target.ID(tabID)),
+			chromedp.WithExistingTarget(target.ID(tabID)),
 			chromedp.WithLogf(log.Printf),
 			chromedp.WithErrorf(filteredErrorf))
 	} else {
 		tabCtx, tabCancel = chromedp.NewContext(allocCtx,
-			chromedp.WithTargetID(target.ID(tabID)),
+			chromedp.WithExistingTarget(target.ID(tabID)),
 			chromedp.WithErrorf(filteredErrorf))
 	}
 
@@ -237,11 +234,7 @@ func (b *Browser) ConnectToTabWebSocket(ctx context.Context, tabWSURL string) er
 	}
 
 	// Store context and cancel functions
-	b.ctx = tabCtx
-	b.cancelFunc = func() {
-		tabCancel()
-		allocCancel()
-	}
+	b.setRemoteContext(tabCtx, tabCancel, allocCancel)
 
 	// Mark that we're attached to an existing tab
 	b.attachedToTab = true
@@ -271,10 +264,10 @@ func (b *Browser) ConnectToWebSocket(ctx context.Context, wsURL string) error {
 
 	// Store context and cancel functions
 	b.ctx = browserCtx
-	b.cancelFunc = func() {
+	b.cancelFunc = sync.OnceFunc(func() {
 		browserCancel()
 		allocCancel()
-	}
+	})
 
 	return nil
 }
@@ -320,4 +313,13 @@ func (b *Browser) ConnectToFirstTab(ctx context.Context, host string, port int) 
 		log.Printf("No existing page tabs found, creating new tab")
 	}
 	return b.ConnectToRunningChrome(ctx, host, port)
+}
+
+// setRemoteContext owns the attachment and allocator cleanup as one operation.
+func (b *Browser) setRemoteContext(ctx context.Context, cancel, allocCancel context.CancelFunc) {
+	b.ctx = ctx
+	b.cancelFunc = sync.OnceFunc(func() {
+		cancel()
+		allocCancel()
+	})
 }

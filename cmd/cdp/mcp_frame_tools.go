@@ -8,8 +8,8 @@ import (
 	"github.com/chromedp/cdproto/cdp"
 	"github.com/chromedp/cdproto/page"
 	"github.com/chromedp/cdproto/target"
-	"github.com/chromedp/chromedp"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/tmc/cdp/internal/chromedp"
 )
 
 // --- Frame/iframe navigation tools ---
@@ -88,7 +88,7 @@ func registerFrameTools(server *mcp.Server, s *mcpSession) {
 		// chromedp doesn't have direct frame targeting, so we use the
 		// iframe's content document via evaluate in the frame's execution context.
 
-		// For same-origin frames, we can use chromedp.WithTargetID if the
+		// For same-origin frames, we can use chromedp.WithExistingTarget if the
 		// frame has its own target. Otherwise, we'll set a frame execution
 		// context via the Page domain.
 
@@ -100,7 +100,7 @@ func registerFrameTools(server *mcp.Server, s *mcpSession) {
 
 		for _, t := range targets {
 			if t.Type == "iframe" && string(t.TargetID) == frameID {
-				frameCtx, frameCancel := chromedp.NewContext(s.browserCtx, chromedp.WithTargetID(target.ID(frameID)))
+				frameCtx, frameCancel := chromedp.NewContext(s.browserCtx, chromedp.WithExistingTarget(target.ID(frameID)))
 				if err := chromedp.Run(frameCtx); err != nil {
 					frameCancel()
 					return nil, nil, fmt.Errorf("switch_frame: attach to frame: %w", err)

@@ -5,8 +5,8 @@ import (
 	"log"
 
 	"github.com/chromedp/cdproto/domdebugger"
-	"github.com/chromedp/chromedp"
 	"github.com/spf13/cobra"
+	"github.com/tmc/cdp/internal/chromedp"
 )
 
 var nodeBreakpointsCmd = &cobra.Command{

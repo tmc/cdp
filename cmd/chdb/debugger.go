@@ -9,7 +9,7 @@ import (
 
 	"github.com/chromedp/cdproto/debugger"
 	"github.com/chromedp/cdproto/domdebugger"
-	"github.com/chromedp/chromedp"
+	"github.com/tmc/cdp/internal/chromedp"
 )
 
 // DebuggerController handles all debugging operations

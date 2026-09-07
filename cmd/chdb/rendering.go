@@ -10,7 +10,7 @@ import (
 	"github.com/chromedp/cdproto/layertree"
 	"github.com/chromedp/cdproto/overlay"
 	"github.com/chromedp/cdproto/runtime"
-	"github.com/chromedp/chromedp"
+	"github.com/tmc/cdp/internal/chromedp"
 )
 
 // RenderingController handles rendering and paint debugging

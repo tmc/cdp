@@ -11,8 +11,8 @@ import (
 	"sync"
 
 	"github.com/chromedp/cdproto/tracing"
-	"github.com/chromedp/chromedp"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/tmc/cdp/internal/chromedp"
 )
 
 // --- Tracing tools ---

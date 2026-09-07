@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/chromedp/cdproto/input"
-	"github.com/chromedp/chromedp"
+	"github.com/tmc/cdp/internal/chromedp"
 	"rsc.io/script"
 )
 

@@ -23,7 +23,7 @@ import (
 	"github.com/chromedp/cdproto/css"
 	"github.com/chromedp/cdproto/debugger"
 	"github.com/chromedp/cdproto/page"
-	"github.com/chromedp/chromedp"
+	"github.com/tmc/cdp/internal/chromedp"
 	"github.com/tmc/cdp/internal/scrub"
 	"github.com/tmc/cdp/internal/sitegroup"
 )
@@ -172,7 +172,7 @@ func (c *Collector) Enable(ctx context.Context) error {
 // AttachToTarget enables Debugger and CSS on a new target context, so the
 // scriptParsed and styleSheetAdded events for that target's already-parsed
 // scripts are replayed. Use this after switching to a new target via
-// chromedp.NewContext(parent, chromedp.WithTargetID(...)) to receive events
+// chromedp.NewContext(parent, chromedp.WithExistingTarget(...)) to receive events
 // from the new target's session.
 //
 // Callers must register a per-target listener via

@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/chromedp/cdproto/page"
-	"github.com/chromedp/chromedp"
+	"github.com/tmc/cdp/internal/chromedp"
 )
 
 func browserFrameFixture(t *testing.T, ctx context.Context) (*mcpSession, string) {

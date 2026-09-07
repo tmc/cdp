@@ -10,7 +10,7 @@ import (
 	"time"
 
 	cdptarget "github.com/chromedp/cdproto/target"
-	"github.com/chromedp/chromedp"
+	"github.com/tmc/cdp/internal/chromedp"
 )
 
 // SessionType represents the type of debugging session
@@ -160,9 +160,9 @@ func (sm *SessionManager) connectToTarget(ctx context.Context, target DebugTarge
 		opts = append(opts, chromedp.WithLogf(log.Printf))
 	}
 
-	// For Node.js, use WithTargetID to connect to existing target instead of creating new one
+	// For Node.js, use WithExistingTarget to connect to existing target instead of creating new one
 	if target.Type == SessionTypeNode {
-		opts = append(opts, chromedp.WithTargetID(cdptarget.ID(target.ID)))
+		opts = append(opts, chromedp.WithExistingTarget(cdptarget.ID(target.ID)))
 	}
 
 	chromeCtx, chromeCancel := chromedp.NewContext(allocCtx, opts...)

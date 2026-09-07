@@ -7,7 +7,7 @@ import (
 	"time"
 
 	cdpbrowser "github.com/chromedp/cdproto/browser"
-	"github.com/chromedp/chromedp"
+	"github.com/tmc/cdp/internal/chromedp"
 	"rsc.io/script"
 )
 

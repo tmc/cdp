@@ -8,7 +8,7 @@ import (
 	"errors"
 
 	"github.com/chromedp/cdproto/input"
-	"github.com/chromedp/chromedp"
+	"github.com/tmc/cdp/internal/chromedp"
 )
 
 // ElementHandle represents a handle to a DOM element

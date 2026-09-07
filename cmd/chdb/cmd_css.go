@@ -9,8 +9,8 @@ import (
 
 	"github.com/chromedp/cdproto/css"
 	"github.com/chromedp/cdproto/dom"
-	"github.com/chromedp/chromedp"
 	"github.com/spf13/cobra"
+	"github.com/tmc/cdp/internal/chromedp"
 )
 
 var cssSelector string

@@ -1,6 +1,6 @@
 package browser
 
-import "github.com/chromedp/chromedp"
+import "github.com/tmc/cdp/internal/chromedp"
 
 // OptimizationGuideOnDeviceModelFeatures is the Chromium feature list for
 // chrome://flags/#optimization-guide-on-device-model on desktop.

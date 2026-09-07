@@ -9,7 +9,7 @@ import (
 
 	"github.com/chromedp/cdproto/animation"
 	"github.com/chromedp/cdproto/runtime"
-	"github.com/chromedp/chromedp"
+	"github.com/tmc/cdp/internal/chromedp"
 )
 
 // AnimationController handles animation debugging and control

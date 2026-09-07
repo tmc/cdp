@@ -16,7 +16,7 @@ import (
 
 	"errors"
 
-	"github.com/chromedp/chromedp"
+	"github.com/tmc/cdp/internal/chromedp"
 	"github.com/tmc/cdp/internal/discovery"
 )
 

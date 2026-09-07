@@ -18,7 +18,7 @@ import (
 	"time"
 
 	"github.com/chromedp/cdproto/network"
-	"github.com/chromedp/chromedp"
+	"github.com/tmc/cdp/internal/chromedp"
 	"golang.org/x/term"
 
 	"github.com/tmc/cdp/internal/browser"

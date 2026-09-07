@@ -111,7 +111,7 @@ func runArgs(args []string, stdout, stderr io.Writer) int {
 		opts := append(chromedp.DefaultExecAllocatorOptions[:],
 			chromedp.Flag("headless", !*headful),
 			chromedp.WindowSize(w, h),
-			browser.EnableOptimizationGuideOnDeviceModel(),
+			chromedp.Flag("enable-features", browser.OptimizationGuideOnDeviceModelFeatures),
 		)
 		if path != "" {
 			opts = append(opts, chromedp.ExecPath(path))

@@ -33,10 +33,10 @@ import (
 	"github.com/chromedp/cdproto/page"
 	"github.com/chromedp/cdproto/runtime"
 	"github.com/chromedp/cdproto/target"
-	"github.com/chromedp/chromedp"
 	"github.com/tmc/cdp/internal/browser"
 	"github.com/tmc/cdp/internal/browserprofile"
 	"github.com/tmc/cdp/internal/cdpproxy"
+	"github.com/tmc/cdp/internal/chromedp"
 	"github.com/tmc/cdp/internal/discovery"
 	"github.com/tmc/cdp/internal/htmltomd"
 	harrecorder "github.com/tmc/cdp/internal/recorder"
@@ -1111,6 +1111,8 @@ var enhancedCommands = map[string]func(*browser.Page, []string) error{
 
 // AllTabsMonitor handles monitoring network traffic from all browser tabs
 type AllTabsMonitor struct {
+	cancel          context.CancelFunc
+	pending         sync.WaitGroup
 	ctx             context.Context
 	attach          func(context.Context) error
 	verbose         bool
@@ -1127,7 +1129,9 @@ func NewAllTabsMonitor(ctx context.Context, recorder *harrecorder.Recorder, verb
 }
 
 func newAllTabsMonitor(ctx context.Context, verbose bool, attach func(context.Context) error) *AllTabsMonitor {
+	ctx, cancel := context.WithCancel(ctx)
 	return &AllTabsMonitor{
+		cancel:          cancel,
 		ctx:             ctx,
 		attach:          attach,
 		verbose:         verbose,
@@ -1155,7 +1159,9 @@ func (m *AllTabsMonitor) Start() error {
 		case *target.EventTargetDestroyed:
 			m.mu.Lock()
 			if cancel, ok := m.attachedTargets[e.TargetID]; ok {
-				cancel()
+				// Listeners run on the browser event loop. Cancellation waits
+				// for protocol replies, so it must finish outside that loop.
+				go cancel()
 				delete(m.attachedTargets, e.TargetID)
 				if m.verbose {
 					log.Printf("Tab closed: %s", e.TargetID)
@@ -1195,14 +1201,21 @@ func (m *AllTabsMonitor) attachTarget(targetID target.ID) {
 // attachToTarget attaches to a target and enables network monitoring
 func (m *AllTabsMonitor) attachToTarget(targetID target.ID) error {
 	m.mu.Lock()
+	if err := m.ctx.Err(); err != nil {
+		m.mu.Unlock()
+		return err
+	}
 	if _, exists := m.attachedTargets[targetID]; exists {
 		m.mu.Unlock()
 		return nil // Already attached
 	}
 
-	targetCtx, cancel := chromedp.NewContext(m.ctx, chromedp.WithTargetID(targetID))
+	targetCtx, cancel := chromedp.NewContext(m.ctx, chromedp.WithExistingTarget(targetID))
+	cancel = sync.OnceFunc(cancel)
 	m.attachedTargets[targetID] = cancel
+	m.pending.Add(1)
 	m.mu.Unlock()
+	defer m.pending.Done()
 
 	if err := m.attach(targetCtx); err != nil {
 		cancel()
@@ -1221,12 +1234,15 @@ func (m *AllTabsMonitor) attachToTarget(targetID target.ID) error {
 
 // Stop stops monitoring all tabs
 func (m *AllTabsMonitor) Stop() {
+	m.cancel()
 	m.mu.Lock()
-	defer m.mu.Unlock()
-	for id, cancel := range m.attachedTargets {
+	targets := m.attachedTargets
+	m.attachedTargets = make(map[target.ID]context.CancelFunc)
+	m.mu.Unlock()
+	for _, cancel := range targets {
 		cancel()
-		delete(m.attachedTargets, id)
 	}
+	m.pending.Wait()
 }
 
 func shouldStartMacgo(args []string) bool {
@@ -2021,7 +2037,7 @@ func main() {
 			if targetTabID != "" {
 				// Connect to browser first, then attach to existing target
 				allocCtx, allocCancel = chromedp.NewRemoteAllocator(ctx, fmt.Sprintf("ws://%s:%d", remoteHost, remotePort))
-				opts = append(opts, chromedp.WithTargetID(target.ID(targetTabID)))
+				opts = append(opts, chromedp.WithExistingTarget(target.ID(targetTabID)))
 				// Use existing target without managing its lifecycle
 				opts = append(opts, chromedp.WithBrowserOption(
 					chromedp.WithBrowserDebugf(func(s string, i ...interface{}) {
@@ -2647,7 +2663,7 @@ func main() {
 			defer allocCancel()
 			ctxOpts := []chromedp.ContextOption{
 				chromedp.WithErrorf(filteredErrorf),
-				chromedp.WithTargetID(target.ID(targetTab.ID)),
+				chromedp.WithExistingTarget(target.ID(targetTab.ID)),
 			}
 			if verbose {
 				ctxOpts = append(ctxOpts, chromedp.WithLogf(filteredLogf))
@@ -3757,7 +3773,7 @@ func main() {
 					if found == nil {
 						fmt.Printf("No tab matching '%s'\n", selector)
 					} else {
-						newCtx, _ := chromedp.NewContext(browserCtx, chromedp.WithTargetID(found.TargetID))
+						newCtx, _ := chromedp.NewContext(browserCtx, chromedp.WithExistingTarget(found.TargetID))
 						if err := chromedp.Run(newCtx, chromedp.ActionFunc(func(ctx context.Context) error { return nil })); err != nil {
 							fmt.Printf("Error switching to tab: %v\n", err)
 						} else {
@@ -4995,7 +5011,7 @@ func setupChromeForEnhanced(ctx context.Context, cfg fullCaptureConfig) (context
 				allocCtx2, allocCancel2 := chromedp.NewRemoteAllocator(ctx, fmt.Sprintf("ws://%s:%d", remoteHost, remotePort))
 				browserCtx2, browserCancel2 := chromedp.NewContext(allocCtx2,
 					chromedp.WithErrorf(filteredErrorf),
-					chromedp.WithTargetID(target.ID(targetTab.ID)),
+					chromedp.WithExistingTarget(target.ID(targetTab.ID)),
 				)
 				if err := chromedp.Run(browserCtx2, chromedp.Evaluate("1", nil)); err != nil {
 					browserCancel2()

@@ -20,7 +20,7 @@ import (
 	"github.com/chromedp/cdproto/page"
 	cdpruntime "github.com/chromedp/cdproto/runtime"
 	cdptarget "github.com/chromedp/cdproto/target"
-	"github.com/chromedp/chromedp"
+	"github.com/tmc/cdp/internal/chromedp"
 )
 
 // ChromeTarget represents a Chrome tab or debug target
@@ -135,7 +135,7 @@ func (cd *ChromeDebugger) Connect(ctx context.Context, targetID string) error {
 	if cd.verbose {
 		opts = append(opts, chromedp.WithLogf(log.Printf))
 	}
-	opts = append(opts, chromedp.WithTargetID(cdptarget.ID(target.ID)))
+	opts = append(opts, chromedp.WithExistingTarget(cdptarget.ID(target.ID)))
 
 	chromeCtx, chromeCancel := chromedp.NewContext(allocCtx, opts...)
 	cd.chromeCtx = chromeCtx

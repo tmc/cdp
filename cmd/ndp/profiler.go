@@ -13,8 +13,8 @@ import (
 	"github.com/chromedp/cdproto/heapprofiler"
 	"github.com/chromedp/cdproto/profiler"
 	"github.com/chromedp/cdproto/runtime"
-	"github.com/chromedp/chromedp"
 	"github.com/gorilla/websocket"
+	"github.com/tmc/cdp/internal/chromedp"
 )
 
 // ProfileType represents the type of profile

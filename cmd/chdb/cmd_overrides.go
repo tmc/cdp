@@ -13,8 +13,8 @@ import (
 	"syscall"
 
 	"github.com/chromedp/cdproto/fetch"
-	"github.com/chromedp/chromedp"
 	"github.com/spf13/cobra"
+	"github.com/tmc/cdp/internal/chromedp"
 )
 
 var overridesDir string

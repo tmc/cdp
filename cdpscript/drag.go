@@ -6,8 +6,8 @@ import (
 	"strconv"
 
 	"github.com/chromedp/cdproto/input"
-	"github.com/chromedp/chromedp"
 	"github.com/tmc/cdp/internal/cdpinput"
+	"github.com/tmc/cdp/internal/chromedp"
 	"rsc.io/script"
 )
 

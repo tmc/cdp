@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/chromedp/chromedp"
+	"github.com/tmc/cdp/internal/chromedp"
 )
 
 // StateTracker tracks page state changes during interactions

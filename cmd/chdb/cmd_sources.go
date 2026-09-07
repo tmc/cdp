@@ -13,8 +13,8 @@ import (
 	"github.com/chromedp/cdproto/cdp"
 	"github.com/chromedp/cdproto/debugger"
 	cdppage "github.com/chromedp/cdproto/page"
-	"github.com/chromedp/chromedp"
 	"github.com/spf13/cobra"
+	"github.com/tmc/cdp/internal/chromedp"
 	"golang.org/x/tools/txtar"
 )
 

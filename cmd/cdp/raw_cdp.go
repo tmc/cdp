@@ -12,8 +12,8 @@ import (
 	"unicode"
 
 	cdproto "github.com/chromedp/cdproto/cdp"
-	"github.com/chromedp/chromedp"
 	"github.com/gorilla/websocket"
+	"github.com/tmc/cdp/internal/chromedp"
 )
 
 type rawCDPResult map[string]any
