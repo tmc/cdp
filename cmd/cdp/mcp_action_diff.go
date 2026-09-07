@@ -40,7 +40,16 @@ func registerActionDiffTool(server *mcp.Server, s *mcpSession) {
 Actions: "click" (needs selector), "type" (needs selector + text), "navigate" (needs url).
 Params is a JSON string, e.g. {"selector": "@1"}, {"selector": "coord:100,200"}, or {"url": "https://example.com"}.`,
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input ActionDiffInput) (*mcp.CallToolResult, any, error) {
-		actx := s.activeCtx()
+		// Bound setup and both captures as well as the action. Cancel only
+		// contexts derived from the tab so the browser remains usable.
+		ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+		defer cancel()
+		actx, err := s.activeContext(ctx)
+		if err != nil {
+			return nil, nil, fmt.Errorf("action_diff: %w", err)
+		}
+		actx, cancel = requestToolCtx(ctx, actx, 30*time.Second)
+		defer cancel()
 
 		// Parse params.
 		var params actionDiffParams
@@ -109,16 +118,9 @@ func captureViewportPNG(ctx context.Context) ([]byte, error) {
 
 // executeActionWithTimeout wraps executeAction with a deadline.
 func executeActionWithTimeout(ctx context.Context, s *mcpSession, action string, params actionDiffParams, timeout time.Duration) error {
-	done := make(chan error, 1)
-	go func() {
-		done <- executeAction(ctx, s, action, params)
-	}()
-	select {
-	case err := <-done:
-		return err
-	case <-time.After(timeout):
-		return fmt.Errorf("timed out after %s", timeout)
-	}
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	return executeAction(ctx, s, action, params)
 }
 
 // executeAction runs the specified action.

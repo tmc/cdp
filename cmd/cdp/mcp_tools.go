@@ -329,6 +329,11 @@ func interactionCtx(reqCtx, actx context.Context, timeoutSec int) (context.Conte
 func requestToolCtx(reqCtx, actx context.Context, timeout time.Duration) (context.Context, context.CancelFunc) {
 	ctx, cancel := context.WithTimeout(actx, timeout)
 	stop := context.AfterFunc(reqCtx, cancel)
+	// AfterFunc runs asynchronously, even when the request is already done.
+	// Do not hand callers a live context in that case.
+	if reqCtx.Err() != nil {
+		cancel()
+	}
 	return ctx, func() {
 		stop()
 		cancel()

@@ -92,6 +92,29 @@ func (s *mcpSession) browserContext(reqCtx context.Context) (context.Context, er
 	return s.browserCtx, nil
 }
 
+// activeContext returns the active tab after setup, bounded by the request.
+func (s *mcpSession) activeContext(reqCtx context.Context) (context.Context, error) {
+	if s.browserReady != nil {
+		select {
+		case <-s.browserReady:
+		case <-reqCtx.Done():
+			return nil, fmt.Errorf("browser not ready: %w", reqCtx.Err())
+		}
+	}
+	if err := reqCtx.Err(); err != nil {
+		return nil, err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.setupErr != nil {
+		return nil, fmt.Errorf("browser setup failed: %w", s.setupErr)
+	}
+	if s.ctx == nil {
+		return nil, fmt.Errorf("active tab not available")
+	}
+	return s.ctx, nil
+}
+
 // signalBrowserReady marks browser setup as finished (success or failure),
 // unblocking tool calls waiting in activeCtx or browserContext. Safe to call
 // more than once; only the first call closes the channel.
