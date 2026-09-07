@@ -3,7 +3,10 @@
 Use `browser_observe` and `browser_act` when an action must refer to the page
 state you inspected. Both are MCP tools provided by `cdp`.
 
-Call `browser_observe` with an empty object. It returns a `state_id`, `target_id`,
+Call `browser_observe` with an empty object to observe the selected frame (the
+root by default), or pass `{"frame_id":"<frame ID>"}` for an exact frame in the
+active target. An explicit frame never falls back to its parent and does not
+change frame selection. The tool returns a `state_id`, `target_id`,
 document identity, URL, and accessibility tree. Interactive elements in the tree
 have refs such as `@1`. Copy the returned identifiers into your action:
 
@@ -18,7 +21,8 @@ have refs such as `@1`. Copy the returned identifiers into your action:
 ```
 
 The ref must come from that observation. For typing, use `"action": "type"`
-and supply a nonempty `text`. `timeout_ms` defaults to 30000 and accepts values
+and supply a nonempty `text`. To navigate the observed frame, use
+`"action": "navigate"` and an absolute `url`; omit `ref`. `timeout_ms` defaults to 30000 and accepts values
 from 1 through 60000; zero selects the default.
 
 A successful observation replaces the previous state. An action consumes its
@@ -42,7 +46,7 @@ The result separates three questions:
 
 | Field | Values | Meaning |
 | --- | --- | --- |
-| `execution` | `not_dispatched`, `dispatched_unknown`, `completed` | Whether action-related commands were attempted and the complete input sequence acknowledged. |
+| `execution` | `not_dispatched`, `dispatched_unknown`, `completed` | Whether action-related commands were attempted and the input sequence or navigation command acknowledged. |
 | `observation` | `captured`, `unavailable` | Whether the subsequent page observation succeeded. |
 | `postcondition` | `not_requested`, `unknown`, `unmet`, `met` | Whether the optional exact text condition was checked and satisfied. |
 
@@ -52,6 +56,13 @@ describes browser acknowledgement, not completion of the user's broader task.
 If capture fails after acknowledged input, execution remains `completed` and
 no `fresh_state` is returned. Inspect the target before considering another
 action; a missing observation is not permission to click again.
+
+Navigation waits, within the same timeout, for the acknowledged frame and
+loader's DOMContentLoaded event. A same-document navigation needs no new-loader
+wait. HTTP error pages are valid observations. A readiness or capture failure
+after navigation acknowledgement leaves execution `completed`; a lost
+acknowledgement is `dispatched_unknown`. A download is reported in `error_text`
+and does not imply a new document. Navigation is never automatically retried.
 
 When capture succeeds, use `fresh_state` for the next action. `expect` compares
 the exact `textContent` of a single CSS match in the captured document, once,
@@ -65,8 +76,8 @@ and input. This is not a page transaction, and cancellation cannot undo input
 already sent. An observation records document identity; it does not freeze the
 DOM or guarantee that an unchanged node still has the same business meaning.
 
-The current pair supports clicks and typing in the active target's top document.
-A selected same-process subframe is rejected explicitly. Navigation, screenshot
-coordinate mapping, and same-process frame actions are not yet part of this pair.
+The pair supports clicks, typing and navigation in the active target's root or
+same-process frames. Cross-process frames require their own active target.
+Screenshot coordinate mapping is not yet part of this pair.
 The pair requires the CDP Accessibility domain; it reports an observation error
 when that domain is unavailable.

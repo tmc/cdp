@@ -6,8 +6,10 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/chromedp/cdproto/accessibility"
@@ -19,7 +21,12 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
+type browserObserveInput struct {
+	FrameID string `json:"frame_id,omitempty"`
+}
+
 type browserObserveOutput struct {
+	world            runtime.ExecutionContextID
 	StateID          string `json:"state_id"`
 	TargetID         string `json:"target_id"`
 	FrameID          string `json:"frame_id"`
@@ -38,7 +45,8 @@ type browserActInput struct {
 	StateID   string        `json:"state_id"`
 	TargetID  string        `json:"target_id"`
 	Action    string        `json:"action"`
-	Ref       string        `json:"ref"`
+	Ref       string        `json:"ref,omitempty"`
+	URL       string        `json:"url,omitempty"`
 	Text      string        `json:"text,omitempty"`
 	Expect    *expectClause `json:"expect,omitempty"`
 	TimeoutMS int           `json:"timeout_ms,omitempty"`
@@ -61,12 +69,12 @@ type browserObservation struct {
 func registerBrowserObservationTools(server *mcp.Server, s *mcpSession) {
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "browser_observe",
-		Description: "Observe the active browser target. Returns a state_id, exact target/document identity, and a tree with @refs. Replaces the previous observation. Use browser_act with this state_id and target_id. Same-process subframe selection is not yet supported.",
+		Description: "Observe the active browser target. Returns a state_id, exact target/document identity, and a tree with @refs. Replaces the previous observation. Use browser_act with this state_id and target_id. Optional frame_id selects an exact frame in this target; otherwise uses the selected frame or root.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
-	}, func(ctx context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, browserObserveOutput, error) {
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, in browserObserveInput) (*mcp.CallToolResult, browserObserveOutput, error) {
 		var out browserObserveOutput
 		err := s.withBrowserObservation(ctx, 30*time.Second, func(ctx, actx context.Context) error {
-			state, err := s.captureBrowserObservation(ctx, actx)
+			state, err := s.captureBrowserObservation(ctx, actx, cdp.FrameID(in.FrameID))
 			if err != nil {
 				return err
 			}
@@ -78,7 +86,7 @@ func registerBrowserObservationTools(server *mcp.Server, s *mcpSession) {
 	})
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "browser_act",
-		Description: "Click or type using a browser_observe state_id, target_id, and @ref. Consumes that state before attempting the action; stale nodes are never recovered by name. Returns independent execution, observation and postcondition results and, when captured, a fresh_state. expect compares exact textContent of one CSS match immediately after capture. Never automatically replay an uncertain action. Timeout is milliseconds, default 30000, maximum 60000.",
+		Description: "Click, type, or navigate using a browser_observe state_id and target_id. Click/type require an @ref; navigate requires an absolute url and targets the observed frame. Consumes that state before attempting the action; stale nodes are never recovered by name. Returns independent execution, observation and postcondition results and, when captured, a fresh_state. expect compares exact textContent of one CSS match immediately after capture. Never automatically replay an uncertain action. Timeout is milliseconds, default 30000, maximum 60000.",
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, in browserActInput) (*mcp.CallToolResult, browserActOutput, error) {
 		out := newBrowserActOutput(in)
 		if in.TimeoutMS < 0 || in.TimeoutMS > 60000 {
@@ -128,7 +136,7 @@ func (s *mcpSession) withBrowserObservation(ctx context.Context, timeout time.Du
 	}))
 }
 
-func browserDocument(ctx context.Context) (browserObserveOutput, error) {
+func browserDocument(ctx context.Context, frameID cdp.FrameID) (browserObserveOutput, error) {
 	var out browserObserveOutput
 	c := chromedp.FromContext(ctx)
 	if c == nil || c.Target == nil {
@@ -139,10 +147,19 @@ func browserDocument(ctx context.Context) (browserObserveOutput, error) {
 	if err != nil {
 		return out, err
 	}
+	frame := findBrowserFrame(tree, frameID)
+	if frame == nil {
+		return out, fmt.Errorf("browser frame %q unavailable", frameID)
+	}
+	world, err := page.CreateIsolatedWorld(frame.ID).WithWorldName("cdp-browser-observation").Do(ctx)
+	if err != nil {
+		return out, fmt.Errorf("frame execution world: %w", err)
+	}
+	out.world = world
 	// GetDocument resets the protocol's frontend node bindings, invalidating
 	// chromedp's cached tree. Describe the document through a runtime handle
 	// instead so observation does not break later selector queries.
-	object, exception, err := runtime.Evaluate("document").Do(ctx)
+	object, exception, err := runtime.Evaluate("document").WithContextID(world).Do(ctx)
 	if err != nil {
 		return out, err
 	}
@@ -157,10 +174,10 @@ func browserDocument(ctx context.Context) (browserObserveOutput, error) {
 	if tree == nil || tree.Frame == nil || root == nil || root.BackendNodeID == 0 {
 		return out, fmt.Errorf("browser document unavailable")
 	}
-	out.FrameID = string(tree.Frame.ID)
-	out.LoaderID = string(tree.Frame.LoaderID)
+	out.FrameID = string(frame.ID)
+	out.LoaderID = string(frame.LoaderID)
 	out.DocBackendNodeID = int64(root.BackendNodeID)
-	out.URL = tree.Frame.URL
+	out.URL = frame.URL + frame.URLFragment
 	return out, nil
 }
 
@@ -169,30 +186,47 @@ func sameBrowserDocument(a, b browserObserveOutput) bool {
 		a.LoaderID == b.LoaderID && a.DocBackendNodeID == b.DocBackendNodeID && a.URL == b.URL
 }
 
-func (s *mcpSession) captureBrowserObservation(ctx, actx context.Context) (*browserObservation, error) {
-	before, err := browserDocument(ctx)
-	if err != nil {
-		return nil, err
+// findBrowserFrame uses an empty ID only to select the root. An explicit ID
+// never falls back to another frame.
+func findBrowserFrame(tree *page.FrameTree, id cdp.FrameID) *cdp.Frame {
+	if tree == nil || tree.Frame == nil {
+		return nil
 	}
+	if id == "" || tree.Frame.ID == id {
+		return tree.Frame
+	}
+	for _, child := range tree.ChildFrames {
+		if frame := findBrowserFrame(child, id); frame != nil {
+			return frame
+		}
+	}
+	return nil
+}
+
+func (s *mcpSession) captureBrowserObservation(ctx, actx context.Context, frames ...cdp.FrameID) (*browserObservation, error) {
 	s.mu.Lock()
 	frame, current := s.activeFrameID, s.ctx
 	s.mu.Unlock()
+	if len(frames) != 0 && frames[0] != "" {
+		frame = frames[0]
+	}
 	if current != actx {
 		return nil, fmt.Errorf("active target changed during observation")
 	}
-	if frame != "" && string(frame) != before.FrameID {
-		return nil, fmt.Errorf("same-process subframe observation is not supported yet")
+	before, err := browserDocument(ctx, frame)
+	if err != nil {
+		return nil, err
 	}
 	refs := newRefRegistry()
 	if err := accessibility.Enable().Do(ctx); err != nil {
 		return nil, fmt.Errorf("accessibility observation: %w", err)
 	}
-	nodes, err := accessibility.GetFullAXTree().Do(ctx)
+	nodes, err := accessibility.GetFullAXTree().WithFrameID(cdp.FrameID(before.FrameID)).Do(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("accessibility observation: %w", err)
 	}
 	tree := formatAXSnapshot(nodes, refs)
-	after, err := browserDocument(ctx)
+	after, err := browserDocument(ctx, cdp.FrameID(before.FrameID))
 	if err != nil {
 		return nil, err
 	}
@@ -232,16 +266,19 @@ func (s *mcpSession) actOnBrowserObservation(ctx, actx context.Context, in brows
 	}
 	tracker := &browserActionExecutor{base: cdp.ExecutorFromContext(ctx)}
 	actionCtx := cdp.WithExecutor(ctx, tracker)
+	navigationAck := false
 	switch in.Action {
+	case "navigate":
+		navigationAck, err = navigateObservedBrowserFrame(actionCtx, cdp.FrameID(state.output.FrameID), in.URL)
 	case "click":
-		err = clickObservedBrowserNode(actionCtx, entry.BackendNodeID, cdp.FrameID(state.output.FrameID))
+		err = clickObservedBrowserNode(actionCtx, entry.BackendNodeID, cdp.FrameID(state.output.FrameID), state.output.world)
 	case "type":
 		err = page.BringToFront().Do(actionCtx)
 		if err == nil {
 			err = dom.Focus().WithBackendNodeID(entry.BackendNodeID).Do(actionCtx)
 		}
 		if err == nil {
-			err = observedBrowserNodeFocused(actionCtx, entry.BackendNodeID)
+			err = observedBrowserNodeFocused(actionCtx, entry.BackendNodeID, state.output.world)
 		}
 		if err == nil {
 			err = chromedp.KeyEvent(in.Text).Do(actionCtx)
@@ -252,10 +289,11 @@ func (s *mcpSession) actOnBrowserObservation(ctx, actx context.Context, in brows
 	}
 	if err != nil {
 		out.ErrorText = err.Error()
-	} else {
+	}
+	if err == nil || navigationAck {
 		out.Execution = "completed"
 	}
-	fresh, err := s.captureBrowserObservation(ctx, actx)
+	fresh, err := s.captureBrowserObservation(ctx, actx, cdp.FrameID(state.output.FrameID))
 	if err != nil {
 		if out.ErrorText != "" {
 			out.ErrorText += "; "
@@ -267,7 +305,7 @@ func (s *mcpSession) actOnBrowserObservation(ctx, actx context.Context, in brows
 	out.Observation = "captured"
 	out.FreshState = &fresh.output
 	if in.Expect != nil {
-		met, err := browserTextMatches(ctx, in.Expect, cdp.BackendNodeID(fresh.output.DocBackendNodeID))
+		met, err := browserTextMatches(ctx, in.Expect, cdp.BackendNodeID(fresh.output.DocBackendNodeID), fresh.output.world)
 		if err != nil {
 			if out.ErrorText != "" {
 				out.ErrorText += "; "
@@ -282,8 +320,8 @@ func (s *mcpSession) actOnBrowserObservation(ctx, actx context.Context, in brows
 	return out
 }
 
-func observedBrowserNodeFocused(ctx context.Context, nodeID cdp.BackendNodeID) error {
-	node, err := dom.ResolveNode().WithBackendNodeID(nodeID).Do(ctx)
+func observedBrowserNodeFocused(ctx context.Context, nodeID cdp.BackendNodeID, world runtime.ExecutionContextID) error {
+	node, err := dom.ResolveNode().WithBackendNodeID(nodeID).WithExecutionContextID(world).Do(ctx)
 	if err != nil {
 		return err
 	}
@@ -299,7 +337,7 @@ func observedBrowserNodeFocused(ctx context.Context, nodeID cdp.BackendNodeID) e
 	return nil
 }
 
-func clickObservedBrowserNode(ctx context.Context, nodeID cdp.BackendNodeID, frameID cdp.FrameID) error {
+func clickObservedBrowserNode(ctx context.Context, nodeID cdp.BackendNodeID, frameID cdp.FrameID, world runtime.ExecutionContextID) error {
 	if err := page.BringToFront().Do(ctx); err != nil {
 		return err
 	}
@@ -323,12 +361,12 @@ func clickObservedBrowserNode(ctx context.Context, nodeID cdp.BackendNodeID, fra
 		return fmt.Errorf("click point belongs to another frame")
 	}
 	if hit != nodeID {
-		node, err := dom.ResolveNode().WithBackendNodeID(nodeID).Do(ctx)
+		node, err := dom.ResolveNode().WithBackendNodeID(nodeID).WithExecutionContextID(world).Do(ctx)
 		if err != nil {
 			return err
 		}
 		defer runtime.ReleaseObject(node.ObjectID).Do(ctx)
-		other, err := dom.ResolveNode().WithBackendNodeID(hit).Do(ctx)
+		other, err := dom.ResolveNode().WithBackendNodeID(hit).WithExecutionContextID(world).Do(ctx)
 		if err != nil {
 			return err
 		}
@@ -352,54 +390,59 @@ func (s *mcpSession) validateBrowserAction(ctx, actx context.Context, state *bro
 	if state.ctx != actx || state.output.TargetID != in.TargetID {
 		return empty, fmt.Errorf("observation belongs to a different target")
 	}
-	if in.Action != "click" && in.Action != "type" {
-		return empty, fmt.Errorf("action must be click or type")
+	if in.Action != "click" && in.Action != "type" && in.Action != "navigate" {
+		return empty, fmt.Errorf("action must be click, type, or navigate")
 	}
 	if in.Action == "type" && in.Text == "" {
 		return empty, fmt.Errorf("type requires non-empty text")
 	}
-	n, err := strconv.Atoi(strings.TrimPrefix(in.Ref, "@"))
-	if err != nil || n <= 0 || fmt.Sprintf("@%d", n) != in.Ref {
-		return empty, fmt.Errorf("invalid observation ref %q", in.Ref)
+	var entry refEntry
+	if in.Action == "navigate" {
+		parsed, err := url.Parse(in.URL)
+		if err != nil || parsed == nil || !parsed.IsAbs() {
+			return empty, fmt.Errorf("navigate requires an absolute url")
+		}
+	} else {
+		n, err := strconv.Atoi(strings.TrimPrefix(in.Ref, "@"))
+		if err != nil || n <= 0 || fmt.Sprintf("@%d", n) != in.Ref {
+			return empty, fmt.Errorf("invalid observation ref %q", in.Ref)
+		}
+		var ok bool
+		entry, ok = state.refs.get(n)
+		if !ok {
+			return empty, fmt.Errorf("ref %q is absent from this observation", in.Ref)
+		}
 	}
-	entry, ok := state.refs.get(n)
-	if !ok {
-		return empty, fmt.Errorf("ref %q is absent from this observation", in.Ref)
-	}
-	current, err := browserDocument(ctx)
+	current, err := browserDocument(ctx, cdp.FrameID(state.output.FrameID))
 	if err != nil {
 		return empty, err
 	}
 	if !sameBrowserDocument(state.output, current) {
 		return empty, fmt.Errorf("observation document is stale; call browser_observe")
 	}
-	s.mu.Lock()
-	frame := s.activeFrameID
-	s.mu.Unlock()
-	if frame != "" && string(frame) != current.FrameID {
-		return empty, fmt.Errorf("selected frame changed; call browser_observe")
-	}
-	if err := browserNodeConnected(ctx, entry.BackendNodeID, cdp.BackendNodeID(current.DocBackendNodeID)); err != nil {
-		return empty, err
+	if in.Action != "navigate" {
+		if err := browserNodeConnected(ctx, entry.BackendNodeID, cdp.BackendNodeID(current.DocBackendNodeID), current.world); err != nil {
+			return empty, err
+		}
 	}
 	if in.Expect != nil {
 		if in.Expect.Selector == "" {
 			return empty, fmt.Errorf("expect requires a selector")
 		}
-		if _, err := browserTextMatches(ctx, in.Expect, cdp.BackendNodeID(current.DocBackendNodeID)); err != nil {
+		if _, err := browserTextMatches(ctx, in.Expect, cdp.BackendNodeID(current.DocBackendNodeID), current.world); err != nil {
 			return empty, fmt.Errorf("invalid expect: %w", err)
 		}
 	}
 	return entry, ctx.Err()
 }
 
-func browserNodeConnected(ctx context.Context, nodeID, documentID cdp.BackendNodeID) error {
-	node, err := dom.ResolveNode().WithBackendNodeID(nodeID).Do(ctx)
+func browserNodeConnected(ctx context.Context, nodeID, documentID cdp.BackendNodeID, world runtime.ExecutionContextID) error {
+	node, err := dom.ResolveNode().WithBackendNodeID(nodeID).WithExecutionContextID(world).Do(ctx)
 	if err != nil {
 		return fmt.Errorf("stale observation node: %w", err)
 	}
 	defer runtime.ReleaseObject(node.ObjectID).Do(ctx)
-	doc, err := dom.ResolveNode().WithBackendNodeID(documentID).Do(ctx)
+	doc, err := dom.ResolveNode().WithBackendNodeID(documentID).WithExecutionContextID(world).Do(ctx)
 	if err != nil {
 		return err
 	}
@@ -426,16 +469,16 @@ func (e *browserActionExecutor) Execute(ctx context.Context, method string, para
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	if strings.HasPrefix(method, "Input.") || method == "DOM.scrollIntoViewIfNeeded" || method == "DOM.focus" || method == "Page.bringToFront" {
+	if strings.HasPrefix(method, "Input.") || method == "DOM.scrollIntoViewIfNeeded" || method == "DOM.focus" || method == "Page.bringToFront" || method == "Page.navigate" {
 		e.attempted = true
 	}
 	return e.base.Execute(ctx, method, params, result)
 }
 
-func browserTextMatches(ctx context.Context, expect *expectClause, documentID cdp.BackendNodeID) (bool, error) {
+func browserTextMatches(ctx context.Context, expect *expectClause, documentID cdp.BackendNodeID, world runtime.ExecutionContextID) (bool, error) {
 	selector, _ := json.Marshal(expect.Selector)
 	want, _ := json.Marshal(expect.Text)
-	doc, err := dom.ResolveNode().WithBackendNodeID(documentID).Do(ctx)
+	doc, err := dom.ResolveNode().WithBackendNodeID(documentID).WithExecutionContextID(world).Do(ctx)
 	if err != nil {
 		return false, err
 	}
@@ -452,4 +495,64 @@ func browserTextMatches(ctx context.Context, expect *expectClause, documentID cd
 		return false, fmt.Errorf("text comparison returned no boolean")
 	}
 	return string(result.Value) == "true", nil
+}
+
+// navigateObservedBrowserFrame returns whether navigation was acknowledged,
+// independently of the bounded wait for that loader's DOMContentLoaded event.
+// The listener records events before dispatch, including events preceding the
+// command response. Its callback never blocks the protocol reader.
+func navigateObservedBrowserFrame(ctx context.Context, frame cdp.FrameID, url string) (bool, error) {
+	if err := page.SetLifecycleEventsEnabled(true).Do(ctx); err != nil {
+		return false, err
+	}
+	listenCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	var mu sync.Mutex
+	ready := make(map[cdp.LoaderID]bool)
+	wake := make(chan struct{}, 1)
+	chromedp.ListenTarget(listenCtx, func(event any) {
+		e, ok := event.(*page.EventLifecycleEvent)
+		if !ok || e.FrameID != frame || e.Name != "DOMContentLoaded" {
+			return
+		}
+		mu.Lock()
+		ready[e.LoaderID] = true
+		mu.Unlock()
+		select {
+		case wake <- struct{}{}:
+		default:
+		}
+	})
+	actual, loader, errorText, download, err := page.Navigate(url).WithFrameID(frame).Do(ctx)
+	if err != nil {
+		return false, err
+	}
+	if errorText != "" {
+		return false, fmt.Errorf("navigation: %s", errorText)
+	}
+	if actual != frame {
+		return false, fmt.Errorf("navigation acknowledged another frame")
+	}
+	if download {
+		return true, fmt.Errorf("navigation started a download; no new document")
+	}
+	if loader == "" {
+		return true, nil
+	}
+	for {
+		if err := ctx.Err(); err != nil {
+			return true, fmt.Errorf("navigation readiness: %w", err)
+		}
+		mu.Lock()
+		loaded := ready[loader]
+		mu.Unlock()
+		if loaded {
+			return true, nil
+		}
+		select {
+		case <-ctx.Done():
+			return true, fmt.Errorf("navigation readiness: %w", ctx.Err())
+		case <-wake:
+		}
+	}
 }
