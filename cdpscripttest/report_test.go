@@ -2,19 +2,9 @@ package cdpscripttest
 
 import (
 	"bytes"
-	"os"
 	"strings"
 	"testing"
-
-	"github.com/tmc/cdp/cdpscripttest/report"
 )
-
-func TestScriptReportAlias(t *testing.T) {
-	var script report.Script = ScriptReport{Name: "compatibility"}
-	if script.Name != "compatibility" {
-		t.Fatalf("ScriptReport alias lost name: %q", script.Name)
-	}
-}
 
 func TestParseLog(t *testing.T) {
 	log := `
@@ -325,69 +315,5 @@ func TestExtractReportLevel(t *testing.T) {
 				t.Errorf("ExtractReportLevel() = %v, want %v", got, tt.want)
 			}
 		})
-	}
-}
-
-func TestGenerateCombinedReport(t *testing.T) {
-	scripts := []ScriptReport{
-		{
-			Name:        "script-b",
-			Source:      []byte("# Test B preamble.\nnavigate /b\n"),
-			Log:         "# Navigate (0.2s)\n> navigate /b\n",
-			ArtifactDir: "/tmp/art/script-b",
-			Failed:      true,
-		},
-		{
-			Name:        "script-a",
-			Source:      []byte("# Test A preamble.\nnavigate /a\n"),
-			Log:         "# Navigate (0.1s)\n> navigate /a\n",
-			ArtifactDir: "/tmp/art/script-a",
-		},
-	}
-
-	dir := t.TempDir()
-	reportPath := dir + "/report.md"
-	if err := GenerateCombinedReport(reportPath, scripts); err != nil {
-		t.Fatal(err)
-	}
-
-	data, err := os.ReadFile(reportPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	out := string(data)
-
-	for _, want := range []string{
-		"# CDP Script Test Report",
-		"2 scripts: 1 passed, 1 failed",
-		"## Contents",
-		"PASS [script-a](#script-a) — Test A preamble.",
-		"FAIL [script-b](#script-b) — Test B preamble.",
-		"<details",
-		"<summary>PASS <strong>script-a</strong>",
-		"<summary>FAIL <strong>script-b</strong>",
-		"</details>",
-		"navigate /a",
-		"navigate /b",
-	} {
-		if !strings.Contains(out, want) {
-			t.Errorf("combined report missing %q\nfull:\n%s", want, out)
-		}
-	}
-
-	// Failed tests should have open attribute.
-	if !strings.Contains(out, `<details id="script-b" open>`) {
-		t.Errorf("failed test should have open attribute\nfull:\n%s", out)
-	}
-	// Passing tests should not.
-	if strings.Contains(out, `<details id="script-a" open>`) {
-		t.Errorf("passing test should not have open attribute")
-	}
-
-	// Scripts should be sorted alphabetically (script-a before script-b).
-	aIdx := strings.Index(out, "script-a</strong>")
-	bIdx := strings.Index(out, "script-b</strong>")
-	if aIdx > bIdx {
-		t.Errorf("expected script-a before script-b in sorted output")
 	}
 }

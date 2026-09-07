@@ -48,7 +48,7 @@ test's working directory, and each script runs as a subtest with its own tab.
    `go doc` and this skill disagree, `go doc` wins and this skill is the bug.
 
 6. **Never print a secret from a fixture, and filter the environment for any
-   run whose report you will share.** *Why:* `GenerateReport` embeds the
+   run whose report you will share.** *Why:* the report writer embeds the
    execution **log**, so anything a script prints — `env` output, an echoed
    variable, JavaScript returning a token — lands in a file that gets committed
    and rendered to HTML. (The report does not serialize the environment on its
@@ -221,9 +221,8 @@ usable error (not a panic) when its precondition is missing.
 
 ## Phase 7 — Reports, when the run is the deliverable
 
-`GenerateReport` writes a per-script `report.md` pairing the script source with
-its command log and artifacts; `NewCombinedReportWriter` merges them and can be
-updated incrementally so a crashed run still leaves a readable report.
+`report.Writer` writes per-script reports pairing the script source with its
+command log and artifacts, and refreshes the combined index as scripts finish.
 
 **If a report will be shared, keep secrets out of the log.** The report embeds
 the script source and its execution log, not the environment, but anything a

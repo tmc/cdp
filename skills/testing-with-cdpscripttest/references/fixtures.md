@@ -58,7 +58,7 @@ not fixture subtests.
 | `-emit-cdp-report` | write `report.md` into the artifact directory |
 | `-emit-cdp-report-combined` | merge all reports into one file |
 | `-cdp-report-dir=<dir>` | write detailed reports and optional indexes below `<dir>` |
-| `-emit-cdp-report-html` | write `report.html` and, with combined output, `index.html`; requires `-cdp-report-dir` |
+| `-emit-cdp-report-html` | write `report.html` and, with combined output, `index.html` |
 | `CDPSCRIPTTEST_COVERAGE` | `0`/`false`/`off` disables coverage (on by default) |
 
 Environment variables take precedence over their flag counterparts. Register
@@ -195,16 +195,13 @@ bufio.NewReader(bytes.NewReader(a.Comment)), logBuf)`.
 Treat `ErrSkip` as `t.Skip`, `ErrStop` as success, anything else as failure —
 that is what makes the `skip` and `stop` commands mean what they say.
 
-**Reports.** `GenerateReport(path, name, a.Comment, log)` per script;
-`NewCombinedReportWriter(path, names, sources)` plus `Update(ScriptReport{...})`
-for one merged report updated as each script finishes, so a crashed run still
-leaves something readable. For native Markdown and HTML reports, set
-`RunOptions.Report` to `&report.Options{Dir: root, HTML: true, Combined: true}`.
-The writer emits `index.md`, `index.html`, and per-script reports beside the
-existing artifacts; no converter or asset-copy step is needed.
+**Reports.** Set `RunOptions.Report` to
+`&report.Options{Dir: root, HTML: true, Combined: true}`. The writer emits
+per-script reports and refreshes `index.md` and `index.html` as scripts finish;
+no converter or asset-copy step is needed.
 
-**Redact for shared reports.** `GenerateReport` embeds the script source and
-the execution **log**, not the environment — but anything a fixture prints lands
+**Redact for shared reports.** The report writer embeds the script source and
+execution **log**, not the environment — but anything a fixture prints lands
 in the log. Do not print secrets from a fixture, and filter keys containing
 `TOKEN`, `SECRET`, `PASSWORD`, `COOKIE`, `PRIVATE_KEY`, or ending in
 `_KEY`/`_API` down to `[redacted]` when the report will be shared.

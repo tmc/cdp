@@ -77,7 +77,8 @@ type RunOptions struct {
 func RunFiles(ctx context.Context, e *Engine, files []string, opts RunOptions) (RunResult, error) {
 	var reporter *report.Writer
 	sources := make(map[string][]byte)
-	if opts.Report != nil {
+	reportOpts := runReportOptions(opts)
+	if reportOpts != nil {
 		scripts := make([]report.Script, 0, len(files))
 		for _, file := range files {
 			source, err := scriptSource(file)
@@ -86,14 +87,15 @@ func RunFiles(ctx context.Context, e *Engine, files []string, opts RunOptions) (
 			}
 			name := strings.TrimSuffix(filepath.Base(file), ".txt")
 			sources[file] = source
+			artifactDir := runReportArtifactDir(opts, reportOpts, name)
 			scripts = append(scripts, report.Script{
 				Name:        name,
 				Source:      source,
-				ArtifactDir: filepath.Join(opts.Report.Dir, name),
+				ArtifactDir: artifactDir,
 			})
 		}
 		var err error
-		reporter, err = report.NewWriter(*opts.Report, scripts)
+		reporter, err = report.NewWriter(*reportOpts, scripts)
 		if err != nil {
 			return RunResult{}, fmt.Errorf("create report writer: %w", err)
 		}
@@ -117,11 +119,12 @@ func RunFiles(ctx context.Context, e *Engine, files []string, opts RunOptions) (
 		result.Results = append(result.Results, sr)
 		if reporter != nil {
 			name := strings.TrimSuffix(filepath.Base(file), ".txt")
+			artifactDir := runReportArtifactDir(opts, reportOpts, name)
 			if err := reporter.Update(report.Script{
 				Name:        name,
 				Source:      sources[file],
 				Log:         sr.Log,
-				ArtifactDir: filepath.Join(opts.Report.Dir, name),
+				ArtifactDir: artifactDir,
 				Failed:      sr.Err != nil,
 			}); err != nil {
 				if reportErr == nil {
@@ -143,6 +146,23 @@ func RunFiles(ctx context.Context, e *Engine, files []string, opts RunOptions) (
 	}
 
 	return result, nil
+}
+
+func runReportOptions(opts RunOptions) *report.Options {
+	if opts.Report != nil {
+		return opts.Report
+	}
+	if opts.EmitReport && opts.ArtifactDir != "" {
+		return &report.Options{Dir: opts.ArtifactDir}
+	}
+	return nil
+}
+
+func runReportArtifactDir(opts RunOptions, reportOpts *report.Options, name string) string {
+	if opts.Report == nil {
+		return opts.ArtifactDir
+	}
+	return filepath.Join(reportOpts.Dir, name)
 }
 
 func runFile(allocCtx context.Context, e *Engine, file string, opts RunOptions) ScriptResult {
@@ -201,12 +221,6 @@ func runFile(allocCtx context.Context, e *Engine, file string, opts RunOptions) 
 	}()
 
 	log := strings.TrimSuffix(logBuf.String(), "\n")
-
-	if opts.EmitReport && opts.ArtifactDir != "" {
-		name := strings.TrimSuffix(filepath.Base(file), ".txt")
-		reportPath := filepath.Join(opts.ArtifactDir, "report.md")
-		_ = GenerateReport(reportPath, name, a.Comment, logBuf.String())
-	}
 
 	return ScriptResult{
 		File: file,

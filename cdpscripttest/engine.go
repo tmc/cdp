@@ -141,27 +141,11 @@ func (e *Engine) normalizeConds(src []byte) []byte {
 // script.NewState, CDP commands can retrieve it via cdpState(s) at any time.
 func Run(t testing.TB, e *Engine, s *State, filename string, r io.Reader) {
 	t.Helper()
-	runCapture(t, e, s, filename, r, nil)
-}
-
-// runCaptureOpts configures how runCapture behaves.
-type runCaptureOpts struct {
-	// ReportWriter, when non-nil, receives streaming GFM report output
-	// as the script executes. Typically set to t.Output().
-	ReportWriter io.Writer
-
-	// ReportName is the script name used in the report heading.
-	ReportName string
-
-	// ReportDir is the artifact directory for relative image paths.
-	ReportDir string
-
-	// ScriptSource is the raw script for preamble extraction.
-	ScriptSource []byte
+	runCapture(t, e, s, filename, r)
 }
 
 // runCapture executes the script and returns the captured engine log.
-func runCapture(t testing.TB, e *Engine, s *State, filename string, r io.Reader, opts *runCaptureOpts) string {
+func runCapture(t testing.TB, e *Engine, s *State, filename string, r io.Reader) string {
 	t.Helper()
 
 	var captured string
@@ -169,14 +153,7 @@ func runCapture(t testing.TB, e *Engine, s *State, filename string, r io.Reader,
 		logBuf := new(strings.Builder)
 		logBuf.WriteString("\n")
 
-		// If streaming, the engine writes to the streamer which tees
-		// to logBuf and the report writer (t.Output()).
 		var logW io.Writer = logBuf
-		var streamer *reportStreamer
-		if opts != nil && opts.ReportWriter != nil {
-			streamer = NewReportStreamer(logBuf, opts.ReportWriter, opts.ReportName, opts.ReportDir, opts.ScriptSource)
-			logW = streamer
-		}
 
 		t.Helper()
 		cov, err := startCoverage(s)
@@ -198,9 +175,6 @@ func runCapture(t testing.TB, e *Engine, s *State, filename string, r io.Reader,
 			}
 			if covErr := finishCoverage(cov, s); err == nil {
 				err = covErr
-			}
-			if streamer != nil {
-				streamer.Flush()
 			}
 			captured = logBuf.String()
 			if logBuf.Len() > 0 {
@@ -292,12 +266,13 @@ func Test(t *testing.T, e *Engine, allocCtx context.Context, baseURL, pattern st
 	if *flagReportDir != "" {
 		artRoot = *flagReportDir
 	}
-	emitReport := *flagEmitReport || *flagReportDir != "" || *flagCombinedReport
+	emitReport := *flagEmitReport || *flagReportDir != "" || *flagEmitReportHTML || *flagCombinedReport
 
-	// A path-bearing report request uses the public report writer. The writer
-	// receives the complete manifest before parallel subtests begin.
+	// The report writer receives the complete manifest before parallel subtests
+	// begin. All report flags use this writer, so the test and CLI entry points
+	// produce the same report tree.
 	var reportWriter *reportpkg.Writer
-	if *flagReportDir != "" {
+	if emitReport {
 		scripts := make([]reportpkg.Script, 0, len(files))
 		for _, file := range files {
 			a, err := txtar.ParseFile(file)
@@ -329,38 +304,7 @@ func Test(t *testing.T, e *Engine, allocCtx context.Context, baseURL, pattern st
 		}
 	}
 
-	// Combined report: live-updating file rewritten as each script finishes.
 	var combinedMu sync.Mutex
-	var combinedWriter *CombinedReportWriter
-	wantCombined := *flagCombinedReport && artRoot != "" && reportWriter == nil
-	if wantCombined {
-		// Build the full manifest from script files.
-		names := make([]string, len(files))
-		sources := make(map[string][]byte, len(files))
-		for i, file := range files {
-			name := strings.TrimSuffix(filepath.Base(file), ".txt")
-			names[i] = name
-			if a, err := txtar.ParseFile(file); err == nil {
-				if ExtractReportLevel(a.Comment) == ReportOverview {
-					sources[name] = a.Comment
-				}
-			}
-		}
-		// Filter to overview-only scripts.
-		var overviewNames []string
-		for _, name := range names {
-			if _, ok := sources[name]; ok {
-				overviewNames = append(overviewNames, name)
-			}
-		}
-		reportPath := filepath.Join(artRoot, "report.md")
-		w, err := NewCombinedReportWriter(reportPath, overviewNames, sources)
-		if err != nil {
-			t.Logf("combined report: %v", err)
-		} else {
-			combinedWriter = w
-		}
-	}
 
 	for _, file := range files {
 		name := strings.TrimSuffix(filepath.Base(file), ".txt")
@@ -409,17 +353,7 @@ func Test(t *testing.T, e *Engine, allocCtx context.Context, baseURL, pattern st
 				t.Logf("$WORK=%s", work)
 			}
 
-			var opts *runCaptureOpts
-			if reportWriter == nil && emitReport {
-				opts = &runCaptureOpts{
-					ReportWriter: t.Output(),
-					ReportName:   name,
-					ReportDir:    artDir,
-					ScriptSource: a.Comment,
-				}
-			}
-
-			captured := runCapture(t, e, s, file, bytes.NewReader(a.Comment), opts)
+			captured := runCapture(t, e, s, file, bytes.NewReader(a.Comment))
 
 			if reportWriter != nil {
 				combinedMu.Lock()
@@ -433,35 +367,9 @@ func Test(t *testing.T, e *Engine, allocCtx context.Context, baseURL, pattern st
 				combinedMu.Unlock()
 				if err != nil {
 					t.Logf("report generation failed: %v", err)
-				}
-			} else if emitReport {
-				reportPath := filepath.Join(artDir, "report.md")
-				if err := GenerateReport(reportPath, name, a.Comment, captured); err != nil {
-					t.Logf("report generation failed: %v", err)
 				} else {
-					t.Attr("cdp.report", reportPath)
+					t.Attr("cdp.report", filepath.Join(artDir, "report.md"))
 				}
-				if *flagEmitReportHTML {
-					htmlPath := filepath.Join(artDir, "report.html")
-					if err := reportpkg.WriteHTML(htmlPath, reportpkg.Script{Name: name, Source: a.Comment, Log: captured, ArtifactDir: artDir, Failed: t.Failed()}); err != nil {
-						t.Logf("html report generation failed: %v", err)
-					}
-				}
-			}
-
-			// Update combined report (skip detail-only scripts).
-			if combinedWriter != nil && ExtractReportLevel(a.Comment) == ReportOverview {
-				combinedMu.Lock()
-				if err := combinedWriter.Update(ScriptReport{
-					Name:        name,
-					Source:      a.Comment,
-					Log:         captured,
-					ArtifactDir: artDir,
-					Failed:      t.Failed(),
-				}); err != nil {
-					t.Logf("combined report update: %v", err)
-				}
-				combinedMu.Unlock()
 			}
 		})
 	}
