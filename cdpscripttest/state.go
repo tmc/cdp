@@ -2,6 +2,7 @@ package cdpscripttest
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -171,8 +172,11 @@ func newState(cdpCtx context.Context, workdir, baseURL string, env []string, art
 	}
 
 	// Detect headless mode: navigator.webdriver is true in headless Chrome.
+	// A plain context is allowed for scripts that do not use a browser.
 	var isHeadless bool
-	_ = chromedp.Run(cdpCtx, chromedp.Evaluate(`navigator.webdriver === true`, &isHeadless))
+	if err := chromedp.Run(cdpCtx, chromedp.Evaluate(`navigator.webdriver === true`, &isHeadless)); err != nil && !errors.Is(err, chromedp.ErrInvalidContext) {
+		return nil, fmt.Errorf("cdpscripttest: start browser: %w", err)
+	}
 	cs.headless = isHeadless
 
 	return cs, nil
