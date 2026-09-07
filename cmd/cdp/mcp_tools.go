@@ -52,6 +52,7 @@ func registerMCPTools(server *mcp.Server, session *mcpSession, cfg mcpConfig) {
 	registerWebMCPTools(server, session)
 	registerExtensionTools(server, session)
 	registerActionDiffTool(server, session)
+	registerBrowserObservationTools(server, session)
 	registerNetworkTools(server, session)
 	registerCDPScriptTools(server, session)
 	if cfg.EnableInspect {

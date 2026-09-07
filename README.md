@@ -10,6 +10,8 @@ The browser-automation stack has three primary layers:
 - `cdpscript`: executable txtar scripts that turn browser interactions into Unix-style tools.
 - `cdpscripttest`: `rsc.io/script`-style browser fixtures for Go tests, including a bridge that runs real `cdpscript` archives.
 
+For MCP actions tied to an inspected page, see [browser observations and actions](docs/browser-observations.md).
+
 ## Commands
 
 - `chrome-to-har`: focused HAR capture CLI

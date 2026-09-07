@@ -43,6 +43,8 @@ type mcpSession struct {
 	activeFrameID     cdp.FrameID
 	outputDir         string
 	contextStack      []string
+	observationGate   chan struct{}
+	observation       *browserObservation // protected by observationGate
 }
 
 // activeCtx returns the current active tab context, waiting for browser setup

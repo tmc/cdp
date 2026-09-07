@@ -143,6 +143,11 @@ func buildAXSnapshot(ctx context.Context, refs *refRegistry) (string, error) {
 		return result, nil
 	}
 
+	return formatAXSnapshot(nodes, refs), nil
+}
+
+// formatAXSnapshot formats an AX tree into a private observation registry.
+func formatAXSnapshot(nodes []*accessibility.Node, refs *refRegistry) string {
 	// Build a lookup from NodeID → *Node and a children map.
 	byID := make(map[accessibility.NodeID]*accessibility.Node, len(nodes))
 	children := make(map[accessibility.NodeID][]accessibility.NodeID, len(nodes))
@@ -256,7 +261,7 @@ func buildAXSnapshot(ctx context.Context, refs *refRegistry) (string, error) {
 		walk(rootID, 0)
 	}
 
-	return b.String(), nil
+	return b.String()
 }
 
 // resolveRef resolves a @ref number to a BackendNodeID.
