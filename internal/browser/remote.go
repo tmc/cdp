@@ -141,6 +141,11 @@ func (b *Browser) ConnectToExistingTab(ctx context.Context, browserWSURL string,
 	}
 
 	browserCtx, browserCancel = chromedp.NewContext(allocCtx, opts...)
+	if err := chromedp.Run(browserCtx); err != nil {
+		browserCancel()
+		allocCancel()
+		return fmt.Errorf("initialize existing tab connection: %w", err)
+	}
 
 	// Store context and cancel functions
 	b.setRemoteContext(browserCtx, browserCancel, allocCancel)
@@ -242,7 +247,8 @@ func (b *Browser) ConnectToTabWebSocket(ctx context.Context, tabWSURL string) er
 	return nil
 }
 
-// ConnectToWebSocket connects to a Chrome instance via WebSocket URL (creates new tab)
+// ConnectToWebSocket connects to a Chrome instance via WebSocket URL (creates new tab).
+// It initializes the connection before returning.
 func (b *Browser) ConnectToWebSocket(ctx context.Context, wsURL string) error {
 	// Create a new context with the WebSocket URL
 	allocCtx, allocCancel := chromedp.NewRemoteAllocator(ctx, wsURL)
@@ -260,6 +266,11 @@ func (b *Browser) ConnectToWebSocket(ctx context.Context, wsURL string) error {
 	} else {
 		browserCtx, browserCancel = chromedp.NewContext(allocCtx,
 			chromedp.WithErrorf(filteredErrorf))
+	}
+	if err := chromedp.Run(browserCtx); err != nil {
+		browserCancel()
+		allocCancel()
+		return fmt.Errorf("initialize websocket connection: %w", err)
 	}
 
 	// Store context and cancel functions

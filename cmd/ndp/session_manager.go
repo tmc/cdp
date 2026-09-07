@@ -172,6 +172,14 @@ func (sm *SessionManager) connectToTarget(ctx context.Context, target DebugTarge
 		chromeCancel()
 		allocCancel()
 	}
+	// Node targets use a raw WebSocket connection after this setup. chromedp
+	// initialization sends Chrome-specific Target and Page commands they lack.
+	if target.Type != SessionTypeNode {
+		if err := chromedp.Run(chromeCtx); err != nil {
+			cancel()
+			return nil, fmt.Errorf("connect to %s target: %w", target.Type, err)
+		}
+	}
 
 	conn := &CDPConnection{
 		URL:       wsURL,
@@ -180,9 +188,6 @@ func (sm *SessionManager) connectToTarget(ctx context.Context, target DebugTarge
 		ChromeCtx: chromeCtx,
 		verbose:   sm.verbose,
 	}
-
-	// Skip connection test for now due to chromedp URL parsing issues with Node.js WebSocket URLs
-	// TODO: Find alternative way to test connection
 
 	if sm.verbose {
 		log.Printf("Connected to %s target at %s", target.Type, wsURL)
