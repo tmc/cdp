@@ -11,7 +11,7 @@ instead of a script someone remembers to run.
 
 `cdpscripttest` brings `rsc.io/script` txtar ergonomics to CDP: the archive
 comment section is the script body, `-- name --` sections become files in the
-test's working directory, and each script runs as a subtest with its own tab.
+test's working directory, and each script runs as a subtest with its own browser.
 
 ## Hard rules
 

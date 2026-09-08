@@ -39,13 +39,11 @@ func TestCDP(t *testing.T) {
 
 	allocCtx, cancel := chromedp.NewExecAllocator(t.Context(), opts...)
 	t.Cleanup(cancel)
-	browserCtx, cancelBrowser := chromedp.NewContext(allocCtx)
-	t.Cleanup(cancelBrowser)
 
 	baseURL := startTestServer(t)
 	e := cdpscripttest.NewEngine()
 
 	for _, pattern := range matched {
-		cdpscripttest.Test(t, e, browserCtx, baseURL, pattern, nil)
+		cdpscripttest.Test(t, e, allocCtx, baseURL, pattern, nil)
 	}
 }

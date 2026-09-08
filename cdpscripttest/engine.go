@@ -219,10 +219,14 @@ func runCapture(t testing.TB, e *Engine, s *State, filename string, r io.Reader)
 }
 
 // Test discovers txtar scripts matching pattern and runs each as a parallel
-// subtest. Each test gets an isolated browser tab (chromedp context) and a
-// fresh temporary working directory.
+// subtest. Each subtest gets its own browser and a fresh temporary working
+// directory.
 //
-// allocCtx must be a chromedp allocator context (from chromedp.NewExecAllocator).
+// allocCtx must be a chromedp allocator context, from chromedp.NewExecAllocator.
+// Do not pass a browser context that has already been run: the subtests would
+// share its browser, and Page.startScreencast delivers frames only for the
+// foreground target, so parallel screenrecord scripts would capture nothing.
+//
 // baseURL is prepended to paths in navigate commands.
 // env is the initial environment; nil uses os.Environ().
 func Test(t *testing.T, e *Engine, allocCtx context.Context, baseURL, pattern string, env []string) {
@@ -311,7 +315,7 @@ func Test(t *testing.T, e *Engine, allocCtx context.Context, baseURL, pattern st
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			// Each subtest gets its own browser tab.
+			// Each subtest gets its own browser.
 			tabCtx, tabCancel := chromedp.NewContext(allocCtx)
 			t.Cleanup(tabCancel)
 
