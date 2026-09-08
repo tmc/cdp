@@ -392,7 +392,7 @@ func (im *InteractiveMode) coverageStart(ctx context.Context) error {
 		return fmt.Errorf("coverage already running")
 	}
 	c := coverage.New(im.verbose)
-	if err := c.Start(ctx); err != nil {
+	if err := chromedp.Run(ctx, chromedp.ActionFunc(c.Start)); err != nil {
 		return fmt.Errorf("start coverage: %w", err)
 	}
 	im.coverageCollector = c

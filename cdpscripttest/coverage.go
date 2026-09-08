@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/chromedp/chromedp"
 	"github.com/tmc/cdp/internal/coverage"
 )
 
@@ -24,7 +25,7 @@ func startCoverage(s *State) (*coverage.Collector, error) {
 		return nil, nil
 	}
 	c := coverage.New(false)
-	if err := c.Start(s.cdpCtx); err != nil {
+	if err := chromedp.Run(s.cdpCtx, chromedp.ActionFunc(c.Start)); err != nil {
 		return nil, fmt.Errorf("start coverage: %w", err)
 	}
 	return c, nil

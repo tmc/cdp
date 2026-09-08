@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/tmc/cdp/internal/chromedp"
 	"github.com/tmc/cdp/internal/coverage"
 )
 
@@ -262,7 +263,7 @@ func registerCoverageTools(server *mcp.Server, s *mcpSession) {
 			s.coverageCollector.Stop()
 		}
 		c := coverage.New(false)
-		if err := c.Start(s.activeCtx()); err != nil {
+		if err := chromedp.Run(s.activeCtx(), chromedp.ActionFunc(c.Start)); err != nil {
 			return nil, nil, fmt.Errorf("start_coverage: %w", err)
 		}
 		s.coverageCollector = c

@@ -11,17 +11,17 @@ import (
 	"sync"
 	"time"
 
+	"github.com/chromedp/cdproto/cdp"
 	"github.com/chromedp/cdproto/css"
 	"github.com/chromedp/cdproto/debugger"
 	"github.com/chromedp/cdproto/profiler"
-	"github.com/tmc/cdp/internal/chromedp"
 )
 
 // Collector gathers code coverage from an active browser context.
 // It does not write to disk; callers handle persistence.
 type Collector struct {
 	mu        sync.Mutex
-	outerCtx  context.Context // chromedp context (survives page reloads)
+	outerCtx  context.Context // carries the CDP executor; survives page reloads
 	running   bool
 	snapshots []*Snapshot
 	verbose   bool
@@ -106,9 +106,17 @@ func New(verbose bool) *Collector {
 	}
 }
 
-// Start enables profiling and begins coverage collection on the given
-// chromedp browser context. The context must be a chromedp context (from
-// chromedp.NewContext or passed through chromedp.Run).
+// Start enables profiling and begins coverage collection. Call it as a browser
+// action, so that ctx carries a CDP executor:
+//
+//	chromedp.Run(browserCtx, chromedp.ActionFunc(c.Start))
+//
+// Taking the executor from ctx rather than a chromedp context keeps this
+// package independent of which chromedp implementation the caller uses.
+//
+// Start retains ctx for later snapshots, so ctx must outlive the collector.
+// The executor it carries survives page reloads, which reset only the inner
+// target context.
 func (c *Collector) Start(ctx context.Context) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -116,26 +124,24 @@ func (c *Collector) Start(ctx context.Context) error {
 	if c.running {
 		return fmt.Errorf("coverage collection already running")
 	}
+	if cdp.ExecutorFromContext(ctx) == nil {
+		return fmt.Errorf("no CDP executor in context")
+	}
 
-	if err := chromedp.Run(ctx, chromedp.ActionFunc(func(ctx context.Context) error {
-		if err := profiler.Enable().Do(ctx); err != nil {
-			return fmt.Errorf("enable profiler: %w", err)
-		}
-		if _, err := debugger.Enable().Do(ctx); err != nil {
-			return fmt.Errorf("enable debugger: %w", err)
-		}
-		if _, err := profiler.StartPreciseCoverage().WithCallCount(true).WithDetailed(true).Do(ctx); err != nil {
-			return fmt.Errorf("start precise coverage: %w", err)
-		}
-		if err := css.Enable().Do(ctx); err != nil {
-			return fmt.Errorf("enable css: %w", err)
-		}
-		if err := css.StartRuleUsageTracking().Do(ctx); err != nil {
-			return fmt.Errorf("start css rule tracking: %w", err)
-		}
-		return nil
-	})); err != nil {
-		return err
+	if err := profiler.Enable().Do(ctx); err != nil {
+		return fmt.Errorf("enable profiler: %w", err)
+	}
+	if _, err := debugger.Enable().Do(ctx); err != nil {
+		return fmt.Errorf("enable debugger: %w", err)
+	}
+	if _, err := profiler.StartPreciseCoverage().WithCallCount(true).WithDetailed(true).Do(ctx); err != nil {
+		return fmt.Errorf("start precise coverage: %w", err)
+	}
+	if err := css.Enable().Do(ctx); err != nil {
+		return fmt.Errorf("enable css: %w", err)
+	}
+	if err := css.StartRuleUsageTracking().Do(ctx); err != nil {
+		return fmt.Errorf("start css rule tracking: %w", err)
 	}
 
 	c.outerCtx = ctx
@@ -159,114 +165,114 @@ func (c *Collector) TakeSnapshot(name string) (*Snapshot, error) {
 		Scripts:   make(map[string]*ScriptCoverage),
 	}
 
-	// Collect JS and CSS coverage via fresh chromedp.Run calls.
-	// Using the outer chromedp context ensures we get a valid executor
-	// even after page reloads (which reset the inner target context).
-	if err := chromedp.Run(c.outerCtx, chromedp.ActionFunc(func(ctx context.Context) error {
-		jsCoverage, _, err := profiler.TakePreciseCoverage().Do(ctx)
-		if err != nil {
-			return fmt.Errorf("take js coverage: %w", err)
-		}
-
-		for _, sc := range jsCoverage {
-			if sc.URL == "" || strings.HasPrefix(sc.URL, "data:") {
-				continue
-			}
-
-			source, _, err := debugger.GetScriptSource(sc.ScriptID).Do(ctx)
-			if err != nil {
-				if c.verbose {
-					fmt.Printf("coverage: skip script %s: %v\n", sc.URL, err)
-				}
-				continue
-			}
-
-			cov := &ScriptCoverage{
-				URL:    sc.URL,
-				Source: source,
-				Lines:  make(map[int]int),
-			}
-
-			for _, fn := range sc.Functions {
-				var ranges []CoverageRange
-				var hitCount int
-				for _, r := range fn.Ranges {
-					cr := CoverageRange{
-						StartOffset: int(r.StartOffset),
-						EndOffset:   int(r.EndOffset),
-						Count:       int(r.Count),
-					}
-					ranges = append(ranges, cr)
-					cov.ByteRanges = append(cov.ByteRanges, cr)
-					if r.Count > 0 {
-						hitCount += int(r.Count)
-					}
-				}
-
-				startLine, _ := offsetToLineCol(source, int(fn.Ranges[0].StartOffset))
-				endLine, _ := offsetToLineCol(source, int(fn.Ranges[0].EndOffset))
-
-				cov.Functions = append(cov.Functions, FunctionCoverage{
-					Name:      fn.FunctionName,
-					StartLine: startLine,
-					EndLine:   endLine,
-					HitCount:  hitCount,
-					Ranges:    ranges,
-				})
-
-				for _, r := range fn.Ranges {
-					if r.Count == 0 {
-						continue
-					}
-					sl, _ := offsetToLineCol(source, int(r.StartOffset))
-					el, _ := offsetToLineCol(source, int(r.EndOffset))
-					for line := sl; line <= el; line++ {
-						cov.Lines[line] += int(r.Count)
-					}
-				}
-			}
-
-			snap.Scripts[sc.URL] = cov
-		}
-
-		// Collect CSS coverage delta.
-		cssRules, _, err := css.TakeCoverageDelta().Do(ctx)
-		if err != nil {
-			if c.verbose {
-				fmt.Printf("coverage: css delta: %v\n", err)
-			}
-			return nil // CSS failure is non-fatal
-		}
-		bySheet := make(map[string]*CSSCoverage)
-		for _, rule := range cssRules {
-			id := string(rule.StyleSheetID)
-			cc, ok := bySheet[id]
-			if !ok {
-				cc = &CSSCoverage{URL: id}
-				bySheet[id] = cc
-			}
-			size := int(rule.EndOffset - rule.StartOffset)
-			cc.TotalBytes += size
-			if rule.Used {
-				cc.UsedBytes += size
-			}
-			cc.Ranges = append(cc.Ranges, CoverageRange{
-				StartOffset: int(rule.StartOffset),
-				EndOffset:   int(rule.EndOffset),
-				Count:       boolToInt(rule.Used),
-			})
-		}
-		for _, cc := range bySheet {
-			snap.CSS = append(snap.CSS, cc)
-		}
-
-		return nil
-	})); err != nil {
+	if err := c.collect(c.outerCtx, snap); err != nil {
 		return nil, err
 	}
 
 	c.snapshots = append(c.snapshots, snap)
 	return snap, nil
+}
+
+// collect fills snap with the JavaScript and CSS coverage collected so far.
+func (c *Collector) collect(ctx context.Context, snap *Snapshot) error {
+	jsCoverage, _, err := profiler.TakePreciseCoverage().Do(ctx)
+	if err != nil {
+		return fmt.Errorf("take js coverage: %w", err)
+	}
+
+	for _, sc := range jsCoverage {
+		if sc.URL == "" || strings.HasPrefix(sc.URL, "data:") {
+			continue
+		}
+
+		source, _, err := debugger.GetScriptSource(sc.ScriptID).Do(ctx)
+		if err != nil {
+			if c.verbose {
+				fmt.Printf("coverage: skip script %s: %v\n", sc.URL, err)
+			}
+			continue
+		}
+
+		cov := &ScriptCoverage{
+			URL:    sc.URL,
+			Source: source,
+			Lines:  make(map[int]int),
+		}
+
+		for _, fn := range sc.Functions {
+			var ranges []CoverageRange
+			var hitCount int
+			for _, r := range fn.Ranges {
+				cr := CoverageRange{
+					StartOffset: int(r.StartOffset),
+					EndOffset:   int(r.EndOffset),
+					Count:       int(r.Count),
+				}
+				ranges = append(ranges, cr)
+				cov.ByteRanges = append(cov.ByteRanges, cr)
+				if r.Count > 0 {
+					hitCount += int(r.Count)
+				}
+			}
+
+			startLine, _ := offsetToLineCol(source, int(fn.Ranges[0].StartOffset))
+			endLine, _ := offsetToLineCol(source, int(fn.Ranges[0].EndOffset))
+
+			cov.Functions = append(cov.Functions, FunctionCoverage{
+				Name:      fn.FunctionName,
+				StartLine: startLine,
+				EndLine:   endLine,
+				HitCount:  hitCount,
+				Ranges:    ranges,
+			})
+
+			for _, r := range fn.Ranges {
+				if r.Count == 0 {
+					continue
+				}
+				sl, _ := offsetToLineCol(source, int(r.StartOffset))
+				el, _ := offsetToLineCol(source, int(r.EndOffset))
+				for line := sl; line <= el; line++ {
+					cov.Lines[line] += int(r.Count)
+				}
+			}
+		}
+
+		snap.Scripts[sc.URL] = cov
+	}
+
+	// Collect CSS coverage delta.
+	cssRules, _, err := css.TakeCoverageDelta().Do(ctx)
+	if err != nil {
+		if c.verbose {
+			fmt.Printf("coverage: css delta: %v\n", err)
+		}
+		return nil // CSS failure is non-fatal
+	}
+	bySheet := make(map[string]*CSSCoverage)
+	for _, rule := range cssRules {
+		id := string(rule.StyleSheetID)
+		cc, ok := bySheet[id]
+		if !ok {
+			cc = &CSSCoverage{URL: id}
+			bySheet[id] = cc
+		}
+		size := int(rule.EndOffset - rule.StartOffset)
+		cc.TotalBytes += size
+		if rule.Used {
+			cc.UsedBytes += size
+		}
+		cc.Ranges = append(cc.Ranges, CoverageRange{
+			StartOffset: int(rule.StartOffset),
+			EndOffset:   int(rule.EndOffset),
+			Count:       boolToInt(rule.Used),
+		})
+	}
+	for _, cc := range bySheet {
+		snap.CSS = append(snap.CSS, cc)
+	}
+
+	return nil
 }
 
 // Stop ends coverage collection and disables profiling.
@@ -279,22 +285,21 @@ func (c *Collector) Stop() error {
 	}
 	c.running = false
 
-	var firstErr error
-	if err := chromedp.Run(c.outerCtx, chromedp.ActionFunc(func(ctx context.Context) error {
-		if err := profiler.StopPreciseCoverage().Do(ctx); err != nil {
-			return fmt.Errorf("stop precise coverage: %w", err)
-		}
-		if err := profiler.Disable().Do(ctx); err != nil {
-			return fmt.Errorf("disable profiler: %w", err)
-		}
-		if _, err := css.StopRuleUsageTracking().Do(ctx); err != nil {
-			return fmt.Errorf("stop css tracking: %w", err)
-		}
-		return nil
-	})); err != nil {
-		firstErr = err
+	return c.disable(c.outerCtx)
+}
+
+// disable turns off the profiling domains enabled by Start.
+func (c *Collector) disable(ctx context.Context) error {
+	if err := profiler.StopPreciseCoverage().Do(ctx); err != nil {
+		return fmt.Errorf("stop precise coverage: %w", err)
 	}
-	return firstErr
+	if err := profiler.Disable().Do(ctx); err != nil {
+		return fmt.Errorf("disable profiler: %w", err)
+	}
+	if _, err := css.StopRuleUsageTracking().Do(ctx); err != nil {
+		return fmt.Errorf("stop css tracking: %w", err)
+	}
+	return nil
 }
 
 // Snapshots returns all captured snapshots.

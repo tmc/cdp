@@ -106,7 +106,7 @@ func TestSourcemapPipeline_EndToEnd(t *testing.T) {
 	cov := coverage.New(true)
 
 	t.Log("starting coverage and navigating...")
-	if err := cov.Start(browserCtx); err != nil {
+	if err := chromedp.Run(browserCtx, chromedp.ActionFunc(cov.Start)); err != nil {
 		t.Fatalf("start coverage: %v", err)
 	}
 
