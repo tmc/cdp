@@ -915,17 +915,21 @@ func (r *Recorder) streamEntry(entry *har.Entry) {
 	r.streamEntryAtPage(entry, page, dir)
 }
 
-func (r *Recorder) streamEntryAtPage(entry *har.Entry, page, dir string) {
+// transformEntry applies the configured filter and template to entry. It
+// returns nil when the filter drops the entry or a transform fails. Both the
+// streamed entries and the assembled HAR go through it, so that -filter and
+// -template mean the same thing whichever output the caller asked for.
+func (r *Recorder) transformEntry(entry *har.Entry) *har.Entry {
 	if r.filter != nil && r.filter.JQExpr != "" {
 		filtered, err := r.applyJQFilter(entry)
 		if err != nil {
 			if r.verbose {
 				log.Printf("Error applying filter: %v", err)
 			}
-			return
+			return nil
 		}
 		if filtered == nil {
-			return // Entry filtered out
+			return nil // Entry filtered out
 		}
 		entry = filtered
 	}
@@ -936,9 +940,17 @@ func (r *Recorder) streamEntryAtPage(entry *har.Entry, page, dir string) {
 			if r.verbose {
 				log.Printf("Error applying template: %v", err)
 			}
-			return
+			return nil
 		}
 		entry = templated
+	}
+
+	return entry
+}
+
+func (r *Recorder) streamEntryAtPage(entry *har.Entry, page, dir string) {
+	if entry = r.transformEntry(entry); entry == nil {
+		return
 	}
 
 	jsonBytes, err := json.Marshal(entry)
@@ -1104,6 +1116,9 @@ func (r *Recorder) HAR() (*har.HAR, error) {
 		}
 
 		r.scrubEntry(entry)
+		if entry = r.transformEntry(entry); entry == nil {
+			continue
+		}
 		h.Log.Entries = append(h.Log.Entries, entry)
 	}
 
