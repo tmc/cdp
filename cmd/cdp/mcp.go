@@ -288,6 +288,9 @@ func (s *mcpSession) contextPath() string {
 
 // mcpConfig holds configuration for the MCP server mode.
 type mcpConfig struct {
+	RemoteHost        string
+	RemotePort        int
+	RemoteTab         string
 	Headless          bool
 	Verbose           bool
 	OutputDir         string
@@ -397,6 +400,9 @@ func runMCP(cfg mcpConfig) error {
 		}
 
 		fcfg := fullCaptureConfig{
+			RemoteHost:        cfg.RemoteHost,
+			RemotePort:        cfg.RemotePort,
+			TabID:             cfg.RemoteTab,
 			Verbose:           cfg.Verbose,
 			Headless:          cfg.Headless,
 			DebugPort:         cfg.DebugPort,

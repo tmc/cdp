@@ -1508,6 +1508,9 @@ func main() {
 			}
 		})
 		mcpCfg := mcpConfig{
+			RemoteHost:        remoteHost,
+			RemotePort:        remotePort,
+			RemoteTab:         remoteTab,
 			Headless:          headless,
 			Verbose:           verbose,
 			OutputDir:         outputDir,

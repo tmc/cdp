@@ -628,7 +628,10 @@ func registerTabTools(server *mcp.Server, s *mcpSession) {
 		// domains on the new session, causing timeouts on the next tool call.
 		var out TabOutput
 		out.ID = input.ID
-		if err := runWithTimeout(tabCtx, 10*time.Second,
+		// The first Run owns the target event loop. Keep its context alive
+		// after attachment; cancel the target itself if startup times out.
+		startup := time.AfterFunc(10*time.Second, tabCancel)
+		err = chromedp.Run(tabCtx,
 			chromedp.ActionFunc(func(ctx context.Context) error {
 				if err := page.Enable().Do(ctx); err != nil {
 					return fmt.Errorf("enable page: %w", err)
@@ -640,7 +643,11 @@ func registerTabTools(server *mcp.Server, s *mcpSession) {
 			}),
 			chromedp.Title(&out.Title),
 			chromedp.Location(&out.URL),
-		); err != nil {
+		)
+		if !startup.Stop() && err == nil {
+			err = context.DeadlineExceeded
+		}
+		if err != nil {
 			tabCancel()
 			return nil, TabOutput{}, fmt.Errorf("switch_tab: attach: %w", err)
 		}
