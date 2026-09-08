@@ -149,6 +149,60 @@ func TestChurl_ShowHelp(t *testing.T) {
 	}
 }
 
+// TestChurl_MirrorFlagsRejected checks that the wget-compatible mirroring
+// flags fail instead of being ignored. They used to be parsed and never read,
+// so churl printed one page and exited 0 for a command that asked it to write
+// a site to disk.
+func TestChurl_MirrorFlagsRejected(t *testing.T) {
+	t.Parallel()
+	churlPath := buildChurl(t)
+
+	tests := []struct {
+		name string
+		args []string
+		want string
+	}{
+		{
+			name: "mirror a documentation site",
+			args: []string{"-m", "-np", "-P", "./site", "https://example.com/docs/"},
+			want: "churl: mirroring is not implemented: -P, -m, -np",
+		},
+		{
+			name: "recursive with depth",
+			args: []string{"-r", "-l", "3", "https://example.com"},
+			want: "churl: mirroring is not implemented: -l, -r",
+		},
+		{
+			name: "long spellings",
+			args: []string{"-recursive", "-accept", "html", "https://example.com"},
+			want: "churl: mirroring is not implemented: -accept, -recursive",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+
+			var stdout, stderr bytes.Buffer
+			cmd := exec.CommandContext(ctx, churlPath, tt.args...)
+			cmd.Stdout = &stdout
+			cmd.Stderr = &stderr
+			err := cmd.Run()
+
+			if err == nil {
+				t.Errorf("churl %s exited 0, want failure", strings.Join(tt.args, " "))
+			}
+			if got := strings.TrimSpace(stderr.String()); got != tt.want {
+				t.Errorf("stderr = %q, want %q", got, tt.want)
+			}
+			if stdout.Len() > 0 {
+				t.Errorf("stdout = %q, want empty", stdout.String())
+			}
+		})
+	}
+}
+
 func TestChurl_BasicFetch(t *testing.T) {
 	// not parallel — Chrome profile contention
 	skipIfNoBrowser(t)

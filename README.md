@@ -190,7 +190,7 @@ The main `cdp` command is the broader general-purpose entry point. It goes beyon
 - SPA-aware page fetches
 - extracting rendered HTML or text
 - saving HAR alongside fetch output
-- mirroring and scripted page interaction
+- scripted page interaction
 
 ## What `ndp` and `chdb` Do
 

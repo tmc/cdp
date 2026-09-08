@@ -4,7 +4,7 @@ Churl fetches URLs through a real browser.
 Churl is shaped like curl and wget, but every request runs in Chrome or Brave,
 so JavaScript executes and single-page applications render before the content
 is read. It prints the rendered page, extracts it as text, Markdown, or JSON,
-mirrors a site recursively, and can write a HAR alongside any of those.
+and can write a HAR alongside any of those.
 
 Usage:
 
@@ -62,6 +62,7 @@ There is no image-quality or resampling parameter: Page.printToPDF does not
 expose one, and deviceScaleFactor does not affect its output. Images are
 embedded at their source resolution, so the lever is the resolution of the
 images the page loads.
+
 	-har file
 	    Also write a HAR to this path. Works with any output format.
 	-verbose
@@ -114,10 +115,13 @@ A rendered page is only worth reading once it has settled.
 	    (default true)
 	-stable-timeout seconds
 	    Maximum time to wait for the page to stabilize. (default 30)
-	-w, -wait seconds
-	    Wait between downloads.
 
-# Recursion and mirroring
+# Mirroring
+
+Mirroring is not implemented. Churl accepts wget's mirroring flags so that the
+implementation, when it lands, keeps their spelling, and rejects any command
+that sets one: a command asking for a copy of a site on disk should fail rather
+than print a single page and exit successfully.
 
 	-r, -recursive
 	    Download recursively.
@@ -133,11 +137,8 @@ A rendered page is only worth reading once it has settled.
 	    Follow links to other domains.
 	-k, -convert-links
 	    Rewrite links to point at the downloaded copies.
-
-# Where files land
-
 	-P, -directory-prefix dir
-	    Save below this directory. (default ".")
+	    Save below this directory.
 	-nd, -no-directories
 	    Do not recreate the directory hierarchy.
 	-nH, -no-host-directories
@@ -152,13 +153,12 @@ A rendered page is only worth reading once it has settled.
 	    Download only files newer than the local copy.
 	-c, -continue
 	    Resume partial downloads.
+	-w, -wait seconds
+	    Wait between downloads.
 	-limit-rate n
 	    Limit download speed to n bytes per second, 0 for unlimited.
 	-Q, -quota n
 	    Stop after downloading n bytes in total, 0 for unlimited.
-
-# Choosing what to fetch
-
 	-A, -accept extensions
 	    Accept only these file extensions, comma-separated.
 	-R, -reject extensions
@@ -259,10 +259,6 @@ Print a rendered page, then convert it to Markdown:
 Wait for an application shell before reading the page:
 
 	churl -wait-for '#app-root' https://app.example.com
-
-Mirror a documentation site, staying within it:
-
-	churl -m -np -P ./site https://example.com/docs/
 
 Capture a HAR while fetching:
 

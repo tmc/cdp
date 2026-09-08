@@ -105,34 +105,33 @@ type options struct {
 	webSocketDirection   string      // WebSocket direction filter (sent/received)
 	webSocketOutputFile  string      // Output file for WebSocket data
 	webSocketStats       bool        // Show WebSocket statistics
+}
 
-	// Mirror options (wget-compatible)
-	mirror            bool        // Enable mirroring mode (shortcut for -r -l inf -k)
-	recursive         bool        // Enable recursive downloading
-	level             int         // Maximum recursion depth (0 = infinite)
-	convertLinks      bool        // Convert links to relative paths
-	pageRequisites    bool        // Download all assets needed to display page
-	noParent          bool        // Don't ascend to parent directory
-	spanHosts         bool        // Follow links to other domains
-	acceptExtensions  stringSlice // Accept file extensions (e.g., html,js,css)
-	rejectExtensions  stringSlice // Reject file extensions (e.g., mp4,zip)
-	acceptDomains     stringSlice // Accept only these domains
-	rejectDomains     stringSlice // Reject these domains
-	includeDirs       stringSlice // Include only these directories
-	excludeDirs       stringSlice // Exclude these directories
-	acceptRegex       string      // Accept URLs matching regex
-	rejectRegex       string      // Reject URLs matching regex
-	wait              int         // Wait seconds between downloads
-	noClobber         bool        // Don't re-download existing files
-	timestamping      bool        // Only download newer files
-	continueDownload  bool        // Resume partial downloads
-	limitRate         int64       // Limit download speed (bytes/sec)
-	quota             int64       // Maximum total download size
-	directoryPrefix   string      // Save files to this directory
-	noDirectories     bool        // Don't create directory hierarchy
-	forceDirectories  bool        // Force creation of directories
-	cutDirs           int         // Ignore N remote directory components
-	noHostDirectories bool        // Don't create host-based directories
+// unimplemented is the flag.Value of an option churl documents and parses but
+// does not act on. Rejecting such an option is better than ignoring it: wget's
+// mirroring flags ask for files on disk, and a command that asks for them and
+// exits successfully having written none is a silent failure.
+type unimplemented struct{ isBool bool }
+
+func (*unimplemented) String() string     { return "" }
+func (*unimplemented) Set(string) error   { return nil }
+func (u *unimplemented) IsBoolFlag() bool { return u.isBool }
+
+var (
+	notImplemented     = &unimplemented{}
+	notImplementedBool = &unimplemented{isBool: true}
+)
+
+// unimplementedFlags returns the names of the unimplemented flags that the
+// command line set, in lexicographical order.
+func unimplementedFlags() []string {
+	var names []string
+	flag.Visit(func(f *flag.Flag) {
+		if _, ok := f.Value.(*unimplemented); ok {
+			names = append(names, f.Name)
+		}
+	})
+	return names
 }
 
 // headerSlice allows multiple -H flags
@@ -331,52 +330,54 @@ func main() {
 	flag.StringVar(&opts.webSocketOutputFile, "ws-output", "", "Output file for WebSocket data")
 	flag.BoolVar(&opts.webSocketStats, "ws-stats", false, "Show WebSocket statistics")
 
-	// Mirror options (wget-compatible)
-	flag.BoolVar(&opts.mirror, "m", false, "Mirror mode (shortcut for -r -k)")
-	flag.BoolVar(&opts.mirror, "mirror", false, "Mirror mode (shortcut for -r -k)")
-	flag.BoolVar(&opts.recursive, "r", false, "Recursive download")
-	flag.BoolVar(&opts.recursive, "recursive", false, "Recursive download")
-	flag.IntVar(&opts.level, "l", 0, "Maximum recursion depth (0 = infinite)")
-	flag.IntVar(&opts.level, "level", 0, "Maximum recursion depth (0 = infinite)")
-	flag.BoolVar(&opts.convertLinks, "k", false, "Convert links to relative paths")
-	flag.BoolVar(&opts.convertLinks, "convert-links", false, "Convert links to relative paths")
-	flag.BoolVar(&opts.pageRequisites, "p", false, "Download all assets needed to display page")
-	flag.BoolVar(&opts.pageRequisites, "page-requisites", false, "Download all assets needed to display page")
-	flag.BoolVar(&opts.noParent, "np", false, "Don't ascend to parent directory")
-	flag.BoolVar(&opts.noParent, "no-parent", false, "Don't ascend to parent directory")
-	flag.BoolVar(&opts.spanHosts, "span-hosts", false, "Follow links to other domains")
-	flag.Var(&opts.acceptExtensions, "A", "Accept file extensions (comma-separated)")
-	flag.Var(&opts.acceptExtensions, "accept", "Accept file extensions (comma-separated)")
-	flag.Var(&opts.rejectExtensions, "R", "Reject file extensions (comma-separated)")
-	flag.Var(&opts.rejectExtensions, "reject", "Reject file extensions (comma-separated)")
-	flag.Var(&opts.acceptDomains, "D", "Accept only these domains (comma-separated)")
-	flag.Var(&opts.acceptDomains, "domains", "Accept only these domains (comma-separated)")
-	flag.Var(&opts.rejectDomains, "exclude-domains", "Reject these domains (comma-separated)")
-	flag.Var(&opts.includeDirs, "I", "Include only these directories (comma-separated)")
-	flag.Var(&opts.includeDirs, "include-directories", "Include only these directories (comma-separated)")
-	flag.Var(&opts.excludeDirs, "exclude-directories", "Exclude these directories (comma-separated)")
-	flag.StringVar(&opts.acceptRegex, "accept-regex", "", "Accept URLs matching regex")
-	flag.StringVar(&opts.rejectRegex, "reject-regex", "", "Reject URLs matching regex")
-	flag.IntVar(&opts.wait, "w", 0, "Wait seconds between downloads")
-	flag.IntVar(&opts.wait, "wait", 0, "Wait seconds between downloads")
-	flag.BoolVar(&opts.noClobber, "nc", false, "Don't re-download existing files")
-	flag.BoolVar(&opts.noClobber, "no-clobber", false, "Don't re-download existing files")
-	flag.BoolVar(&opts.timestamping, "N", false, "Only download newer files")
-	flag.BoolVar(&opts.timestamping, "timestamping", false, "Only download newer files")
-	flag.BoolVar(&opts.continueDownload, "c", false, "Resume partial downloads")
-	flag.BoolVar(&opts.continueDownload, "continue", false, "Resume partial downloads")
-	flag.Int64Var(&opts.limitRate, "limit-rate", 0, "Limit download speed (bytes/sec)")
-	flag.Int64Var(&opts.quota, "Q", 0, "Maximum total download size (bytes)")
-	flag.Int64Var(&opts.quota, "quota", 0, "Maximum total download size (bytes)")
-	flag.StringVar(&opts.directoryPrefix, "P", ".", "Save files to this directory")
-	flag.StringVar(&opts.directoryPrefix, "directory-prefix", ".", "Save files to this directory")
-	flag.BoolVar(&opts.noDirectories, "nd", false, "Don't create directory hierarchy")
-	flag.BoolVar(&opts.noDirectories, "no-directories", false, "Don't create directory hierarchy")
-	flag.BoolVar(&opts.forceDirectories, "x", false, "Force creation of directories")
-	flag.BoolVar(&opts.forceDirectories, "force-directories", false, "Force creation of directories")
-	flag.IntVar(&opts.cutDirs, "cut-dirs", 0, "Ignore N remote directory components")
-	flag.BoolVar(&opts.noHostDirectories, "nH", false, "Don't create host-based directories")
-	flag.BoolVar(&opts.noHostDirectories, "no-host-directories", false, "Don't create host-based directories")
+	// Mirror options (wget-compatible). Mirroring is not implemented, so
+	// churl parses these only to reject them below: a mirroring command
+	// must fail rather than quietly fetch a single page.
+	flag.Var(notImplementedBool, "m", "Mirror mode (shortcut for -r -k) (not implemented)")
+	flag.Var(notImplementedBool, "mirror", "Mirror mode (shortcut for -r -k) (not implemented)")
+	flag.Var(notImplementedBool, "r", "Recursive download (not implemented)")
+	flag.Var(notImplementedBool, "recursive", "Recursive download (not implemented)")
+	flag.Var(notImplemented, "l", "Maximum recursion depth (0 = infinite) (not implemented)")
+	flag.Var(notImplemented, "level", "Maximum recursion depth (0 = infinite) (not implemented)")
+	flag.Var(notImplementedBool, "k", "Convert links to relative paths (not implemented)")
+	flag.Var(notImplementedBool, "convert-links", "Convert links to relative paths (not implemented)")
+	flag.Var(notImplementedBool, "p", "Download all assets needed to display page (not implemented)")
+	flag.Var(notImplementedBool, "page-requisites", "Download all assets needed to display page (not implemented)")
+	flag.Var(notImplementedBool, "np", "Don't ascend to parent directory (not implemented)")
+	flag.Var(notImplementedBool, "no-parent", "Don't ascend to parent directory (not implemented)")
+	flag.Var(notImplementedBool, "span-hosts", "Follow links to other domains (not implemented)")
+	flag.Var(notImplemented, "A", "Accept file extensions (comma-separated) (not implemented)")
+	flag.Var(notImplemented, "accept", "Accept file extensions (comma-separated) (not implemented)")
+	flag.Var(notImplemented, "R", "Reject file extensions (comma-separated) (not implemented)")
+	flag.Var(notImplemented, "reject", "Reject file extensions (comma-separated) (not implemented)")
+	flag.Var(notImplemented, "D", "Accept only these domains (comma-separated) (not implemented)")
+	flag.Var(notImplemented, "domains", "Accept only these domains (comma-separated) (not implemented)")
+	flag.Var(notImplemented, "exclude-domains", "Reject these domains (comma-separated) (not implemented)")
+	flag.Var(notImplemented, "I", "Include only these directories (comma-separated) (not implemented)")
+	flag.Var(notImplemented, "include-directories", "Include only these directories (comma-separated) (not implemented)")
+	flag.Var(notImplemented, "exclude-directories", "Exclude these directories (comma-separated) (not implemented)")
+	flag.Var(notImplemented, "accept-regex", "Accept URLs matching regex (not implemented)")
+	flag.Var(notImplemented, "reject-regex", "Reject URLs matching regex (not implemented)")
+	flag.Var(notImplemented, "w", "Wait seconds between downloads (not implemented)")
+	flag.Var(notImplemented, "wait", "Wait seconds between downloads (not implemented)")
+	flag.Var(notImplementedBool, "nc", "Don't re-download existing files (not implemented)")
+	flag.Var(notImplementedBool, "no-clobber", "Don't re-download existing files (not implemented)")
+	flag.Var(notImplementedBool, "N", "Only download newer files (not implemented)")
+	flag.Var(notImplementedBool, "timestamping", "Only download newer files (not implemented)")
+	flag.Var(notImplementedBool, "c", "Resume partial downloads (not implemented)")
+	flag.Var(notImplementedBool, "continue", "Resume partial downloads (not implemented)")
+	flag.Var(notImplemented, "limit-rate", "Limit download speed (bytes/sec) (not implemented)")
+	flag.Var(notImplemented, "Q", "Maximum total download size (bytes) (not implemented)")
+	flag.Var(notImplemented, "quota", "Maximum total download size (bytes) (not implemented)")
+	flag.Var(notImplemented, "P", "Save files to this directory (not implemented)")
+	flag.Var(notImplemented, "directory-prefix", "Save files to this directory (not implemented)")
+	flag.Var(notImplementedBool, "nd", "Don't create directory hierarchy (not implemented)")
+	flag.Var(notImplementedBool, "no-directories", "Don't create directory hierarchy (not implemented)")
+	flag.Var(notImplementedBool, "x", "Force creation of directories (not implemented)")
+	flag.Var(notImplementedBool, "force-directories", "Force creation of directories (not implemented)")
+	flag.Var(notImplemented, "cut-dirs", "Ignore N remote directory components (not implemented)")
+	flag.Var(notImplementedBool, "nH", "Don't create host-based directories (not implemented)")
+	flag.Var(notImplementedBool, "no-host-directories", "Don't create host-based directories (not implemented)")
 
 	// Custom usage message
 	flag.Usage = func() {
@@ -389,6 +390,12 @@ func main() {
 		fmt.Fprintf(w, "Options:\n")
 
 		flag.VisitAll(func(f *flag.Flag) {
+			// An unimplemented flag has no meaningful type or default.
+			if _, ok := f.Value.(*unimplemented); ok {
+				fmt.Fprintf(w, "  -%s\t\t%s\n", f.Name, f.Usage)
+				return
+			}
+
 			def := f.DefValue
 			if def != "" {
 				def = fmt.Sprintf(" (default: %s)", def)
@@ -411,6 +418,11 @@ func main() {
 	}
 
 	flag.Parse()
+
+	if names := unimplementedFlags(); len(names) > 0 {
+		fmt.Fprintf(os.Stderr, "churl: mirroring is not implemented: -%s\n", strings.Join(names, ", -"))
+		os.Exit(1)
+	}
 
 	// Handle --list-tabs separately
 	if opts.listTabs && opts.remoteHost != "" {
