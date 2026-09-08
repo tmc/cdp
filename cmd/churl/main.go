@@ -290,7 +290,7 @@ func main() {
 	flag.Var(&opts.headers, "H", "Add request header (can be used multiple times)")
 	flag.StringVar(&opts.method, "X", "GET", "HTTP method to use")
 	flag.StringVar(&opts.data, "d", "", "Data to send (for POST/PUT)")
-	flag.BoolVar(&opts.followRedirect, "L", true, "Follow redirects")
+	flag.BoolVar(&opts.followRedirect, "L", true, "Follow redirects (always on)")
 
 	// Authentication
 	flag.StringVar(&opts.username, "u", "", "Username for basic auth (user:password)")
@@ -421,6 +421,12 @@ func main() {
 
 	if names := unimplementedFlags(); len(names) > 0 {
 		fmt.Fprintf(os.Stderr, "churl: mirroring is not implemented: -%s\n", strings.Join(names, ", -"))
+		os.Exit(1)
+	}
+
+	// The browser follows redirects on its own; churl cannot turn that off.
+	if !opts.followRedirect {
+		fmt.Fprintln(os.Stderr, "churl: -L=false is not implemented: the browser always follows redirects")
 		os.Exit(1)
 	}
 

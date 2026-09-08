@@ -79,7 +79,8 @@ images the page loads.
 	-u user:password
 	    Credentials for basic authentication.
 	-L
-	    Follow redirects. (default true)
+	    Follow redirects. (default true) Redirects are always followed:
+	    the browser does it, so -L=false is rejected rather than ignored.
 
 # Browser
 

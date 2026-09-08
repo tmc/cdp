@@ -177,6 +177,11 @@ func TestChurl_MirrorFlagsRejected(t *testing.T) {
 			args: []string{"-recursive", "-accept", "html", "https://example.com"},
 			want: "churl: mirroring is not implemented: -accept, -recursive",
 		},
+		{
+			name: "redirects turned off",
+			args: []string{"-L=false", "https://example.com"},
+			want: "churl: -L=false is not implemented: the browser always follows redirects",
+		},
 	}
 
 	for _, tt := range tests {
