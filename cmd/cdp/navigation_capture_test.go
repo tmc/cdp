@@ -160,6 +160,30 @@ func runFullCaptureNavigation(t *testing.T, url string, timeout int) (string, st
 	return runFullCaptureNavigationWithWait(t, url, timeout, "domcontentloaded")
 }
 
+// startupDuration returns how long cdp spent getting ready to read a command,
+// as cdp itself reported it under --verbose. Subtracting it from the wall
+// clock leaves the navigation, which is what these tests are about: a cold
+// browser launch takes seconds and would otherwise blow every deadline here.
+func startupDuration(t *testing.T, output string) time.Duration {
+	t.Helper()
+
+	const marker = "startup: REPL initialized after "
+	i := strings.LastIndex(output, marker)
+	if i < 0 {
+		t.Fatalf("cdp did not report its startup time; looked for %q in:\n%s", marker, output)
+	}
+	rest := output[i+len(marker):]
+	line, _, _ := strings.Cut(rest, "\n")
+	d, err := time.ParseDuration(strings.TrimSpace(line))
+	if err != nil {
+		t.Fatalf("unparsable startup time %q: %v", line, err)
+	}
+	return d
+}
+
+// runFullCaptureNavigationWithWait runs one goto under --full-capture and
+// returns the output directory, the combined output, and how long the
+// navigation took, excluding the time cdp spent starting up.
 func runFullCaptureNavigationWithWait(t *testing.T, url string, timeout int, wait string) (string, string, time.Duration) {
 	t.Helper()
 
@@ -198,5 +222,5 @@ func runFullCaptureNavigationWithWait(t *testing.T, url string, timeout int, wai
 	if _, err := os.Stat(outDir); err != nil {
 		t.Fatalf("output directory missing: %v", err)
 	}
-	return outDir, output.String(), elapsed
+	return outDir, output.String(), elapsed - startupDuration(t, output.String())
 }
