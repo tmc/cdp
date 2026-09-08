@@ -394,6 +394,14 @@ var nodeAttachCmd = &cobra.Command{
 		if err := debugger.Attach(ctx, port); err != nil {
 			log.Fatalf("Failed to attach to Node.js: %v", err)
 		}
+
+		// Session details for humans on stderr, the port alone on stdout
+		// so that scripts can read it.
+		t := debugger.session.Target
+		fmt.Fprintf(os.Stderr, "Attached to Node.js process on port %s\n", port)
+		fmt.Fprintf(os.Stderr, "Target: %s\n", t.Title)
+		fmt.Fprintf(os.Stderr, "URL: %s\n", t.URL)
+		fmt.Println(port)
 	},
 }
 
@@ -531,16 +539,9 @@ var nodeWatchCmd = &cobra.Command{
 		// Simply re-attach to the port and add watch
 		debugger := NewNodeDebugger(verbose)
 
-		// Suppress duplicate output when re-attaching
-		oldStdout := os.Stdout
-		os.Stdout = os.Stderr // Temporarily redirect stdout to stderr
-
 		if err := debugger.Attach(ctx, port); err != nil {
-			os.Stdout = oldStdout
 			log.Fatalf("Failed to attach to port %s: %v", port, err)
 		}
-
-		os.Stdout = oldStdout
 
 		if err := debugger.AddWatch(ctx, expression); err != nil {
 			log.Fatalf("Failed to add watch: %v", err)

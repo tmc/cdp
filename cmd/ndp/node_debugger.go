@@ -49,7 +49,10 @@ func NewNodeDebugger(verbose bool) *NodeDebugger {
 	}
 }
 
-// Attach attaches to a running Node.js process
+// Attach attaches to the Node.js process listening for inspector
+// connections on port. It prints nothing: most commands attach on the way
+// to doing something else, and a banner on stdout would corrupt their
+// output. Callers that report the attachment do so themselves.
 func (nd *NodeDebugger) Attach(ctx context.Context, port string) error {
 	// Verify Node.js inspector is available
 	url := fmt.Sprintf("http://localhost:%s/json/version", port)
@@ -115,14 +118,6 @@ func (nd *NodeDebugger) Attach(ctx context.Context, port string) error {
 	if err := nd.enableDebugger(ctx); err != nil {
 		return fmt.Errorf("failed to enable debugger: %w", err)
 	}
-
-	// Print session info to stderr for humans
-	fmt.Fprintf(os.Stderr, "Attached to Node.js process on port %s\n", port)
-	fmt.Fprintf(os.Stderr, "Target: %s\n", target["title"])
-	fmt.Fprintf(os.Stderr, "URL: %s\n", target["url"])
-
-	// Print just the port to stdout for scripts
-	fmt.Println(port)
 
 	// Save session file for other commands to use
 	sessionFile := &SessionFile{
