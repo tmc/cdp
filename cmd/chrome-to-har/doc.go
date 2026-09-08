@@ -22,14 +22,10 @@ Usage:
 	-stream
 	    Write entries as NDJSON as they are captured, rather than one HAR at
 	    the end.
-	-html
-	    Write rendered HTML instead of a HAR.
 	-max-body-bytes n
 	    Maximum response body bytes to keep, 0 to keep whole bodies.
 	-interactive
 	    Drive the capture from an interactive prompt.
-	-restore-session
-	    Restore the previous session on startup.
 
 # Browser
 
@@ -58,12 +54,6 @@ Usage:
 These narrow what ends up in the output. To stop requests from being made at
 all, see Blocking below.
 
-	-urls regexp
-	    Keep only URLs matching this pattern.
-	-omit regexp
-	    Drop URLs matching this pattern.
-	-cookies regexp
-	    Keep only cookies matching this pattern.
 	-filter expression
 	    Filter entries with a jq expression.
 	-template template
@@ -71,8 +61,6 @@ all, see Blocking below.
 
 # Blocking
 
-	-block regexp
-	    Prevent matching URLs from loading.
 	-block-enabled
 	    Enable the rule-based blocker below.
 	-block-ads
@@ -107,12 +95,8 @@ pages is well after the load event.
 	    Use the enhanced stability detector rather than the simple one.
 	-network-idle-timeout ms
 	    How long the network must be quiet. (default 500)
-	-dom-stable-timeout ms
-	    How long the DOM must be unchanged. (default 500)
 	-stable-timeout seconds
 	    Maximum time to wait for stability overall. (default 30)
-	-stability-retries n
-	    Retry attempts for stability detection. (default 3)
 	-resource-timeout seconds
 	    Per-resource loading timeout. (default 10)
 	-wait-for-images
@@ -169,7 +153,8 @@ Capture a page:
 
 Stream only API traffic:
 
-	chrome-to-har -url https://example.com -stream -urls 'api\.example\.com'
+	chrome-to-har -url https://example.com -stream \
+		-filter 'select(.request.url | test("api\\.example\\.com"))'
 
 Capture with a profile's cookies, waiting for the app to render:
 

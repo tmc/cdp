@@ -39,13 +39,8 @@ type options struct {
 	differential    bool
 	verbose         bool
 	startURL        string
-	cookiePattern   string
-	urlPattern      string
-	blockPattern    string
-	omitPattern     string
 	cookieDomains   string
 	listProfiles    bool
-	restoreSession  bool
 	streaming       bool
 	headless        bool
 	filter          string
@@ -59,14 +54,11 @@ type options struct {
 	waitStable      bool   // Wait until page is stable (network and DOM)
 	stableTimeout   int    // Max time in seconds to wait for stability
 	waitSelector    string // Wait for specific CSS selector to appear
-	getHTML         bool   // Output HTML instead of HAR
 
 	// Enhanced stability detection options
 	waitForStability   bool // Use enhanced stability detection
 	networkIdleTimeout int  // Network idle timeout in milliseconds
-	domStableTimeout   int  // DOM stable timeout in milliseconds
 	resourceTimeout    int  // Resource loading timeout in seconds
-	stabilityRetries   int  // Number of retry attempts for stability
 	waitForImages      bool // Wait for all images to load
 	waitForFonts       bool // Wait for all fonts to load
 	waitForStylesheets bool // Wait for all stylesheets to load
@@ -207,13 +199,8 @@ func main() {
 	flag.BoolVar(&opts.differential, "diff", false, "Enable differential HAR capture")
 	flag.BoolVar(&opts.verbose, "verbose", false, "Enable verbose logging")
 	flag.StringVar(&opts.startURL, "url", "", "Starting URL to navigate to")
-	flag.StringVar(&opts.cookiePattern, "cookies", "", "Regular expression to filter cookies in HAR output")
-	flag.StringVar(&opts.urlPattern, "urls", "", "Regular expression to filter URLs")
-	flag.StringVar(&opts.blockPattern, "block", "", "Regular expression of URLs to block from loading")
-	flag.StringVar(&opts.omitPattern, "omit", "", "Regular expression of URLs to omit from HAR output")
 	flag.StringVar(&opts.cookieDomains, "cookie-domains", "", "Comma-separated list of domains to include cookies from (requires sqlite3 in PATH)")
 	flag.BoolVar(&opts.listProfiles, "list-profiles", false, "List available Chrome profiles")
-	flag.BoolVar(&opts.restoreSession, "restore-session", false, "Restore previous session on startup")
 	flag.BoolVar(&opts.streaming, "stream", false, "Stream HAR entries as they are captured (outputs NDJSON)")
 	flag.BoolVar(&opts.headless, "headless", false, "Run Chrome in headless mode")
 	flag.StringVar(&opts.filter, "filter", "", "JQ expression to filter HAR entries")
@@ -227,14 +214,11 @@ func main() {
 	flag.BoolVar(&opts.waitStable, "wait-stable", false, "Wait until page is stable (network and DOM)")
 	flag.IntVar(&opts.stableTimeout, "stable-timeout", 30, "Max time in seconds to wait for stability")
 	flag.StringVar(&opts.waitSelector, "wait-for", "", "Wait for specific CSS selector to appear")
-	flag.BoolVar(&opts.getHTML, "html", false, "Output HTML instead of HAR")
 
 	// Enhanced stability detection flags
 	flag.BoolVar(&opts.waitForStability, "wait-for-stability", false, "Use enhanced stability detection system")
 	flag.IntVar(&opts.networkIdleTimeout, "network-idle-timeout", 500, "Network idle timeout in milliseconds")
-	flag.IntVar(&opts.domStableTimeout, "dom-stable-timeout", 500, "DOM stable timeout in milliseconds")
 	flag.IntVar(&opts.resourceTimeout, "resource-timeout", 10, "Resource loading timeout in seconds")
-	flag.IntVar(&opts.stabilityRetries, "stability-retries", 3, "Number of retry attempts for stability detection")
 	flag.BoolVar(&opts.waitForImages, "wait-for-images", true, "Wait for all images to load")
 	flag.BoolVar(&opts.waitForFonts, "wait-for-fonts", true, "Wait for all fonts to load")
 	flag.BoolVar(&opts.waitForStylesheets, "wait-for-stylesheets", true, "Wait for all stylesheets to load")

@@ -262,10 +262,12 @@ jq '[.log.entries[].response.content.size] | add' output.har
 
 ```bash
 # Omit tracking/analytics URLs
-chrome-to-har -url https://example.com -omit "analytics|tracking|ads" -output clean.har
+chrome-to-har -url https://example.com \
+  -filter 'select(.request.url | test("analytics|tracking|ads") | not)' -output clean.har
 
-# Filter cookies (strip sensitive cookies from HAR)
-chrome-to-har -url https://example.com -cookies "session|auth" -output filtered.har
+# Strip cookies from the recorded entries
+chrome-to-har -url https://example.com \
+  -filter 'del(.request.cookies, .response.cookies)' -output clean.har
 ```
 
 ## Recorder Internals
