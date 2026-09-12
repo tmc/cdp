@@ -19,6 +19,8 @@ import (
 	"github.com/tmc/cdp/internal/chromedp"
 )
 
+//go:generate env UPDATE_MCP_TOOL_SCHEMA=1 go test -run=^TestMCPToolSchema$ -count=1
+
 // registerMCPTools registers all MCP tool handlers on the given server.
 func registerMCPTools(server *mcp.Server, session *mcpSession, cfg mcpConfig) {
 	registerNavigationTools(server, session)

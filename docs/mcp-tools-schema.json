@@ -1,0 +1,2267 @@
+{
+  "tools": [
+    {
+      "description": "Execute an action and return before/after/diff screenshots with change percentage.\nActions: \"click\" (needs selector), \"type\" (needs selector + text), \"navigate\" (needs url).\nParams is a JSON string, e.g. {\"selector\": \"@1\"}, {\"selector\": \"coord:100,200\"}, or {\"url\": \"https://example.com\"}.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "type": "string"
+          },
+          "params": {
+            "type": "string"
+          },
+          "width": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "action"
+        ],
+        "type": "object"
+      },
+      "name": "action_diff"
+    },
+    {
+      "description": "Analyze a JavaScript bundle using coverage data to infer its original source structure.\n\nIf the MCP client supports sampling, the analysis happens automatically via CreateMessage.\nOtherwise, returns extracted code chunks for you to analyze manually, then call\nset_bundle_structure with the inferred file structure.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "action_label": {
+            "type": "string"
+          },
+          "bundle_url": {
+            "type": "string"
+          },
+          "snapshot_name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "bundle_url"
+        ],
+        "type": "object"
+      },
+      "name": "analyze_bundle"
+    },
+    {
+      "annotations": {
+        "readOnlyHint": true
+      },
+      "description": "Analyze a Chrome trace JSON file and return Core Web Vitals: LCP, INP, and CLS. Use path \"-\" to read from stdin.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "path": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "name": "analyze_trace"
+    },
+    {
+      "description": "Click, type, or navigate using a browser_observe state_id and target_id. Click/type require an @ref; navigate requires an absolute url and targets the observed frame. Consumes that state before attempting the action; stale nodes are never recovered by name. Returns independent execution, observation and postcondition results and, when captured, a fresh_state. expect compares exact textContent of one CSS match immediately after capture. Never automatically replay an uncertain action. Timeout is milliseconds, default 30000, maximum 60000.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "type": "string"
+          },
+          "expect": {
+            "additionalProperties": false,
+            "properties": {
+              "selector": {
+                "type": "string"
+              },
+              "text": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "selector",
+              "text"
+            ],
+            "type": [
+              "null",
+              "object"
+            ]
+          },
+          "ref": {
+            "type": "string"
+          },
+          "state_id": {
+            "type": "string"
+          },
+          "target_id": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          },
+          "timeout_ms": {
+            "type": "integer"
+          },
+          "url": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "state_id",
+          "target_id",
+          "action"
+        ],
+        "type": "object"
+      },
+      "name": "browser_act",
+      "outputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "error_text": {
+            "type": "string"
+          },
+          "execution": {
+            "type": "string"
+          },
+          "fresh_state": {
+            "additionalProperties": false,
+            "properties": {
+              "doc_backend_node_id": {
+                "type": "integer"
+              },
+              "frame_id": {
+                "type": "string"
+              },
+              "loader_id": {
+                "type": "string"
+              },
+              "state_id": {
+                "type": "string"
+              },
+              "target_id": {
+                "type": "string"
+              },
+              "tree": {
+                "type": "string"
+              },
+              "url": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "state_id",
+              "target_id",
+              "frame_id",
+              "loader_id",
+              "doc_backend_node_id",
+              "url",
+              "tree"
+            ],
+            "type": [
+              "null",
+              "object"
+            ]
+          },
+          "observation": {
+            "type": "string"
+          },
+          "postcondition": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "execution",
+          "observation",
+          "postcondition"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "annotations": {
+        "readOnlyHint": true
+      },
+      "description": "Observe the active browser target. Returns a state_id, exact target/document identity, and a tree with @refs. Replaces the previous observation. Use browser_act with this state_id and target_id. Optional frame_id selects an exact frame in this target; otherwise uses the selected frame or root.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "frame_id": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "name": "browser_observe",
+      "outputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "doc_backend_node_id": {
+            "type": "integer"
+          },
+          "frame_id": {
+            "type": "string"
+          },
+          "loader_id": {
+            "type": "string"
+          },
+          "state_id": {
+            "type": "string"
+          },
+          "target_id": {
+            "type": "string"
+          },
+          "tree": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "state_id",
+          "target_id",
+          "frame_id",
+          "loader_id",
+          "doc_backend_node_id",
+          "url",
+          "tree"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "description": "Check element state (visible, enabled, checked, selected, focused) by CSS selector or @ref",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "selector": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "selector"
+        ],
+        "type": "object"
+      },
+      "name": "check_element"
+    },
+    {
+      "description": "Clear all data in extension storage area via Runtime.evaluate in the extension's service worker. Area: local (default), sync, session, or managed.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "area": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "type": "object"
+      },
+      "name": "clear_extension_storage"
+    },
+    {
+      "description": "Clear localStorage or sessionStorage. Type must be \"local\" or \"session\". If key is provided, removes only that key; otherwise clears all.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "type"
+        ],
+        "type": "object"
+      },
+      "name": "clear_storage"
+    },
+    {
+      "description": "Click an element by CSS selector, @ref (e.g. @1 from page_snapshot), or viewport coordinates as coord:x,y. Timeout in seconds (default 30).",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "selector": {
+            "type": "string"
+          },
+          "timeout": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "selector"
+        ],
+        "type": "object"
+      },
+      "name": "click"
+    },
+    {
+      "description": "Close a browser tab by target ID. If no ID given, closes the current tab.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "target_id": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "name": "close_tab"
+    },
+    {
+      "description": "Compare two named coverage snapshots with per-file, per-function, and line-range detail",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "after": {
+            "type": "string"
+          },
+          "before": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "before",
+          "after"
+        ],
+        "type": "object"
+      },
+      "name": "compare_coverage"
+    },
+    {
+      "description": "Connect to a different CDP endpoint. Tears down current browser context and connects to the new target. Use this to switch between browsers (e.g. Brave on 9222 to Electron on 9223).",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "host": {
+            "type": "string"
+          },
+          "port": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "port"
+        ],
+        "type": "object"
+      },
+      "name": "connect",
+      "outputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "port": {
+            "type": "integer"
+          },
+          "title": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "url",
+          "port"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "description": "Compare two named DOM snapshots and show a git-style diff of what changed. Use snapshot_dom to capture before/after states.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "after": {
+            "type": "string"
+          },
+          "before": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "before",
+          "after"
+        ],
+        "type": "object"
+      },
+      "name": "dom_diff"
+    },
+    {
+      "description": "Drag from one element to another. Source and target are CSS selectors or @ref. Steps controls intermediate mouse move events (default 10). Timeout in seconds (default 30).",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "source": {
+            "type": "string"
+          },
+          "steps": {
+            "type": "integer"
+          },
+          "target": {
+            "type": "string"
+          },
+          "timeout": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "source",
+          "target"
+        ],
+        "type": "object"
+      },
+      "name": "drag"
+    },
+    {
+      "description": "Enable the WebMCP domain to discover page-registered MCP tools.\n\nOnce enabled, the browser reports toolsAdded/toolsRemoved events as\npages register tools via navigator.modelContext.registerTool().\nUse list_web_tools to see discovered tools, invoke_web_tool to call them.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "type": "object"
+      },
+      "name": "enable_webmcp"
+    },
+    {
+      "description": "Evaluate a JavaScript expression in the page context",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "await_promise": {
+            "type": "boolean"
+          },
+          "expression": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "expression"
+        ],
+        "type": "object"
+      },
+      "name": "evaluate"
+    },
+    {
+      "annotations": {
+        "readOnlyHint": true
+      },
+      "description": "Get console output and errors from an extension's service worker. Attaches to the service worker target on first call.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "clear": {
+            "type": "boolean"
+          },
+          "id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "type": "object"
+      },
+      "name": "extension_console"
+    },
+    {
+      "description": "Evaluate JavaScript in the context of an extension's service worker. Finds the service worker target and runs Runtime.evaluate there.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "expression": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "expression"
+        ],
+        "type": "object"
+      },
+      "name": "extension_evaluate"
+    },
+    {
+      "description": "Fill multiple form fields at once. Each field specifies a CSS selector, value, and optional type (text, select, checkbox, radio). Set submit=true to submit the form after filling.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "fields": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "selector": {
+                  "type": "string"
+                },
+                "type": {
+                  "type": "string"
+                },
+                "value": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "selector",
+                "value"
+              ],
+              "type": "object"
+            },
+            "type": [
+              "null",
+              "array"
+            ]
+          },
+          "submit": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "fields"
+        ],
+        "type": "object"
+      },
+      "name": "fill_form"
+    },
+    {
+      "description": "Find interactive elements by role, accessible name, or text content. Returns @ref numbers. Run page_snapshot first to populate refs.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "nth": {
+            "type": "integer"
+          },
+          "role": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "name": "find_element"
+    },
+    {
+      "description": "Focus an element by CSS selector or @ref. Timeout in seconds (default 30).",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "selector": {
+            "type": "string"
+          },
+          "timeout": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "selector"
+        ],
+        "type": "object"
+      },
+      "name": "focus"
+    },
+    {
+      "description": "Generate a sourcemap v3 JSON from previously analyzed bundle structure. Returns the raw sourcemap JSON.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "bundle_url": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "bundle_url"
+        ],
+        "type": "object"
+      },
+      "name": "generate_sourcemap"
+    },
+    {
+      "annotations": {
+        "readOnlyHint": true
+      },
+      "description": "Read the analysis log for a bundle — shows prior reasoning behind sourcemap naming decisions across sessions.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "bundle_url": {
+            "type": "string"
+          },
+          "last": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "bundle_url"
+        ],
+        "type": "object"
+      },
+      "name": "get_analysis_log"
+    },
+    {
+      "annotations": {
+        "readOnlyHint": true
+      },
+      "description": "Get captured console messages. Filter by type (log, warn, error, info, debug). Use index (1-based) to get a single message. Returns most recent entries.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "clear": {
+            "type": "boolean"
+          },
+          "index": {
+            "type": "integer"
+          },
+          "limit": {
+            "type": "integer"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "name": "get_console"
+    },
+    {
+      "description": "Get browser cookies, optionally filtered by domain",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "domain": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "name": "get_cookies"
+    },
+    {
+      "description": "Take a coverage snapshot and return per-file summary sorted by coverage (least covered first)",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "name": "get_coverage"
+    },
+    {
+      "description": "Get coverage diff between two snapshots showing newly covered lines",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "after": {
+            "type": "string"
+          },
+          "before": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "name": "get_coverage_delta"
+    },
+    {
+      "annotations": {
+        "readOnlyHint": true
+      },
+      "description": "Get the history of JavaScript dialogs (alert, confirm, prompt) that have appeared, and any currently pending dialog.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "type": "object"
+      },
+      "name": "get_dialogs"
+    },
+    {
+      "description": "Get element details (text, value, attributes, bounding box) by CSS selector or @ref",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "selector": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "selector"
+        ],
+        "type": "object"
+      },
+      "name": "get_element"
+    },
+    {
+      "annotations": {
+        "readOnlyHint": true
+      },
+      "description": "Get captured JavaScript exceptions and errors. Returns most recent entries.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "clear": {
+            "type": "boolean"
+          },
+          "limit": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "name": "get_errors"
+    },
+    {
+      "annotations": {
+        "readOnlyHint": true
+      },
+      "description": "Get data from extension storage via Runtime.evaluate in the extension's service worker. Area: local (default), sync, session, or managed. Optionally filter by keys.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "area": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "keys": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "null",
+              "array"
+            ]
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "type": "object"
+      },
+      "name": "get_extension_storage"
+    },
+    {
+      "description": "Get captured HAR network entries. Filter by domain or url_pattern (substring match). Use index (1-based) to get a single entry. Returns most recent entries when limit is set.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "domain": {
+            "type": "string"
+          },
+          "index": {
+            "type": "integer"
+          },
+          "limit": {
+            "type": "integer"
+          },
+          "url_pattern": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "name": "get_har_entries"
+    },
+    {
+      "annotations": {
+        "readOnlyHint": true
+      },
+      "description": "Get captured network requests from start_network_log. Optional URL filter (substring match). Set clear=true to reset.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "clear": {
+            "type": "boolean"
+          },
+          "limit": {
+            "type": "integer"
+          },
+          "url": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "name": "get_network_log"
+    },
+    {
+      "description": "Get the text or HTML content of the page or a specific element",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "format": {
+            "type": "string"
+          },
+          "selector": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "name": "get_page_content"
+    },
+    {
+      "annotations": {
+        "readOnlyHint": true
+      },
+      "description": "Get localStorage or sessionStorage. Type must be \"local\" or \"session\". If key is omitted, returns all key-value pairs.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "type"
+        ],
+        "type": "object"
+      },
+      "name": "get_storage"
+    },
+    {
+      "description": "Handle a pending JavaScript dialog (alert, confirm, prompt, beforeunload). Accept or dismiss, optionally providing prompt text.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "accept": {
+            "type": "boolean"
+          },
+          "prompt_text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "accept"
+        ],
+        "type": "object"
+      },
+      "name": "handle_dialog"
+    },
+    {
+      "description": "Hover over an element by CSS selector or @ref. Triggers mouseover events. Timeout in seconds (default 30).",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "selector": {
+            "type": "string"
+          },
+          "timeout": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "selector"
+        ],
+        "type": "object"
+      },
+      "name": "hover"
+    },
+    {
+      "annotations": {
+        "readOnlyHint": true
+      },
+      "description": "Automated app fingerprinting. Detects: identity (title, URL, Electron/Chrome versions), frameworks (React, Vue, Svelte, Angular), bundler (webpack, Vite), non-standard globals, bridge APIs (electronBridge, vscode), feature flags, error monitoring, script inventory, CSP.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "type": "object"
+      },
+      "name": "inspect_fingerprint"
+    },
+    {
+      "annotations": {
+        "readOnlyHint": true
+      },
+      "description": "Get captured IPC messages from inspect_ipc_start. Optional channel filter (substring match). Set clear=true to reset the log after reading.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "channel": {
+            "type": "string"
+          },
+          "clear": {
+            "type": "boolean"
+          },
+          "limit": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "name": "inspect_ipc_log"
+    },
+    {
+      "description": "Start capturing Electron IPC messages. Monkey-patches known bridges (electronBridge, vscode, electron) and postMessage listener. Call inspect_ipc_log to read captured messages.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "type": "object"
+      },
+      "name": "inspect_ipc_start"
+    },
+    {
+      "annotations": {
+        "readOnlyHint": true
+      },
+      "description": "Recursively explore a JS object's structure. Returns a typed tree with key counts, function arities, string lengths, and optional sampled values. Handles cycles via WeakSet. Use depth (default 2) and max_keys (default 20) to control output size.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "depth": {
+            "type": "integer"
+          },
+          "expression": {
+            "type": "string"
+          },
+          "max_keys": {
+            "type": "integer"
+          },
+          "sample_values": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "expression"
+        ],
+        "type": "object"
+      },
+      "name": "inspect_walk"
+    },
+    {
+      "description": "Install the bundled coverage DevTools extension at runtime via developerPrivate. Useful when --load-extension was not set at browser launch.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "type": "object"
+      },
+      "name": "install_bundled_extensions"
+    },
+    {
+      "description": "Load an unpacked Chrome extension from a local directory path. Tries CDP Extensions.loadUnpacked first, falls back to chrome.developerPrivate.loadUnpacked() on chrome://extensions. Note: JS fallback may trigger a file picker if --enable-unsafe-extension-debugging is not set. Use --load-extension flag at launch for reliable headless loading.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "path": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "path"
+        ],
+        "type": "object"
+      },
+      "name": "install_extension"
+    },
+    {
+      "description": "Intercept outgoing requests matching a URL pattern. Actions: \"block\" (fail the request), \"fulfill\" (return custom response with status_code, body, content_type), \"modify\" (change request headers). Pattern supports wildcards (* and ?).",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "type": "string"
+          },
+          "body": {
+            "type": "string"
+          },
+          "content_type": {
+            "type": "string"
+          },
+          "headers": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object"
+          },
+          "status_code": {
+            "type": "integer"
+          },
+          "url_pattern": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "url_pattern",
+          "action"
+        ],
+        "type": "object"
+      },
+      "name": "intercept_request"
+    },
+    {
+      "description": "Intercept responses matching a URL pattern. Actions: \"modify\" (change response headers/status), \"fulfill\" (replace response body entirely). Pattern supports wildcards.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "type": "string"
+          },
+          "body": {
+            "type": "string"
+          },
+          "content_type": {
+            "type": "string"
+          },
+          "headers": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object"
+          },
+          "status_code": {
+            "type": "integer"
+          },
+          "url_pattern": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "url_pattern",
+          "action"
+        ],
+        "type": "object"
+      },
+      "name": "intercept_response"
+    },
+    {
+      "description": "Invoke a web-page-registered MCP tool by name.\n\nThe tool must have been discovered via list_web_tools. Input should be\na JSON string matching the tool's input schema. The invocation happens\nvia Runtime.evaluate calling navigator.modelContext on the page.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "input": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      },
+      "name": "invoke_web_tool"
+    },
+    {
+      "annotations": {
+        "readOnlyHint": true
+      },
+      "description": "List all named DOM snapshots available for dom_diff.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "type": "object"
+      },
+      "name": "list_dom_snapshots"
+    },
+    {
+      "annotations": {
+        "readOnlyHint": true
+      },
+      "description": "List curated cdpscript examples and their header metadata.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "type": "object"
+      },
+      "name": "list_examples"
+    },
+    {
+      "annotations": {
+        "readOnlyHint": true
+      },
+      "description": "List installed Chrome extensions. Uses CDP Extensions domain when available, falls back to chrome.developerPrivate.getExtensionsInfo() on chrome://extensions, then target enumeration.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "enabled_only": {
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "name": "list_extensions"
+    },
+    {
+      "annotations": {
+        "readOnlyHint": true
+      },
+      "description": "List all frames (including iframes) in the current page. Returns frame ID, name, URL, and parent.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "type": "object"
+      },
+      "name": "list_frames",
+      "outputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "frames": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "parent_id": {
+                  "type": "string"
+                },
+                "url": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "url"
+              ],
+              "type": "object"
+            },
+            "type": [
+              "null",
+              "array"
+            ]
+          }
+        },
+        "required": [
+          "frames"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "annotations": {
+        "readOnlyHint": true
+      },
+      "description": "List all active intercept rules",
+      "inputSchema": {
+        "additionalProperties": false,
+        "type": "object"
+      },
+      "name": "list_intercepts"
+    },
+    {
+      "description": "List all coverage snapshots taken during this session",
+      "inputSchema": {
+        "additionalProperties": false,
+        "type": "object"
+      },
+      "name": "list_snapshots"
+    },
+    {
+      "annotations": {
+        "readOnlyHint": true
+      },
+      "description": "List all synthetic sourcemaps and their serving status.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "type": "object"
+      },
+      "name": "list_sourcemaps"
+    },
+    {
+      "description": "List all captured JavaScript and CSS sources",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "type": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "name": "list_sources"
+    },
+    {
+      "description": "List all open browser tabs",
+      "inputSchema": {
+        "additionalProperties": false,
+        "type": "object"
+      },
+      "name": "list_tabs",
+      "outputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "tabs": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "title": {
+                  "type": "string"
+                },
+                "url": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "title",
+                "url"
+              ],
+              "type": "object"
+            },
+            "type": [
+              "null",
+              "array"
+            ]
+          }
+        },
+        "required": [
+          "tabs"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "annotations": {
+        "readOnlyHint": true
+      },
+      "description": "List MCP tools registered by the current web page via navigator.modelContext.\n\nRequires the WebMCP domain to be enabled (call enable_webmcp first).\nReturns tool names, descriptions, input schemas, and annotations.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "frame_id": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "name": "list_web_tools"
+    },
+    {
+      "description": "Load browser state (cookies, localStorage, sessionStorage) from a JSON file previously saved with save_state. Optionally navigate to the saved URL.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "name": "load_state"
+    },
+    {
+      "description": "Navigate to a URL",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "url": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "url"
+        ],
+        "type": "object"
+      },
+      "name": "navigate",
+      "outputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "location": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "location"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "description": "Navigate back in browser history",
+      "inputSchema": {
+        "additionalProperties": false,
+        "type": "object"
+      },
+      "name": "navigate_back",
+      "outputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "title"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "description": "Navigate forward in browser history",
+      "inputSchema": {
+        "additionalProperties": false,
+        "type": "object"
+      },
+      "name": "navigate_forward",
+      "outputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "title"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "description": "Open a new browser tab, optionally navigating to a URL",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "url": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "name": "new_tab",
+      "outputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "url"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "description": "Get an accessibility tree snapshot of the page. Interactive elements are annotated with @ref numbers (e.g. @1, @2) that can be used with click, type_text, and other interaction tools instead of CSS selectors.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "type": "object"
+      },
+      "name": "page_snapshot"
+    },
+    {
+      "description": "Pop the current recording context",
+      "inputSchema": {
+        "additionalProperties": false,
+        "type": "object"
+      },
+      "name": "pop_context",
+      "outputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "path": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "path"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "description": "Press a keyboard key. Supports: Enter, Tab, Escape, Backspace, Delete, Space, ArrowUp/Down/Left/Right, Home, End, PageUp/PageDown, F1-F12, or any single character. Modifiers: ctrl, alt, shift, meta (comma-separated). Timeout in seconds (default 30).",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "modifiers": {
+            "type": "string"
+          },
+          "timeout": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "key"
+        ],
+        "type": "object"
+      },
+      "name": "press_key"
+    },
+    {
+      "description": "Push a new recording context to isolate traffic",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      },
+      "name": "push_context",
+      "outputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "path": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "path"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "description": "Execute a raw Chrome DevTools Protocol method. Defaults to the active target; set target to \"browser\" for browser-level methods. Example: method Runtime.evaluate with params {\"expression\":\"document.title\"}.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "method": {
+            "type": "string"
+          },
+          "params": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "target": {
+            "type": "string"
+          },
+          "timeout": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "method"
+        ],
+        "type": "object"
+      },
+      "name": "raw_cdp"
+    },
+    {
+      "description": "Read the content of a captured source file by URL",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "lines": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "url"
+        ],
+        "type": "object"
+      },
+      "name": "read_source"
+    },
+    {
+      "description": "Re-analyze a bundle with additional coverage data (e.g. after more user actions) and update the sourcemap.\n\nIf MCP sampling is available, the analysis and update happen automatically.\nOtherwise, returns new chunks for you to re-analyze, then call set_bundle_structure.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "action_label": {
+            "type": "string"
+          },
+          "bundle_url": {
+            "type": "string"
+          },
+          "snapshot_name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "bundle_url"
+        ],
+        "type": "object"
+      },
+      "name": "refine_sourcemap"
+    },
+    {
+      "description": "Reload the current page",
+      "inputSchema": {
+        "additionalProperties": false,
+        "type": "object"
+      },
+      "name": "reload",
+      "outputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "title"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "description": "Reload an unpacked Chrome extension by ID. Uses chrome.developerPrivate.reload() on a temporary chrome://extensions tab.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "type": "object"
+      },
+      "name": "reload_extension"
+    },
+    {
+      "description": "Remove an intercept rule by ID, or remove all rules. Use list output from intercept_request/intercept_response to find IDs.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "all": {
+            "type": "boolean"
+          },
+          "id": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "name": "remove_intercept"
+    },
+    {
+      "description": "Run a cdpscript script through the real cdpscript engine. Provide path or script; script may be txtar or plain .cdp.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "args": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "null",
+              "array"
+            ]
+          },
+          "format": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "script": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "name": "run_cdpscript",
+      "outputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "exit_code": {
+            "type": "integer"
+          },
+          "stderr": {
+            "type": "string"
+          },
+          "stdout": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "stdout",
+          "exit_code"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "description": "Generate a PDF of the current page. Optionally save to a file path. Returns the PDF as base64 if no path given.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "landscape": {
+            "type": "boolean"
+          },
+          "paper_height": {
+            "type": "number"
+          },
+          "paper_width": {
+            "type": "number"
+          },
+          "path": {
+            "type": "string"
+          },
+          "print_background": {
+            "type": "boolean"
+          },
+          "scale": {
+            "type": "number"
+          }
+        },
+        "type": "object"
+      },
+      "name": "save_pdf"
+    },
+    {
+      "description": "Capture all JS/CSS sources (including sourcemapped originals) from the current page and write to disk",
+      "inputSchema": {
+        "additionalProperties": false,
+        "type": "object"
+      },
+      "name": "save_sources",
+      "outputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "output_dir": {
+            "type": "string"
+          },
+          "scripts_count": {
+            "type": "integer"
+          },
+          "styles_count": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "scripts_count",
+          "styles_count",
+          "output_dir"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "description": "Save browser state (cookies, localStorage, sessionStorage, URL) to a JSON file. Provide a path or a name (saved to output dir).",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "name": "save_state"
+    },
+    {
+      "description": "Take a screenshot. Options: selector (element only), full_page, width (max px, downscales), quality (1-100, uses JPEG), format (png/jpeg/webp), annotate (draw numbered boxes on interactive elements with metadata).",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "annotate": {
+            "type": "boolean"
+          },
+          "format": {
+            "type": "string"
+          },
+          "full_page": {
+            "type": "boolean"
+          },
+          "quality": {
+            "type": "integer"
+          },
+          "selector": {
+            "type": "string"
+          },
+          "width": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "name": "screenshot"
+    },
+    {
+      "description": "Scroll the page or an element. Use direction (up/down/left/right) with optional distance in pixels (default 500). Or provide a selector/@ref to scroll that element into view.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "direction": {
+            "type": "string"
+          },
+          "distance": {
+            "type": "integer"
+          },
+          "selector": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "name": "scroll"
+    },
+    {
+      "description": "Search across all captured sources for a text pattern or regex",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "max_results": {
+            "type": "integer"
+          },
+          "pattern": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "pattern"
+        ],
+        "type": "object"
+      },
+      "name": "search_source"
+    },
+    {
+      "description": "Install a Fetch intercept to serve the synthetic sourcemap for a bundle URL. When Chrome requests the .map file, it gets our generated map instead.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "bundle_url": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "bundle_url"
+        ],
+        "type": "object"
+      },
+      "name": "serve_sourcemap"
+    },
+    {
+      "description": "Accept inferred source file structure for a bundle and generate a synthetic sourcemap.\n\nCall analyze_bundle first to get the code chunks, then pass your analysis here.\nThe structure field should be JSON matching: {\"files\": [...], \"summary\": \"...\"}\nwhere each file has: path, description, start_line, end_line, start_offset, end_offset,\nfunctions (optional), framework (optional), module (optional).",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "bundle_url": {
+            "type": "string"
+          },
+          "snapshot_name": {
+            "type": "string"
+          },
+          "structure": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "bundle_url",
+          "structure"
+        ],
+        "type": "object"
+      },
+      "name": "set_bundle_structure"
+    },
+    {
+      "description": "Set a browser cookie",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "domain": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "value",
+          "domain"
+        ],
+        "type": "object"
+      },
+      "name": "set_cookie"
+    },
+    {
+      "description": "Emulate a specific device. Sets viewport, scale, user agent, and touch. Presets: iphone-14, iphone-14-pro, iphone-15-pro, iphone-15-pro-max, iphone-se, ipad, ipad-pro-11, ipad-pro-12.9, pixel-7, pixel-7-pro, galaxy-s23, galaxy-s23-ultra, galaxy-tab-s8, desktop-1080p, desktop-1440p.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "device": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "device"
+        ],
+        "type": "object"
+      },
+      "name": "set_device"
+    },
+    {
+      "description": "Set values in extension storage via Runtime.evaluate in the extension's service worker. Area: local (default), sync, session, or managed.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "area": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "values": {
+            "additionalProperties": true,
+            "type": "object"
+          }
+        },
+        "required": [
+          "id",
+          "values"
+        ],
+        "type": "object"
+      },
+      "name": "set_extension_storage"
+    },
+    {
+      "description": "Set extra HTTP headers that will be sent with every request",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "headers": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object"
+          }
+        },
+        "required": [
+          "headers"
+        ],
+        "type": "object"
+      },
+      "name": "set_extra_headers"
+    },
+    {
+      "description": "Override the browser geolocation. Latitude and longitude in decimal degrees.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "accuracy": {
+            "type": "number"
+          },
+          "latitude": {
+            "type": "number"
+          },
+          "longitude": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "latitude",
+          "longitude"
+        ],
+        "type": "object"
+      },
+      "name": "set_geolocation"
+    },
+    {
+      "description": "Enable or disable network offline emulation",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "offline": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "offline"
+        ],
+        "type": "object"
+      },
+      "name": "set_offline"
+    },
+    {
+      "description": "Set a value in localStorage or sessionStorage. Type must be \"local\" or \"session\".",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "key",
+          "value"
+        ],
+        "type": "object"
+      },
+      "name": "set_storage"
+    },
+    {
+      "description": "Set network and CPU throttling. Network presets: slow-3g, fast-3g, slow-4g, fast-4g, offline, none. Custom download/upload in bytes/sec override the preset. CPU rate is a slowdown multiplier (1=normal, 4=4x slower, max 20).",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "cpu_rate": {
+            "type": "number"
+          },
+          "custom_download": {
+            "type": "number"
+          },
+          "custom_latency": {
+            "type": "number"
+          },
+          "custom_upload": {
+            "type": "number"
+          },
+          "network_preset": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "name": "set_throttling"
+    },
+    {
+      "description": "Override the browser user agent string",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "accept_language": {
+            "type": "string"
+          },
+          "platform": {
+            "type": "string"
+          },
+          "user_agent": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_agent"
+        ],
+        "type": "object"
+      },
+      "name": "set_user_agent"
+    },
+    {
+      "description": "Set the browser viewport size and device metrics. Width and height in pixels.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "device_scale_factor": {
+            "type": "number"
+          },
+          "height": {
+            "type": "integer"
+          },
+          "mobile": {
+            "type": "boolean"
+          },
+          "width": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "width",
+          "height"
+        ],
+        "type": "object"
+      },
+      "name": "set_viewport"
+    },
+    {
+      "description": "Capture a named DOM snapshot (simplified accessibility tree) for later comparison with dom_diff. Returns a summary of the captured tree.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      },
+      "name": "snapshot_dom"
+    },
+    {
+      "description": "Start collecting JavaScript code coverage for the current page",
+      "inputSchema": {
+        "additionalProperties": false,
+        "type": "object"
+      },
+      "name": "start_coverage"
+    },
+    {
+      "description": "Start live network request logging for all current and new browser tabs. Captures URL, method, status, headers, and timing, including requests started by links that open a new tab. Use get_network_log to read entries.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "type": "object"
+      },
+      "name": "start_network_log"
+    },
+    {
+      "description": "Start Chrome tracing. Optional categories (comma-separated, e.g. \"devtools.timeline,v8.execute\"). Default captures timeline, network, and rendering events.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "categories": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "name": "start_trace"
+    },
+    {
+      "description": "Stop coverage collection and return final summary",
+      "inputSchema": {
+        "additionalProperties": false,
+        "type": "object"
+      },
+      "name": "stop_coverage"
+    },
+    {
+      "description": "Stop Chrome tracing and save the trace file. Provide a path to write the trace JSON, or it writes to the output directory.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "path": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "name": "stop_trace"
+    },
+    {
+      "description": "Switch execution context to a frame. Use \"main\" for the top frame, a frame name, a numeric index (from list_frames), or a CSS selector for the iframe element.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "frame": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "frame"
+        ],
+        "type": "object"
+      },
+      "name": "switch_frame"
+    },
+    {
+      "description": "Switch to a browser tab by target ID",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "type": "object"
+      },
+      "name": "switch_tab",
+      "outputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "url"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "description": "Type text into an element by CSS selector or @ref (e.g. @1 from page_snapshot). Timeout in seconds (default 30).",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "selector": {
+            "type": "string"
+          },
+          "submit": {
+            "type": "boolean"
+          },
+          "text": {
+            "type": "string"
+          },
+          "timeout": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "selector",
+          "text"
+        ],
+        "type": "object"
+      },
+      "name": "type_text"
+    },
+    {
+      "description": "Uninstall a Chrome extension by ID. Tries CDP Extensions.uninstall, then chrome.management.uninstall() in the service worker, then disables via chrome.developerPrivate.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "type": "object"
+      },
+      "name": "uninstall_extension"
+    },
+    {
+      "description": "Upload file(s) to a file input element by CSS selector or @ref. Provide absolute file paths.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "files": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "null",
+              "array"
+            ]
+          },
+          "selector": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "selector",
+          "files"
+        ],
+        "type": "object"
+      },
+      "name": "upload_file"
+    },
+    {
+      "description": "Validate a cdpscript script without starting a browser or executing actions. Provide path or script; script may be txtar or plain .cdp.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "args": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "null",
+              "array"
+            ]
+          },
+          "format": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "script": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "name": "validate_script",
+      "outputSchema": {
+        "additionalProperties": true,
+        "type": "object"
+      }
+    },
+    {
+      "description": "Wait for an element to be visible by CSS selector or @ref. Timeout in seconds (default 30).",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "selector": {
+            "type": "string"
+          },
+          "timeout": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "selector"
+        ],
+        "type": "object"
+      },
+      "name": "wait_for"
+    },
+    {
+      "annotations": {
+        "readOnlyHint": true
+      },
+      "description": "List recent tool invocations observed via the WebMCP domain. Shows tool name, input, status, output, and timing.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "last": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "name": "web_tool_invocations"
+    }
+  ]
+}
