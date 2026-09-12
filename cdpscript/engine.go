@@ -72,6 +72,7 @@ type Engine struct {
 	dialogMu        sync.Mutex
 	dialogListening bool
 	dialogAction    *dialogAction
+	dialogWG        sync.WaitGroup
 
 	downloadMu  sync.Mutex
 	downloadDir string
@@ -445,6 +446,9 @@ func (e *Engine) scriptTimeout() time.Duration {
 }
 
 func (e *Engine) cleanup() {
+	// Dialog handlers run off the chromedp listener goroutine; wait for any in
+	// flight before tearing the browser down under them.
+	e.dialogWG.Wait()
 	if e.externalBrowser {
 		return
 	}

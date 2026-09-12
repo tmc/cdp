@@ -96,7 +96,16 @@ func (e *Engine) handleDialogEvent(ctx context.Context, ev any) {
 		return
 	}
 
+	// Dismissing the dialog has to happen off the listener goroutine: chromedp
+	// dispatches events synchronously, so calling Run here would deadlock. Bound
+	// the handler by the script timeout and track it so cleanup can wait for it
+	// rather than leaving it to outlive the run.
+	e.dialogWG.Add(1)
 	go func() {
+		defer e.dialogWG.Done()
+		ctx, cancel := context.WithTimeout(ctx, e.scriptTimeout())
+		defer cancel()
+
 		cmd := page.HandleJavaScriptDialog(action.accept)
 		if action.promptText != "" {
 			cmd = cmd.WithPromptText(action.promptText)
