@@ -149,19 +149,6 @@ func WithBrowserFromContext(ctx context.Context) Option {
 	}
 }
 
-// WithBrowser executes against an existing browser context.
-// The engine does not close a browser supplied this way.
-//
-// Deprecated: WithBrowser takes a type from an internal package, so it cannot
-// be called from outside this module and it pins the public API to an internal
-// type. Use [WithBrowserFromContext] instead.
-func WithBrowser(br *browser.Browser) Option {
-	return func(e *Engine) {
-		e.browser = br
-		e.externalBrowser = true
-	}
-}
-
 // WithStdout sets the writer used by commands that produce stdout.
 func WithStdout(w io.Writer) Option {
 	return func(e *Engine) {
