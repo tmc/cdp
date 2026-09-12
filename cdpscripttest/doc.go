@@ -61,7 +61,8 @@
 // delegates to the real cdpscript runtime instead of the legacy cdpscripttest
 // command table, so runtime behavior stays aligned. Set
 // CDPScriptRunOptions.TabID and Port to run a fixture against an already
-// running DevTools tab.
+// running DevTools tab. CDPScriptRunOptions.Options carries cdpscript options
+// through to the engine unchanged, for anything the named fields do not cover.
 // Checked-in fixtures live under testdata/, testdata/interaction/, and
 // testdata/cdpscript/.
 //

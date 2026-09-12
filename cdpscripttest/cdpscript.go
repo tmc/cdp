@@ -31,6 +31,11 @@ type CDPScriptRunOptions struct {
 	// launching a new browser. Port is the DevTools port; if zero, 9222 is used.
 	TabID string
 	Port  int
+
+	// Options are applied to the engine after the fields above, so they can
+	// reach any cdpscript option without cdpscripttest having to mirror it,
+	// and can override what the fields set.
+	Options []cdpscript.Option
 }
 
 // RunCDPScript executes a cdpscript txtar archive through the real runtime
@@ -50,6 +55,7 @@ func RunCDPScript(ctx context.Context, path string, opts CDPScriptRunOptions) er
 	if opts.TabID != "" {
 		engineOpts = append(engineOpts, cdpscript.WithRemoteTab(opts.TabID, opts.Port))
 	}
+	engineOpts = append(engineOpts, opts.Options...)
 
 	engine := cdpscript.New(engineOpts...)
 	return engine.ExecuteTxtar(ctx, path, opts.Args)
