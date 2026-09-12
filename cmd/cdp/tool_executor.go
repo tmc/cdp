@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	"github.com/tmc/cdp/cdpscript"
-	"github.com/tmc/cdp/internal/browser"
 )
 
 func runCDPScriptBody(ctx context.Context, scriptBody string, env map[string]string, outputDir string) (stdout, stderr string, err error) {
@@ -19,7 +18,7 @@ func runCDPScriptBody(ctx context.Context, scriptBody string, env map[string]str
 	var out bytes.Buffer
 	var errout bytes.Buffer
 	opts := []cdpscript.Option{
-		cdpscript.WithBrowser(browser.FromContext(ctx)),
+		cdpscript.WithBrowserFromContext(ctx),
 		cdpscript.WithEnv(os.Environ()...),
 		cdpscript.WithEnv(toolEnv(env)...),
 		cdpscript.WithStdout(&out),

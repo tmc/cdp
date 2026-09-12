@@ -11,7 +11,6 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/tmc/cdp/cdpscript"
-	"github.com/tmc/cdp/internal/browser"
 )
 
 type cdpscriptInput struct {
@@ -45,7 +44,7 @@ func registerCDPScriptTools(server *mcp.Server, s *mcpSession) {
 
 		var stdout, stderr bytes.Buffer
 		opts := []cdpscript.Option{
-			cdpscript.WithBrowser(browser.FromContext(runCtx)),
+			cdpscript.WithBrowserFromContext(runCtx),
 			cdpscript.WithEnv(os.Environ()...),
 			cdpscript.WithStdout(&stdout),
 			cdpscript.WithStderr(&stderr),
