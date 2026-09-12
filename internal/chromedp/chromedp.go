@@ -321,6 +321,12 @@ func initContextBrowser(ctx context.Context) (*Context, error) {
 	if c.Browser == nil {
 		b, err := c.Allocator.Allocate(ctx, c.browserOpts...)
 		if err != nil {
+			// Allocation happens once per context: c.allocated is a
+			// one-shot channel that Allocate drains and then closes. A
+			// second attempt would receive from the closed channel and
+			// close it again, panicking. Make the failure sticky so a
+			// later Run on this context reports it instead.
+			c.setupErr = err
 			return nil, err
 		}
 		c.Browser = b
