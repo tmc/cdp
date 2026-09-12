@@ -95,7 +95,7 @@ type traceEventArgs struct {
 }
 
 func registerTraceTools(server *mcp.Server, s *mcpSession) {
-	mcp.AddTool(server, &mcp.Tool{
+	addMCPTool(server, &mcp.Tool{
 		Name:        "start_trace",
 		Description: `Start Chrome tracing. Optional categories (comma-separated, e.g. "devtools.timeline,v8.execute"). Default captures timeline, network, and rendering events.`,
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input StartTraceInput) (*mcp.CallToolResult, any, error) {
@@ -130,7 +130,7 @@ func registerTraceTools(server *mcp.Server, s *mcpSession) {
 		}, nil, nil
 	})
 
-	mcp.AddTool(server, &mcp.Tool{
+	addMCPTool(server, &mcp.Tool{
 		Name:        "stop_trace",
 		Description: "Stop Chrome tracing and save the trace file. Provide a path to write the trace JSON, or it writes to the output directory.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input StopTraceInput) (*mcp.CallToolResult, any, error) {
@@ -181,7 +181,7 @@ func registerTraceTools(server *mcp.Server, s *mcpSession) {
 		}, nil, nil
 	})
 
-	mcp.AddTool(server, &mcp.Tool{
+	addMCPTool(server, &mcp.Tool{
 		Name:        "analyze_trace",
 		Description: "Analyze a Chrome trace JSON file and return Core Web Vitals: LCP, INP, and CLS. Use path \"-\" to read from stdin.",
 		Annotations: &mcp.ToolAnnotations{

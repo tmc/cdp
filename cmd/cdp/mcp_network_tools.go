@@ -173,7 +173,7 @@ type GetNetworkLogInput struct {
 }
 
 func registerNetworkTools(server *mcp.Server, s *mcpSession) {
-	mcp.AddTool(server, &mcp.Tool{
+	addMCPTool(server, &mcp.Tool{
 		Name:        "start_network_log",
 		Description: `Start live network request logging for all current and new browser tabs. Captures URL, method, status, headers, and timing, including requests started by links that open a new tab. Use get_network_log to read entries.`,
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input StartNetworkLogInput) (*mcp.CallToolResult, any, error) {
@@ -242,7 +242,7 @@ func registerNetworkTools(server *mcp.Server, s *mcpSession) {
 		}, nil, nil
 	})
 
-	mcp.AddTool(server, &mcp.Tool{
+	addMCPTool(server, &mcp.Tool{
 		Name:        "get_network_log",
 		Description: `Get captured network requests from start_network_log. Optional URL filter (substring match). Set clear=true to reset.`,
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},

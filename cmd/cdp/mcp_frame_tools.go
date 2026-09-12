@@ -30,7 +30,7 @@ type SwitchFrameInput struct {
 }
 
 func registerFrameTools(server *mcp.Server, s *mcpSession) {
-	mcp.AddTool(server, &mcp.Tool{
+	addMCPTool(server, &mcp.Tool{
 		Name:        "list_frames",
 		Description: "List all frames (including iframes) in the current page. Returns frame ID, name, URL, and parent.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
@@ -50,7 +50,7 @@ func registerFrameTools(server *mcp.Server, s *mcpSession) {
 		return nil, ListFramesOutput{Frames: frames}, nil
 	})
 
-	mcp.AddTool(server, &mcp.Tool{
+	addMCPTool(server, &mcp.Tool{
 		Name:        "switch_frame",
 		Description: `Switch execution context to a frame. Use "main" for the top frame, a frame name, a numeric index (from list_frames), or a CSS selector for the iframe element.`,
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input SwitchFrameInput) (*mcp.CallToolResult, any, error) {

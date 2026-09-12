@@ -28,7 +28,7 @@ type ClearStorageInput struct {
 }
 
 func registerStorageTools(server *mcp.Server, s *mcpSession) {
-	mcp.AddTool(server, &mcp.Tool{
+	addMCPTool(server, &mcp.Tool{
 		Name:        "get_storage",
 		Description: `Get localStorage or sessionStorage. Type must be "local" or "session". If key is omitted, returns all key-value pairs.`,
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
@@ -74,7 +74,7 @@ func registerStorageTools(server *mcp.Server, s *mcpSession) {
 		}, nil, nil
 	})
 
-	mcp.AddTool(server, &mcp.Tool{
+	addMCPTool(server, &mcp.Tool{
 		Name:        "set_storage",
 		Description: `Set a value in localStorage or sessionStorage. Type must be "local" or "session".`,
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input SetStorageInput) (*mcp.CallToolResult, any, error) {
@@ -93,7 +93,7 @@ func registerStorageTools(server *mcp.Server, s *mcpSession) {
 		}, nil, nil
 	})
 
-	mcp.AddTool(server, &mcp.Tool{
+	addMCPTool(server, &mcp.Tool{
 		Name:        "clear_storage",
 		Description: `Clear localStorage or sessionStorage. Type must be "local" or "session". If key is provided, removes only that key; otherwise clears all.`,
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input ClearStorageInput) (*mcp.CallToolResult, any, error) {

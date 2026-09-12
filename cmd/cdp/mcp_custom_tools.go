@@ -85,7 +85,7 @@ func registerCustomTool(server *mcp.Server, session *mcpSession, def *tooldef.To
 		}
 	}
 
-	server.AddTool(tool, func(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	addMCPRawTool(server, tool, func(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		env, err := parseArguments(req.Params.Arguments)
 		if err != nil {
 			return &mcp.CallToolResult{
@@ -146,7 +146,7 @@ func registerDefineToolMeta(server *mcp.Server, session *mcpSession, toolsDir st
 		ReadOnly    bool     `json:"readonly,omitempty"`
 	}
 
-	mcp.AddTool(server, &mcp.Tool{
+	addMCPTool(server, &mcp.Tool{
 		Name:        "define_tool",
 		Description: "Define a new custom cdpscript tool from a script body. Each input string has the format: 'name type \"description\"'.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input defineInput) (*mcp.CallToolResult, any, error) {

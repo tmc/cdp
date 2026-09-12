@@ -67,7 +67,7 @@ type browserObservation struct {
 }
 
 func registerBrowserObservationTools(server *mcp.Server, s *mcpSession) {
-	mcp.AddTool(server, &mcp.Tool{
+	addMCPTool(server, &mcp.Tool{
 		Name:        "browser_observe",
 		Description: "Observe the active browser target. Returns a state_id, exact target/document identity, and a tree with @refs. Replaces the previous observation. Use browser_act with this state_id and target_id. Optional frame_id selects an exact frame in this target; otherwise uses the selected frame or root.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
@@ -84,7 +84,7 @@ func registerBrowserObservationTools(server *mcp.Server, s *mcpSession) {
 		})
 		return nil, out, err
 	})
-	mcp.AddTool(server, &mcp.Tool{
+	addMCPTool(server, &mcp.Tool{
 		Name:        "browser_act",
 		Description: "Click, type, or navigate using a browser_observe state_id and target_id. Click/type require an @ref; navigate requires an absolute url and targets the observed frame. Consumes that state before attempting the action; stale nodes are never recovered by name. Returns independent execution, observation and postcondition results and, when captured, a fresh_state. expect compares exact textContent of one CSS match immediately after capture. Never automatically replay an uncertain action. Timeout is milliseconds, default 30000, maximum 60000.",
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, in browserActInput) (*mcp.CallToolResult, browserActOutput, error) {

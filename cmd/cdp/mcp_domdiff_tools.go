@@ -364,7 +364,7 @@ type DomDiffInput struct {
 }
 
 func registerDomDiffTools(server *mcp.Server, s *mcpSession) {
-	mcp.AddTool(server, &mcp.Tool{
+	addMCPTool(server, &mcp.Tool{
 		Name:        "snapshot_dom",
 		Description: "Capture a named DOM snapshot (simplified accessibility tree) for later comparison with dom_diff. Returns a summary of the captured tree.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input SnapshotDomInput) (*mcp.CallToolResult, any, error) {
@@ -389,7 +389,7 @@ func registerDomDiffTools(server *mcp.Server, s *mcpSession) {
 		}, nil, nil
 	})
 
-	mcp.AddTool(server, &mcp.Tool{
+	addMCPTool(server, &mcp.Tool{
 		Name:        "dom_diff",
 		Description: "Compare two named DOM snapshots and show a git-style diff of what changed. Use snapshot_dom to capture before/after states.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input DomDiffInput) (*mcp.CallToolResult, any, error) {
@@ -418,7 +418,7 @@ func registerDomDiffTools(server *mcp.Server, s *mcpSession) {
 		}, nil, nil
 	})
 
-	mcp.AddTool(server, &mcp.Tool{
+	addMCPTool(server, &mcp.Tool{
 		Name:        "list_dom_snapshots",
 		Description: "List all named DOM snapshots available for dom_diff.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},

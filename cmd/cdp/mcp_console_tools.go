@@ -185,7 +185,7 @@ type GetErrorsInput struct {
 }
 
 func registerConsoleTools(server *mcp.Server, s *mcpSession) {
-	mcp.AddTool(server, &mcp.Tool{
+	addMCPTool(server, &mcp.Tool{
 		Name:        "get_console",
 		Description: "Get captured console messages. Filter by type (log, warn, error, info, debug). Use index (1-based) to get a single message. Returns most recent entries.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
@@ -223,7 +223,7 @@ func registerConsoleTools(server *mcp.Server, s *mcpSession) {
 		}, nil, nil
 	})
 
-	mcp.AddTool(server, &mcp.Tool{
+	addMCPTool(server, &mcp.Tool{
 		Name:        "get_errors",
 		Description: "Get captured JavaScript exceptions and errors. Returns most recent entries.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},

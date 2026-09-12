@@ -18,7 +18,7 @@ type UploadFileInput struct {
 }
 
 func registerFileTools(server *mcp.Server, s *mcpSession) {
-	mcp.AddTool(server, &mcp.Tool{
+	addMCPTool(server, &mcp.Tool{
 		Name:        "upload_file",
 		Description: "Upload file(s) to a file input element by CSS selector or @ref. Provide absolute file paths.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input UploadFileInput) (*mcp.CallToolResult, any, error) {

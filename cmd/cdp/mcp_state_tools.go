@@ -35,7 +35,7 @@ type LoadStateInput struct {
 }
 
 func registerStateTools(server *mcp.Server, s *mcpSession) {
-	mcp.AddTool(server, &mcp.Tool{
+	addMCPTool(server, &mcp.Tool{
 		Name:        "save_state",
 		Description: "Save browser state (cookies, localStorage, sessionStorage, URL) to a JSON file. Provide a path or a name (saved to output dir).",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input SaveStateInput) (*mcp.CallToolResult, any, error) {
@@ -100,7 +100,7 @@ func registerStateTools(server *mcp.Server, s *mcpSession) {
 		}, nil, nil
 	})
 
-	mcp.AddTool(server, &mcp.Tool{
+	addMCPTool(server, &mcp.Tool{
 		Name:        "load_state",
 		Description: "Load browser state (cookies, localStorage, sessionStorage) from a JSON file previously saved with save_state. Optionally navigate to the saved URL.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input LoadStateInput) (*mcp.CallToolResult, any, error) {

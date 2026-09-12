@@ -104,7 +104,7 @@ type InspectIPCLogInput struct {
 }
 
 func registerInspectIPCTools(server *mcp.Server, s *mcpSession) {
-	mcp.AddTool(server, &mcp.Tool{
+	addMCPTool(server, &mcp.Tool{
 		Name:        "inspect_ipc_start",
 		Description: `Start capturing Electron IPC messages. Monkey-patches known bridges (electronBridge, vscode, electron) and postMessage listener. Call inspect_ipc_log to read captured messages.`,
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input InspectIPCStartInput) (*mcp.CallToolResult, any, error) {
@@ -118,7 +118,7 @@ func registerInspectIPCTools(server *mcp.Server, s *mcpSession) {
 		}, nil, nil
 	})
 
-	mcp.AddTool(server, &mcp.Tool{
+	addMCPTool(server, &mcp.Tool{
 		Name:        "inspect_ipc_log",
 		Description: `Get captured IPC messages from inspect_ipc_start. Optional channel filter (substring match). Set clear=true to reset the log after reading.`,
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
@@ -222,7 +222,7 @@ type InspectWalkInput struct {
 }
 
 func registerInspectWalkTool(server *mcp.Server, s *mcpSession) {
-	mcp.AddTool(server, &mcp.Tool{
+	addMCPTool(server, &mcp.Tool{
 		Name:        "inspect_walk",
 		Description: `Recursively explore a JS object's structure. Returns a typed tree with key counts, function arities, string lengths, and optional sampled values. Handles cycles via WeakSet. Use depth (default 2) and max_keys (default 20) to control output size.`,
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
@@ -425,7 +425,7 @@ const reverseAppJS = `(() => {
 type InspectFingerprintInput struct{}
 
 func registerInspectFingerprintTool(server *mcp.Server, s *mcpSession) {
-	mcp.AddTool(server, &mcp.Tool{
+	addMCPTool(server, &mcp.Tool{
 		Name:        "inspect_fingerprint",
 		Description: `Automated app fingerprinting. Detects: identity (title, URL, Electron/Chrome versions), frameworks (React, Vue, Svelte, Angular), bundler (webpack, Vite), non-standard globals, bridge APIs (electronBridge, vscode), feature flags, error monitoring, script inventory, CSP.`,
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},

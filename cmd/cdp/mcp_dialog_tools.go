@@ -84,7 +84,7 @@ type HandleDialogInput struct {
 }
 
 func registerDialogTools(server *mcp.Server, s *mcpSession) {
-	mcp.AddTool(server, &mcp.Tool{
+	addMCPTool(server, &mcp.Tool{
 		Name:        "handle_dialog",
 		Description: "Handle a pending JavaScript dialog (alert, confirm, prompt, beforeunload). Accept or dismiss, optionally providing prompt text.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input HandleDialogInput) (*mcp.CallToolResult, any, error) {
@@ -122,7 +122,7 @@ func registerDialogTools(server *mcp.Server, s *mcpSession) {
 		}, nil, nil
 	})
 
-	mcp.AddTool(server, &mcp.Tool{
+	addMCPTool(server, &mcp.Tool{
 		Name:        "get_dialogs",
 		Description: "Get the history of JavaScript dialogs (alert, confirm, prompt) that have appeared, and any currently pending dialog.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},

@@ -34,7 +34,7 @@ type actionDiffParams struct {
 }
 
 func registerActionDiffTool(server *mcp.Server, s *mcpSession) {
-	mcp.AddTool(server, &mcp.Tool{
+	addMCPTool(server, &mcp.Tool{
 		Name: "action_diff",
 		Description: `Execute an action and return before/after/diff screenshots with change percentage.
 Actions: "click" (needs selector), "type" (needs selector + text), "navigate" (needs url).

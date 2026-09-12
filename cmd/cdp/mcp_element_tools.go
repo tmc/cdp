@@ -30,7 +30,7 @@ type foundElement struct {
 }
 
 func registerFindElementTool(server *mcp.Server, s *mcpSession) {
-	mcp.AddTool(server, &mcp.Tool{
+	addMCPTool(server, &mcp.Tool{
 		Name:        "find_element",
 		Description: "Find interactive elements by role, accessible name, or text content. Returns @ref numbers. Run page_snapshot first to populate refs.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input FindElementInput) (*mcp.CallToolResult, any, error) {
@@ -127,7 +127,7 @@ type elementState struct {
 }
 
 func registerElementQueryTools(server *mcp.Server, s *mcpSession) {
-	mcp.AddTool(server, &mcp.Tool{
+	addMCPTool(server, &mcp.Tool{
 		Name:        "get_element",
 		Description: "Get element details (text, value, attributes, bounding box) by CSS selector or @ref",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input GetElementInput) (*mcp.CallToolResult, any, error) {
@@ -158,7 +158,7 @@ func registerElementQueryTools(server *mcp.Server, s *mcpSession) {
 		}, nil, nil
 	})
 
-	mcp.AddTool(server, &mcp.Tool{
+	addMCPTool(server, &mcp.Tool{
 		Name:        "check_element",
 		Description: "Check element state (visible, enabled, checked, selected, focused) by CSS selector or @ref",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input CheckElementInput) (*mcp.CallToolResult, any, error) {

@@ -345,7 +345,7 @@ type WebToolInvocationsInput struct {
 }
 
 func registerWebMCPTools(server *mcp.Server, s *mcpSession) {
-	mcp.AddTool(server, &mcp.Tool{
+	addMCPTool(server, &mcp.Tool{
 		Name: "list_web_tools",
 		Description: `List MCP tools registered by the current web page via navigator.modelContext.
 
@@ -413,7 +413,7 @@ Returns tool names, descriptions, input schemas, and annotations.`,
 		}, nil, nil
 	})
 
-	mcp.AddTool(server, &mcp.Tool{
+	addMCPTool(server, &mcp.Tool{
 		Name: "invoke_web_tool",
 		Description: `Invoke a web-page-registered MCP tool by name.
 
@@ -463,7 +463,7 @@ via Runtime.evaluate calling navigator.modelContext on the page.`,
 		}, nil, nil
 	})
 
-	mcp.AddTool(server, &mcp.Tool{
+	addMCPTool(server, &mcp.Tool{
 		Name: "enable_webmcp",
 		Description: `Enable the WebMCP domain to discover page-registered MCP tools.
 
@@ -511,7 +511,7 @@ Use list_web_tools to see discovered tools, invoke_web_tool to call them.`,
 		}, nil, nil
 	})
 
-	mcp.AddTool(server, &mcp.Tool{
+	addMCPTool(server, &mcp.Tool{
 		Name:        "web_tool_invocations",
 		Description: "List recent tool invocations observed via the WebMCP domain. Shows tool name, input, status, output, and timing.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},

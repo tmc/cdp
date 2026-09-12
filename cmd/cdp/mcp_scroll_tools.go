@@ -19,7 +19,7 @@ type ScrollInput struct {
 }
 
 func registerScrollTool(server *mcp.Server, s *mcpSession) {
-	mcp.AddTool(server, &mcp.Tool{
+	addMCPTool(server, &mcp.Tool{
 		Name:        "scroll",
 		Description: `Scroll the page or an element. Use direction (up/down/left/right) with optional distance in pixels (default 500). Or provide a selector/@ref to scroll that element into view.`,
 	}, func(ctx context.Context, req *mcp.CallToolRequest, inp ScrollInput) (*mcp.CallToolResult, any, error) {

@@ -24,7 +24,7 @@ type SavePDFInput struct {
 }
 
 func registerPDFTools(server *mcp.Server, s *mcpSession) {
-	mcp.AddTool(server, &mcp.Tool{
+	addMCPTool(server, &mcp.Tool{
 		Name:        "save_pdf",
 		Description: "Generate a PDF of the current page. Optionally save to a file path. Returns the PDF as base64 if no path given.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input SavePDFInput) (*mcp.CallToolResult, any, error) {

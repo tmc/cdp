@@ -78,7 +78,7 @@ type NavigationOutput struct {
 }
 
 func registerNavigationTools(server *mcp.Server, s *mcpSession) {
-	mcp.AddTool(server, &mcp.Tool{
+	addMCPTool(server, &mcp.Tool{
 		Name:        "navigate",
 		Description: "Navigate to a URL",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input NavigateInput) (*mcp.CallToolResult, NavigateOutput, error) {
@@ -94,7 +94,7 @@ func registerNavigationTools(server *mcp.Server, s *mcpSession) {
 		return nil, out, nil
 	})
 
-	mcp.AddTool(server, &mcp.Tool{
+	addMCPTool(server, &mcp.Tool{
 		Name:        "navigate_back",
 		Description: "Navigate back in browser history",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input struct{}) (*mcp.CallToolResult, NavigationOutput, error) {
@@ -110,7 +110,7 @@ func registerNavigationTools(server *mcp.Server, s *mcpSession) {
 		return nil, out, nil
 	})
 
-	mcp.AddTool(server, &mcp.Tool{
+	addMCPTool(server, &mcp.Tool{
 		Name:        "navigate_forward",
 		Description: "Navigate forward in browser history",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input struct{}) (*mcp.CallToolResult, NavigationOutput, error) {
@@ -126,7 +126,7 @@ func registerNavigationTools(server *mcp.Server, s *mcpSession) {
 		return nil, out, nil
 	})
 
-	mcp.AddTool(server, &mcp.Tool{
+	addMCPTool(server, &mcp.Tool{
 		Name:        "reload",
 		Description: "Reload the current page",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input struct{}) (*mcp.CallToolResult, NavigationOutput, error) {
@@ -160,7 +160,7 @@ type GetPageContentInput struct {
 }
 
 func registerObservationTools(server *mcp.Server, s *mcpSession) {
-	mcp.AddTool(server, &mcp.Tool{
+	addMCPTool(server, &mcp.Tool{
 		Name:        "screenshot",
 		Description: "Take a screenshot. Options: selector (element only), full_page, width (max px, downscales), quality (1-100, uses JPEG), format (png/jpeg/webp), annotate (draw numbered boxes on interactive elements with metadata).",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input ScreenshotInput) (*mcp.CallToolResult, any, error) {
@@ -236,7 +236,7 @@ func registerObservationTools(server *mcp.Server, s *mcpSession) {
 		}, nil, nil
 	})
 
-	mcp.AddTool(server, &mcp.Tool{
+	addMCPTool(server, &mcp.Tool{
 		Name:        "get_page_content",
 		Description: "Get the text or HTML content of the page or a specific element",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input GetPageContentInput) (*mcp.CallToolResult, any, error) {
@@ -277,7 +277,7 @@ func registerObservationTools(server *mcp.Server, s *mcpSession) {
 		}, nil, nil
 	})
 
-	mcp.AddTool(server, &mcp.Tool{
+	addMCPTool(server, &mcp.Tool{
 		Name:        "page_snapshot",
 		Description: "Get an accessibility tree snapshot of the page. Interactive elements are annotated with @ref numbers (e.g. @1, @2) that can be used with click, type_text, and other interaction tools instead of CSS selectors.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input struct{}) (*mcp.CallToolResult, any, error) {
@@ -372,7 +372,7 @@ func runWithTimeout(ctx context.Context, timeout time.Duration, actions ...chrom
 }
 
 func registerInteractionTools(server *mcp.Server, s *mcpSession) {
-	mcp.AddTool(server, &mcp.Tool{
+	addMCPTool(server, &mcp.Tool{
 		Name:        "click",
 		Description: "Click an element by CSS selector, @ref (e.g. @1 from page_snapshot), or viewport coordinates as coord:x,y. Timeout in seconds (default 30).",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input ClickInput) (*mcp.CallToolResult, any, error) {
@@ -403,7 +403,7 @@ func registerInteractionTools(server *mcp.Server, s *mcpSession) {
 		}, nil, nil
 	})
 
-	mcp.AddTool(server, &mcp.Tool{
+	addMCPTool(server, &mcp.Tool{
 		Name:        "type_text",
 		Description: "Type text into an element by CSS selector or @ref (e.g. @1 from page_snapshot). Timeout in seconds (default 30).",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input TypeTextInput) (*mcp.CallToolResult, any, error) {
@@ -432,7 +432,7 @@ func registerInteractionTools(server *mcp.Server, s *mcpSession) {
 		}, nil, nil
 	})
 
-	mcp.AddTool(server, &mcp.Tool{
+	addMCPTool(server, &mcp.Tool{
 		Name:        "wait_for",
 		Description: "Wait for an element to be visible by CSS selector or @ref. Timeout in seconds (default 30).",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input WaitForInput) (*mcp.CallToolResult, any, error) {
@@ -474,7 +474,7 @@ type RawCDPInput struct {
 }
 
 func registerJavaScriptTools(server *mcp.Server, s *mcpSession) {
-	mcp.AddTool(server, &mcp.Tool{
+	addMCPTool(server, &mcp.Tool{
 		Name:        "evaluate",
 		Description: "Evaluate a JavaScript expression in the page context",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input EvaluateInput) (*mcp.CallToolResult, any, error) {
@@ -499,7 +499,7 @@ func registerJavaScriptTools(server *mcp.Server, s *mcpSession) {
 		}, nil, nil
 	})
 
-	mcp.AddTool(server, &mcp.Tool{
+	addMCPTool(server, &mcp.Tool{
 		Name:        "raw_cdp",
 		Description: "Execute a raw Chrome DevTools Protocol method. Defaults to the active target; set target to \"browser\" for browser-level methods. Example: method Runtime.evaluate with params {\"expression\":\"document.title\"}.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input RawCDPInput) (*mcp.CallToolResult, any, error) {
@@ -569,7 +569,7 @@ type TabOutput struct {
 }
 
 func registerTabTools(server *mcp.Server, s *mcpSession) {
-	mcp.AddTool(server, &mcp.Tool{
+	addMCPTool(server, &mcp.Tool{
 		Name:        "list_tabs",
 		Description: "List all open browser tabs",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input struct{}) (*mcp.CallToolResult, ListTabsOutput, error) {
@@ -594,7 +594,7 @@ func registerTabTools(server *mcp.Server, s *mcpSession) {
 		return nil, ListTabsOutput{Tabs: tabs}, nil
 	})
 
-	mcp.AddTool(server, &mcp.Tool{
+	addMCPTool(server, &mcp.Tool{
 		Name:        "switch_tab",
 		Description: "Switch to a browser tab by target ID",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input SwitchTabInput) (*mcp.CallToolResult, TabOutput, error) {
@@ -657,7 +657,7 @@ func registerTabTools(server *mcp.Server, s *mcpSession) {
 		return nil, out, nil
 	})
 
-	mcp.AddTool(server, &mcp.Tool{
+	addMCPTool(server, &mcp.Tool{
 		Name:        "new_tab",
 		Description: "Open a new browser tab, optionally navigating to a URL",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input NewTabInput) (*mcp.CallToolResult, TabOutput, error) {
@@ -697,7 +697,7 @@ func registerTabTools(server *mcp.Server, s *mcpSession) {
 		return nil, out, nil
 	})
 
-	mcp.AddTool(server, &mcp.Tool{
+	addMCPTool(server, &mcp.Tool{
 		Name:        "close_tab",
 		Description: "Close a browser tab by target ID. If no ID given, closes the current tab.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input CloseTabInput) (*mcp.CallToolResult, any, error) {
@@ -744,7 +744,7 @@ type ConnectOutput struct {
 }
 
 func registerConnectTool(server *mcp.Server, s *mcpSession) {
-	mcp.AddTool(server, &mcp.Tool{
+	addMCPTool(server, &mcp.Tool{
 		Name:        "connect",
 		Description: "Connect to a different CDP endpoint. Tears down current browser context and connects to the new target. Use this to switch between browsers (e.g. Brave on 9222 to Electron on 9223).",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input ConnectInput) (*mcp.CallToolResult, ConnectOutput, error) {
@@ -823,7 +823,7 @@ type ContextOutput struct {
 }
 
 func registerContextTools(server *mcp.Server, s *mcpSession) {
-	mcp.AddTool(server, &mcp.Tool{
+	addMCPTool(server, &mcp.Tool{
 		Name:        "push_context",
 		Description: "Push a new recording context to isolate traffic",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input PushContextInput) (*mcp.CallToolResult, ContextOutput, error) {
@@ -831,7 +831,7 @@ func registerContextTools(server *mcp.Server, s *mcpSession) {
 		return nil, ContextOutput{Path: path}, nil
 	})
 
-	mcp.AddTool(server, &mcp.Tool{
+	addMCPTool(server, &mcp.Tool{
 		Name:        "pop_context",
 		Description: "Pop the current recording context",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input struct{}) (*mcp.CallToolResult, ContextOutput, error) {
@@ -853,7 +853,7 @@ type GetHAREntriesInput struct {
 }
 
 func registerHARTools(server *mcp.Server, s *mcpSession) {
-	mcp.AddTool(server, &mcp.Tool{
+	addMCPTool(server, &mcp.Tool{
 		Name:        "get_har_entries",
 		Description: "Get captured HAR network entries. Filter by domain or url_pattern (substring match). Use index (1-based) to get a single entry. Returns most recent entries when limit is set.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input GetHAREntriesInput) (*mcp.CallToolResult, any, error) {
@@ -924,7 +924,7 @@ type SetCookieInput struct {
 }
 
 func registerCookieTools(server *mcp.Server, s *mcpSession) {
-	mcp.AddTool(server, &mcp.Tool{
+	addMCPTool(server, &mcp.Tool{
 		Name:        "get_cookies",
 		Description: "Get browser cookies, optionally filtered by domain",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input GetCookiesInput) (*mcp.CallToolResult, any, error) {
@@ -952,7 +952,7 @@ func registerCookieTools(server *mcp.Server, s *mcpSession) {
 		}, nil, nil
 	})
 
-	mcp.AddTool(server, &mcp.Tool{
+	addMCPTool(server, &mcp.Tool{
 		Name:        "set_cookie",
 		Description: "Set a browser cookie",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input SetCookieInput) (*mcp.CallToolResult, any, error) {
@@ -980,7 +980,7 @@ type SaveSourcesOutput struct {
 }
 
 func registerSourceTools(server *mcp.Server, s *mcpSession) {
-	mcp.AddTool(server, &mcp.Tool{
+	addMCPTool(server, &mcp.Tool{
 		Name:        "save_sources",
 		Description: "Capture all JS/CSS sources (including sourcemapped originals) from the current page and write to disk",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input struct{}) (*mcp.CallToolResult, SaveSourcesOutput, error) {

@@ -309,7 +309,7 @@ type RemoveInterceptInput struct {
 }
 
 func registerInterceptTools(server *mcp.Server, s *mcpSession) {
-	mcp.AddTool(server, &mcp.Tool{
+	addMCPTool(server, &mcp.Tool{
 		Name:        "intercept_request",
 		Description: `Intercept outgoing requests matching a URL pattern. Actions: "block" (fail the request), "fulfill" (return custom response with status_code, body, content_type), "modify" (change request headers). Pattern supports wildcards (* and ?).`,
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input InterceptRequestInput) (*mcp.CallToolResult, any, error) {
@@ -340,7 +340,7 @@ func registerInterceptTools(server *mcp.Server, s *mcpSession) {
 		}, nil, nil
 	})
 
-	mcp.AddTool(server, &mcp.Tool{
+	addMCPTool(server, &mcp.Tool{
 		Name:        "intercept_response",
 		Description: `Intercept responses matching a URL pattern. Actions: "modify" (change response headers/status), "fulfill" (replace response body entirely). Pattern supports wildcards.`,
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input InterceptResponseInput) (*mcp.CallToolResult, any, error) {
@@ -371,7 +371,7 @@ func registerInterceptTools(server *mcp.Server, s *mcpSession) {
 		}, nil, nil
 	})
 
-	mcp.AddTool(server, &mcp.Tool{
+	addMCPTool(server, &mcp.Tool{
 		Name:        "remove_intercept",
 		Description: "Remove an intercept rule by ID, or remove all rules. Use list output from intercept_request/intercept_response to find IDs.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input RemoveInterceptInput) (*mcp.CallToolResult, any, error) {
@@ -402,7 +402,7 @@ func registerInterceptTools(server *mcp.Server, s *mcpSession) {
 		}, nil, nil
 	})
 
-	mcp.AddTool(server, &mcp.Tool{
+	addMCPTool(server, &mcp.Tool{
 		Name:        "list_intercepts",
 		Description: "List all active intercept rules",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},

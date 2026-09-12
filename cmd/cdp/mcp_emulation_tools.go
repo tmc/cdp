@@ -100,7 +100,7 @@ type SetDeviceInput struct {
 
 func registerEmulationTools(server *mcp.Server, s *mcpSession) {
 	// Device preset tool.
-	mcp.AddTool(server, &mcp.Tool{
+	addMCPTool(server, &mcp.Tool{
 		Name:        "set_device",
 		Description: "Emulate a specific device. Sets viewport, scale, user agent, and touch. Presets: iphone-14, iphone-14-pro, iphone-15-pro, iphone-15-pro-max, iphone-se, ipad, ipad-pro-11, ipad-pro-12.9, pixel-7, pixel-7-pro, galaxy-s23, galaxy-s23-ultra, galaxy-tab-s8, desktop-1080p, desktop-1440p.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input SetDeviceInput) (*mcp.CallToolResult, any, error) {
@@ -136,7 +136,7 @@ func registerEmulationTools(server *mcp.Server, s *mcpSession) {
 		}, nil, nil
 	})
 
-	mcp.AddTool(server, &mcp.Tool{
+	addMCPTool(server, &mcp.Tool{
 		Name:        "set_throttling",
 		Description: `Set network and CPU throttling. Network presets: slow-3g, fast-3g, slow-4g, fast-4g, offline, none. Custom download/upload in bytes/sec override the preset. CPU rate is a slowdown multiplier (1=normal, 4=4x slower, max 20).`,
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input SetThrottlingInput) (*mcp.CallToolResult, any, error) {
@@ -194,7 +194,7 @@ func registerEmulationTools(server *mcp.Server, s *mcpSession) {
 		}, nil, nil
 	})
 
-	mcp.AddTool(server, &mcp.Tool{
+	addMCPTool(server, &mcp.Tool{
 		Name:        "set_viewport",
 		Description: "Set the browser viewport size and device metrics. Width and height in pixels.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input SetViewportInput) (*mcp.CallToolResult, any, error) {
@@ -211,7 +211,7 @@ func registerEmulationTools(server *mcp.Server, s *mcpSession) {
 		}, nil, nil
 	})
 
-	mcp.AddTool(server, &mcp.Tool{
+	addMCPTool(server, &mcp.Tool{
 		Name:        "set_user_agent",
 		Description: "Override the browser user agent string",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input SetUserAgentInput) (*mcp.CallToolResult, any, error) {
@@ -231,7 +231,7 @@ func registerEmulationTools(server *mcp.Server, s *mcpSession) {
 		}, nil, nil
 	})
 
-	mcp.AddTool(server, &mcp.Tool{
+	addMCPTool(server, &mcp.Tool{
 		Name:        "set_offline",
 		Description: "Enable or disable network offline emulation",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input SetOfflineInput) (*mcp.CallToolResult, any, error) {
@@ -248,7 +248,7 @@ func registerEmulationTools(server *mcp.Server, s *mcpSession) {
 		}, nil, nil
 	})
 
-	mcp.AddTool(server, &mcp.Tool{
+	addMCPTool(server, &mcp.Tool{
 		Name:        "set_geolocation",
 		Description: "Override the browser geolocation. Latitude and longitude in decimal degrees.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input SetGeolocationInput) (*mcp.CallToolResult, any, error) {
@@ -270,7 +270,7 @@ func registerEmulationTools(server *mcp.Server, s *mcpSession) {
 		}, nil, nil
 	})
 
-	mcp.AddTool(server, &mcp.Tool{
+	addMCPTool(server, &mcp.Tool{
 		Name:        "set_extra_headers",
 		Description: "Set extra HTTP headers that will be sent with every request",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input SetExtraHeadersInput) (*mcp.CallToolResult, any, error) {

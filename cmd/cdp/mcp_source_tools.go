@@ -46,7 +46,7 @@ type searchMatch struct {
 
 func registerSourceBrowsingTools(server *mcp.Server, s *mcpSession) {
 	// list_sources
-	mcp.AddTool(server, &mcp.Tool{
+	addMCPTool(server, &mcp.Tool{
 		Name:        "list_sources",
 		Description: "List all captured JavaScript and CSS sources",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input ListSourcesInput) (*mcp.CallToolResult, any, error) {
@@ -85,7 +85,7 @@ func registerSourceBrowsingTools(server *mcp.Server, s *mcpSession) {
 	})
 
 	// read_source
-	mcp.AddTool(server, &mcp.Tool{
+	addMCPTool(server, &mcp.Tool{
 		Name:        "read_source",
 		Description: "Read the content of a captured source file by URL",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input ReadSourceInput) (*mcp.CallToolResult, any, error) {
@@ -109,7 +109,7 @@ func registerSourceBrowsingTools(server *mcp.Server, s *mcpSession) {
 	})
 
 	// search_source
-	mcp.AddTool(server, &mcp.Tool{
+	addMCPTool(server, &mcp.Tool{
 		Name:        "search_source",
 		Description: "Search across all captured sources for a text pattern or regex",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input SearchSourceInput) (*mcp.CallToolResult, any, error) {
@@ -254,7 +254,7 @@ type GetCoverageDeltaInput struct {
 
 func registerCoverageTools(server *mcp.Server, s *mcpSession) {
 	// start_coverage
-	mcp.AddTool(server, &mcp.Tool{
+	addMCPTool(server, &mcp.Tool{
 		Name:        "start_coverage",
 		Description: "Start collecting JavaScript code coverage for the current page",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input StartCoverageInput) (*mcp.CallToolResult, any, error) {
@@ -273,7 +273,7 @@ func registerCoverageTools(server *mcp.Server, s *mcpSession) {
 	})
 
 	// stop_coverage
-	mcp.AddTool(server, &mcp.Tool{
+	addMCPTool(server, &mcp.Tool{
 		Name:        "stop_coverage",
 		Description: "Stop coverage collection and return final summary",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input StopCoverageInput) (*mcp.CallToolResult, any, error) {
@@ -290,7 +290,7 @@ func registerCoverageTools(server *mcp.Server, s *mcpSession) {
 	})
 
 	// get_coverage
-	mcp.AddTool(server, &mcp.Tool{
+	addMCPTool(server, &mcp.Tool{
 		Name:        "get_coverage",
 		Description: "Take a coverage snapshot and return per-file summary sorted by coverage (least covered first)",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input GetCoverageInput) (*mcp.CallToolResult, any, error) {
@@ -326,7 +326,7 @@ func registerCoverageTools(server *mcp.Server, s *mcpSession) {
 	})
 
 	// get_coverage_delta
-	mcp.AddTool(server, &mcp.Tool{
+	addMCPTool(server, &mcp.Tool{
 		Name:        "get_coverage_delta",
 		Description: "Get coverage diff between two snapshots showing newly covered lines",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input GetCoverageDeltaInput) (*mcp.CallToolResult, any, error) {
@@ -384,7 +384,7 @@ func registerCoverageTools(server *mcp.Server, s *mcpSession) {
 		Before string `json:"before"`
 		After  string `json:"after"`
 	}
-	mcp.AddTool(server, &mcp.Tool{
+	addMCPTool(server, &mcp.Tool{
 		Name:        "compare_coverage",
 		Description: "Compare two named coverage snapshots with per-file, per-function, and line-range detail",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input CompareCoverageInput) (*mcp.CallToolResult, any, error) {
@@ -414,7 +414,7 @@ func registerCoverageTools(server *mcp.Server, s *mcpSession) {
 	})
 
 	// list_snapshots
-	mcp.AddTool(server, &mcp.Tool{
+	addMCPTool(server, &mcp.Tool{
 		Name:        "list_snapshots",
 		Description: "List all coverage snapshots taken during this session",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input struct{}) (*mcp.CallToolResult, any, error) {

@@ -104,7 +104,7 @@ func registerExtensionTools(server *mcp.Server, s *mcpSession) {
 		m  map[string]*extensionConsoleCollector
 	}{m: make(map[string]*extensionConsoleCollector)}
 
-	mcp.AddTool(server, &mcp.Tool{
+	addMCPTool(server, &mcp.Tool{
 		Name:        "list_extensions",
 		Description: "List installed Chrome extensions. Uses CDP Extensions domain when available, falls back to chrome.developerPrivate.getExtensionsInfo() on chrome://extensions, then target enumeration.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
@@ -215,7 +215,7 @@ func registerExtensionTools(server *mcp.Server, s *mcpSession) {
 		}, nil, nil
 	})
 
-	mcp.AddTool(server, &mcp.Tool{
+	addMCPTool(server, &mcp.Tool{
 		Name:        "reload_extension",
 		Description: "Reload an unpacked Chrome extension by ID. Uses chrome.developerPrivate.reload() on a temporary chrome://extensions tab.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input ReloadExtensionInput) (*mcp.CallToolResult, any, error) {
@@ -234,7 +234,7 @@ func registerExtensionTools(server *mcp.Server, s *mcpSession) {
 		}, nil, nil
 	})
 
-	mcp.AddTool(server, &mcp.Tool{
+	addMCPTool(server, &mcp.Tool{
 		Name: "install_extension",
 		Description: `Load an unpacked Chrome extension from a local directory path. Tries CDP Extensions.loadUnpacked first, falls back to chrome.developerPrivate.loadUnpacked() on chrome://extensions. ` +
 			`Note: JS fallback may trigger a file picker if --enable-unsafe-extension-debugging is not set. Use --load-extension flag at launch for reliable headless loading.`,
@@ -271,7 +271,7 @@ func registerExtensionTools(server *mcp.Server, s *mcpSession) {
 		}, nil, nil
 	})
 
-	mcp.AddTool(server, &mcp.Tool{
+	addMCPTool(server, &mcp.Tool{
 		Name:        "install_bundled_extensions",
 		Description: "Install the bundled coverage DevTools extension at runtime via developerPrivate. Useful when --load-extension was not set at browser launch.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input struct{}) (*mcp.CallToolResult, any, error) {
@@ -316,7 +316,7 @@ func registerExtensionTools(server *mcp.Server, s *mcpSession) {
 		}, nil, nil
 	})
 
-	mcp.AddTool(server, &mcp.Tool{
+	addMCPTool(server, &mcp.Tool{
 		Name:        "uninstall_extension",
 		Description: "Uninstall a Chrome extension by ID. Tries CDP Extensions.uninstall, then chrome.management.uninstall() in the service worker, then disables via chrome.developerPrivate.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input UninstallExtensionInput) (*mcp.CallToolResult, any, error) {
@@ -355,7 +355,7 @@ func registerExtensionTools(server *mcp.Server, s *mcpSession) {
 		}, nil, nil
 	})
 
-	mcp.AddTool(server, &mcp.Tool{
+	addMCPTool(server, &mcp.Tool{
 		Name:        "extension_console",
 		Description: "Get console output and errors from an extension's service worker. Attaches to the service worker target on first call.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
@@ -446,7 +446,7 @@ func registerExtensionTools(server *mcp.Server, s *mcpSession) {
 		}, nil, nil
 	})
 
-	mcp.AddTool(server, &mcp.Tool{
+	addMCPTool(server, &mcp.Tool{
 		Name:        "extension_evaluate",
 		Description: "Evaluate JavaScript in the context of an extension's service worker. Finds the service worker target and runs Runtime.evaluate there.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input ExtensionEvaluateInput) (*mcp.CallToolResult, any, error) {
@@ -465,7 +465,7 @@ func registerExtensionTools(server *mcp.Server, s *mcpSession) {
 
 	// --- Extension storage tools ---
 
-	mcp.AddTool(server, &mcp.Tool{
+	addMCPTool(server, &mcp.Tool{
 		Name:        "get_extension_storage",
 		Description: "Get data from extension storage via Runtime.evaluate in the extension's service worker. Area: local (default), sync, session, or managed. Optionally filter by keys.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
@@ -497,7 +497,7 @@ func registerExtensionTools(server *mcp.Server, s *mcpSession) {
 		}, nil, nil
 	})
 
-	mcp.AddTool(server, &mcp.Tool{
+	addMCPTool(server, &mcp.Tool{
 		Name:        "set_extension_storage",
 		Description: "Set values in extension storage via Runtime.evaluate in the extension's service worker. Area: local (default), sync, session, or managed.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input SetExtensionStorageInput) (*mcp.CallToolResult, any, error) {
@@ -526,7 +526,7 @@ func registerExtensionTools(server *mcp.Server, s *mcpSession) {
 		}, nil, nil
 	})
 
-	mcp.AddTool(server, &mcp.Tool{
+	addMCPTool(server, &mcp.Tool{
 		Name:        "clear_extension_storage",
 		Description: "Clear all data in extension storage area via Runtime.evaluate in the extension's service worker. Area: local (default), sync, session, or managed.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input ClearExtensionStorageInput) (*mcp.CallToolResult, any, error) {

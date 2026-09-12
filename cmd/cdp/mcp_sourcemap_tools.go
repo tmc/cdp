@@ -115,7 +115,7 @@ type RefineSourcemapInput struct {
 }
 
 func registerSourcemapTools(server *mcp.Server, s *mcpSession) {
-	mcp.AddTool(server, &mcp.Tool{
+	addMCPTool(server, &mcp.Tool{
 		Name: "analyze_bundle",
 		Description: `Analyze a JavaScript bundle using coverage data to infer its original source structure.
 
@@ -183,7 +183,7 @@ set_bundle_structure with the inferred file structure.`,
 		}, nil, nil
 	})
 
-	mcp.AddTool(server, &mcp.Tool{
+	addMCPTool(server, &mcp.Tool{
 		Name: "set_bundle_structure",
 		Description: `Accept inferred source file structure for a bundle and generate a synthetic sourcemap.
 
@@ -279,7 +279,7 @@ functions (optional), framework (optional), module (optional).`,
 		}, nil, nil
 	})
 
-	mcp.AddTool(server, &mcp.Tool{
+	addMCPTool(server, &mcp.Tool{
 		Name:        "generate_sourcemap",
 		Description: "Generate a sourcemap v3 JSON from previously analyzed bundle structure. Returns the raw sourcemap JSON.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input GenerateSourcemapInput) (*mcp.CallToolResult, any, error) {
@@ -295,7 +295,7 @@ functions (optional), framework (optional), module (optional).`,
 		}, nil, nil
 	})
 
-	mcp.AddTool(server, &mcp.Tool{
+	addMCPTool(server, &mcp.Tool{
 		Name:        "serve_sourcemap",
 		Description: "Install a Fetch intercept to serve the synthetic sourcemap for a bundle URL. When Chrome requests the .map file, it gets our generated map instead.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input ServeSourcemapInput) (*mcp.CallToolResult, any, error) {
@@ -344,7 +344,7 @@ functions (optional), framework (optional), module (optional).`,
 		}, nil, nil
 	})
 
-	mcp.AddTool(server, &mcp.Tool{
+	addMCPTool(server, &mcp.Tool{
 		Name:        "list_sourcemaps",
 		Description: "List all synthetic sourcemaps and their serving status.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
@@ -392,7 +392,7 @@ functions (optional), framework (optional), module (optional).`,
 		}, nil, nil
 	})
 
-	mcp.AddTool(server, &mcp.Tool{
+	addMCPTool(server, &mcp.Tool{
 		Name: "refine_sourcemap",
 		Description: `Re-analyze a bundle with additional coverage data (e.g. after more user actions) and update the sourcemap.
 
@@ -494,7 +494,7 @@ Otherwise, returns new chunks for you to re-analyze, then call set_bundle_struct
 		Last      int    `json:"last,omitempty"`
 	}
 
-	mcp.AddTool(server, &mcp.Tool{
+	addMCPTool(server, &mcp.Tool{
 		Name:        "get_analysis_log",
 		Description: "Read the analysis log for a bundle — shows prior reasoning behind sourcemap naming decisions across sessions.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},

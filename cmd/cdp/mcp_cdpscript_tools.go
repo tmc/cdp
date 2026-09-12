@@ -27,7 +27,7 @@ type cdpscriptRunOutput struct {
 }
 
 func registerCDPScriptTools(server *mcp.Server, s *mcpSession) {
-	mcp.AddTool(server, &mcp.Tool{
+	addMCPTool(server, &mcp.Tool{
 		Name:        "run_cdpscript",
 		Description: "Run a cdpscript script through the real cdpscript engine. Provide path or script; script may be txtar or plain .cdp.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input cdpscriptInput) (*mcp.CallToolResult, cdpscriptRunOutput, error) {
@@ -68,7 +68,7 @@ func registerCDPScriptTools(server *mcp.Server, s *mcpSession) {
 		return nil, out, nil
 	})
 
-	mcp.AddTool(server, &mcp.Tool{
+	addMCPTool(server, &mcp.Tool{
 		Name:        "validate_script",
 		Description: "Validate a cdpscript script without starting a browser or executing actions. Provide path or script; script may be txtar or plain .cdp.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input cdpscriptInput) (*mcp.CallToolResult, map[string]any, error) {
@@ -83,7 +83,7 @@ func registerCDPScriptTools(server *mcp.Server, s *mcpSession) {
 		return nil, map[string]any{"ok": true}, nil
 	})
 
-	mcp.AddTool(server, &mcp.Tool{
+	addMCPTool(server, &mcp.Tool{
 		Name:        "list_examples",
 		Description: "List curated cdpscript examples and their header metadata.",
 		Annotations: &mcp.ToolAnnotations{
