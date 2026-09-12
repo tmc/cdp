@@ -1,6 +1,8 @@
 package cdpscript
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -62,7 +64,7 @@ func (e *Engine) cmdWaitDownload() script.Cmd {
 		if err != nil {
 			return err
 		}
-		if err := waitForFile(path, timeout); err != nil {
+		if err := waitForFile(s.Context(), path, timeout); err != nil {
 			return err
 		}
 		s.Setenv("DOWNLOADED", path)
@@ -93,11 +95,18 @@ func (e *Engine) downloadPath(name string) (string, error) {
 	return filepath.Join(dir, name), nil
 }
 
-func waitForFile(path string, timeout time.Duration) error {
+// waitForFile waits for path to exist as a regular file. It returns early if
+// ctx is cancelled, so a cancelled script run does not have to wait out the
+// remaining timeout.
+func waitForFile(ctx context.Context, path string, timeout time.Duration) error {
 	if timeout <= 0 {
 		timeout = defaultScriptTimeout
 	}
-	deadline := time.Now().Add(timeout)
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	tick := time.NewTicker(50 * time.Millisecond)
+	defer tick.Stop()
 	for {
 		info, err := os.Stat(path)
 		if err == nil && !info.IsDir() {
@@ -106,9 +115,13 @@ func waitForFile(path string, timeout time.Duration) error {
 		if err != nil && !os.IsNotExist(err) {
 			return fmt.Errorf("wait-download %q: %w", path, err)
 		}
-		if time.Now().After(deadline) {
-			return fmt.Errorf("wait-download %q: timed out after %v", path, timeout)
+		select {
+		case <-ctx.Done():
+			if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+				return fmt.Errorf("wait-download %q: timed out after %v", path, timeout)
+			}
+			return fmt.Errorf("wait-download %q: %w", path, ctx.Err())
+		case <-tick.C:
 		}
-		time.Sleep(50 * time.Millisecond)
 	}
 }

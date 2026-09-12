@@ -3,6 +3,7 @@ package cdpscript
 import (
 	"bytes"
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -444,8 +445,31 @@ func TestWaitForFile(t *testing.T) {
 		}
 	}()
 
-	if err := waitForFile(path, time.Second); err != nil {
+	if err := waitForFile(context.Background(), path, time.Second); err != nil {
 		t.Fatal(err)
 	}
 	<-done
+}
+
+// TestWaitForFileCancel checks that a cancelled run aborts the wait instead of
+// sitting out the remaining timeout.
+func TestWaitForFileCancel(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "never-arrives.txt")
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		time.Sleep(20 * time.Millisecond)
+		cancel()
+	}()
+
+	start := time.Now()
+	err := waitForFile(ctx, path, time.Minute)
+	if err == nil {
+		t.Fatal("waitForFile returned nil for a file that never appeared")
+	}
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("waitForFile error = %v, want one wrapping context.Canceled", err)
+	}
+	if elapsed := time.Since(start); elapsed > 10*time.Second {
+		t.Fatalf("waitForFile waited %v after cancellation; want a prompt return", elapsed)
+	}
 }
