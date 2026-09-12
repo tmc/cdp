@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -27,6 +28,10 @@ func TestMCPToolPanicIsToolError(t *testing.T) {
 	}
 	if !result.IsError {
 		t.Fatalf("panic result IsError = false: %+v", result)
+	}
+	text, ok := result.Content[0].(*mcp.TextContent)
+	if !ok || !strings.Contains(text.Text, "panic") {
+		t.Fatalf("panic result content = %#v, want tool name", result.Content)
 	}
 
 	result, err = client.CallTool(t.Context(), &mcp.CallToolParams{Name: "ok"})
