@@ -135,15 +135,26 @@ func WithRemoteTab(tabID string, port int) Option {
 	}
 }
 
-// WithRecorder sets the recorder for HAR capture with tagging support.
-func WithRecorder(rec *recorder.Recorder) Option {
+// WithBrowserFromContext executes against the browser already attached to ctx,
+// rather than launching one. The engine does not close a browser supplied this
+// way. If ctx carries no browser, the engine launches its own as usual.
+func WithBrowserFromContext(ctx context.Context) Option {
 	return func(e *Engine) {
-		e.recorder = rec
+		br := browser.FromContext(ctx)
+		if br == nil {
+			return
+		}
+		e.browser = br
+		e.externalBrowser = true
 	}
 }
 
 // WithBrowser executes against an existing browser context.
 // The engine does not close a browser supplied this way.
+//
+// Deprecated: WithBrowser takes a type from an internal package, so it cannot
+// be called from outside this module and it pins the public API to an internal
+// type. Use [WithBrowserFromContext] instead.
 func WithBrowser(br *browser.Browser) Option {
 	return func(e *Engine) {
 		e.browser = br
