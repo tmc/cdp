@@ -9,6 +9,27 @@
 // script body, and any -- filename -- sections are files extracted to the
 // test's working directory before the script runs.
 //
+// # Stability and Compatibility
+//
+// The module is pre-v1; nothing here carries a v1 compatibility promise yet.
+//
+// The harness command vocabulary is the settled surface. Canonical names are
+// hyphenated (navigate, wait-visible) and the cdpscript shell spellings (goto,
+// wait) are registered as aliases; both are kept working. New commands are
+// added, existing ones are not repurposed, so checked-in fixtures keep
+// passing.
+//
+// The Go API is stable in shape. Run, RunFiles, RunCDPScript, and the exported
+// option structs are unlikely to move. CDPScriptRunOptions gains fields rather
+// than losing them; its Options field exists so a test can reach a cdpscript
+// option this package does not mirror, without this struct having to grow for
+// each one.
+//
+// Everything reached only under the cdp build tag — the screen recorder, the
+// WebRTC shim, screenshot-comparison thresholds — is harness machinery and may
+// change with the browser behavior it wraps. Baseline images and pixel
+// thresholds are not a compatibility contract.
+//
 // # Script Syntax
 //
 // Scripts follow the rsc.io/script language. Each line is either a comment,

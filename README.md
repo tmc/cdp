@@ -206,6 +206,18 @@ The main `cdp` command is the broader general-purpose entry point. It goes beyon
 
 See [docs/planning/cdp-best-in-class-checklist.md](docs/planning/cdp-best-in-class-checklist.md) for the current implementation checklist and verification gates.
 
+## Stability and Compatibility
+
+The module is pre-v1, so nothing here carries a v1 compatibility promise yet. The three surfaces are not equally settled, and the script DSL is deliberately the most stable of them.
+
+**Script DSL** (`main.cdp` commands, exit codes). Treated as a contract. Command names and argument order do not change meaning, a renamed command keeps its old name as an alias, and new behavior arrives as optional flags. Scripts written today are expected to keep running. `cdpscripttest` canonical names are hyphenated (`navigate`, `wait-visible`) and also register the shell spellings (`goto`, `wait`) as aliases; both are kept working.
+
+**Go API** (`cdpscript`, `cdpscripttest`). Stable in shape, not frozen. The engine types, the `Execute` methods, and the option constructors are unlikely to move; options are added over time. An exported option taking a type from an `internal/` package may be removed outright, since no code outside this module can call it. Other deprecations are marked in godoc for at least one release before removal.
+
+**MCP tool set** (`cdp --mcp`). The least stable surface. Tool names, input schemas, and result shapes follow what the hosts need and may change without notice. Pin a commit if you depend on a specific schema.
+
+Anything reached only under the `cdp` build tag — the screen recorder, the WebRTC shim, screenshot-comparison thresholds — is test-harness machinery and tracks the browser behavior it wraps. Baseline images and pixel thresholds are not a compatibility contract.
+
 ## Documentation
 
 - [docs/usage.md](docs/usage.md)
