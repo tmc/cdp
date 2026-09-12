@@ -1249,12 +1249,41 @@ func shouldStartMacgo(args []string) bool {
 	if os.Getenv("CDP_MACGO_PERMISSIONS") != "" {
 		return true
 	}
+	start := false
 	for _, arg := range args {
+		if arg == "--" {
+			break
+		}
 		if arg == "-macos-permissions" || arg == "--macos-permissions" {
-			return true
+			start = true
+			continue
+		}
+		for _, prefix := range []string{"-macos-permissions=", "--macos-permissions="} {
+			if value, ok := strings.CutPrefix(arg, prefix); ok {
+				enabled, err := strconv.ParseBool(value)
+				if err == nil {
+					start = enabled
+				}
+				break
+			}
 		}
 	}
-	return false
+	return start
+}
+
+func remoteTargetID(tabID, remoteTab string, tabs []ChromeTab) (string, error) {
+	if tabID != "" {
+		return tabID, nil
+	}
+	if remoteTab == "" {
+		return "", nil
+	}
+	for _, tab := range tabs {
+		if tab.ID == remoteTab || tab.URL == remoteTab {
+			return tab.ID, nil
+		}
+	}
+	return "", fmt.Errorf("no remote tab matches %q", remoteTab)
 }
 
 func main() {
@@ -2008,27 +2037,17 @@ func main() {
 		// Handle direct tab connection for specific operations (only when connecting to remote)
 		if remoteHost != "" && (len(jsScripts) > 0 || tabID != "" || harFile != "" || harlStream || extractSelector != "" || screenshotRequested || renderRequested) {
 			// Get available tabs
-			_, err := getChromeTabsFrom(remoteHost, remotePort)
+			tabs, err := getChromeTabsFrom(remoteHost, remotePort)
 			if err != nil {
 				exitWithError(ExitBrowserError, ErrorTypeBrowser, "Failed to get tabs at %s:%d: %v", remoteHost, remotePort, err)
 			}
 
-			// Find target tab
-			var targetTabID string
-			if tabID != "" {
-				targetTabID = tabID
+			// Select the requested target. --tab takes precedence over the
+			// older --remote-tab spelling when both are present.
+			targetTabID, err := remoteTargetID(tabID, remoteTab, tabs)
+			if err != nil {
+				exitWithError(ExitBrowserError, ErrorTypeBrowser, "%v", err)
 			}
-
-			// Connect to specific tab
-			var remoteURL string
-			if targetTabID != "" {
-				remoteURL = fmt.Sprintf("ws://%s:%d/devtools/page/%s", remoteHost, remotePort, targetTabID)
-			} else {
-				remoteURL = fmt.Sprintf("ws://%s:%d", remoteHost, remotePort)
-			}
-
-			allocCtx, allocCancel := chromedp.NewRemoteAllocator(ctx, remoteURL)
-			defer allocCancel()
 
 			// Use the existing target instead of creating a new one
 			var opts []chromedp.ContextOption
@@ -2038,8 +2057,6 @@ func main() {
 			}
 
 			if targetTabID != "" {
-				// Connect to browser first, then attach to existing target
-				allocCtx, allocCancel = chromedp.NewRemoteAllocator(ctx, fmt.Sprintf("ws://%s:%d", remoteHost, remotePort))
 				opts = append(opts, chromedp.WithExistingTarget(target.ID(targetTabID)))
 				// Use existing target without managing its lifecycle
 				opts = append(opts, chromedp.WithBrowserOption(
@@ -2051,7 +2068,11 @@ func main() {
 				))
 			}
 
-			browserCtx, browserCancel = chromedp.NewContext(allocCtx, opts...)
+			browserCtx, browserCancel, err = newRemoteBrowserContext(ctx, fmt.Sprintf("ws://%s:%d", remoteHost, remotePort), opts...)
+			if err != nil {
+				exitWithError(ExitBrowserError, ErrorTypeBrowser, "Connect to remote browser at %s:%d: %v", remoteHost, remotePort, err)
+			}
+			defer browserCancel()
 
 			// Set up console monitoring for remote tab operations
 			if monitorConsole {
@@ -2662,8 +2683,6 @@ func main() {
 			if targetTab == nil {
 				targetTab = &tabs[0]
 			}
-			allocCtx, allocCancel := chromedp.NewRemoteAllocator(ctx, fmt.Sprintf("ws://%s:%d", remoteHost, remotePort))
-			defer allocCancel()
 			ctxOpts := []chromedp.ContextOption{
 				chromedp.WithErrorf(filteredErrorf),
 				chromedp.WithExistingTarget(target.ID(targetTab.ID)),
@@ -2672,7 +2691,11 @@ func main() {
 				ctxOpts = append(ctxOpts, chromedp.WithLogf(filteredLogf))
 				log.Printf("Attached to remote target: %s (%s)", targetTab.Title, targetTab.ID)
 			}
-			browserCtx, browserCancel = chromedp.NewContext(allocCtx, ctxOpts...)
+			browserCtx, browserCancel, err = newRemoteBrowserContext(ctx, fmt.Sprintf("ws://%s:%d", remoteHost, remotePort), ctxOpts...)
+			if err != nil {
+				exitWithError(ExitBrowserError, ErrorTypeBrowser, "Connect to remote browser at %s:%d: %v", remoteHost, remotePort, err)
+			}
+			defer browserCancel()
 		} else {
 			// Local Chrome instance with optional profile support
 			var profileManager browserprofile.ProfileManager
@@ -2909,16 +2932,17 @@ func main() {
 
 				// Create new context connecting through the proxy
 				proxyURL := fmt.Sprintf("ws://localhost:%d", proxyListenPort)
-				proxyAllocCtx, proxyAllocCancel := chromedp.NewRemoteAllocator(ctx, proxyURL)
-				defer proxyAllocCancel()
-
 				var proxyOpts []chromedp.ContextOption
 				proxyOpts = append(proxyOpts, chromedp.WithErrorf(filteredErrorf))
 				if verbose {
 					proxyOpts = append(proxyOpts, chromedp.WithLogf(filteredLogf))
 				}
 
-				browserCtx, browserCancel = chromedp.NewContext(proxyAllocCtx, proxyOpts...)
+				browserCtx, browserCancel, err = newRemoteBrowserContext(ctx, proxyURL, proxyOpts...)
+				if err != nil {
+					exitWithError(ExitBrowserError, ErrorTypeBrowser, "Connect to browser through proxy: %v", err)
+				}
+				defer browserCancel()
 
 				if verbose {
 					log.Printf("Reconnected to browser through CDP proxy")
@@ -5181,6 +5205,22 @@ func setupChromeForEnhanced(ctx context.Context, cfg fullCaptureConfig) (context
 		}
 	}
 	return browserCtx, cancel, true, nil
+}
+
+// newRemoteBrowserContext connects to a remote browser and initializes its CDP
+// context before returning it.
+func newRemoteBrowserContext(ctx context.Context, wsURL string, opts ...chromedp.ContextOption) (context.Context, context.CancelFunc, error) {
+	allocCtx, allocCancel := chromedp.NewRemoteAllocator(ctx, wsURL)
+	browserCtx, browserCancel := chromedp.NewContext(allocCtx, opts...)
+	if err := chromedp.Run(browserCtx); err != nil {
+		browserCancel()
+		allocCancel()
+		return nil, nil, fmt.Errorf("initialize remote browser: %w", err)
+	}
+	return browserCtx, func() {
+		browserCancel()
+		allocCancel()
+	}, nil
 }
 
 // launchKeepOpenChrome starts a browser independently of chromedp's exec

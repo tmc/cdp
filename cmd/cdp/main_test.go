@@ -447,14 +447,26 @@ func TestAppendChromeWrapperEnv(t *testing.T) {
 
 func TestShouldStartMacgo(t *testing.T) {
 	t.Setenv("CDP_MACGO_PERMISSIONS", "")
-	if shouldStartMacgo([]string{"run", "script.txtar"}) {
-		t.Fatal("run should not trigger macgo relaunch")
-	}
-	if shouldStartMacgo([]string{"-js", "1+1"}) {
-		t.Fatal("-js should not trigger macgo relaunch")
-	}
-	if !shouldStartMacgo([]string{"-macos-permissions", "-url", "about:blank"}) {
-		t.Fatal("-macos-permissions should trigger macgo relaunch")
+	for _, test := range []struct {
+		name string
+		args []string
+		want bool
+	}{
+		{name: "unrelated", args: []string{"run", "script.txtar"}},
+		{name: "javascript", args: []string{"-js", "1+1"}},
+		{name: "short", args: []string{"-macos-permissions", "-url", "about:blank"}, want: true},
+		{name: "short true", args: []string{"-macos-permissions=true"}, want: true},
+		{name: "long true", args: []string{"--macos-permissions=true"}, want: true},
+		{name: "false", args: []string{"-macos-permissions=false"}},
+		{name: "last value wins", args: []string{"-macos-permissions=false", "--macos-permissions=true"}, want: true},
+		{name: "after flag value", args: []string{"-url", "about:blank", "-macos-permissions=true"}, want: true},
+		{name: "after double dash", args: []string{"--", "-macos-permissions=true"}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if got := shouldStartMacgo(test.args); got != test.want {
+				t.Fatalf("shouldStartMacgo(%q) = %v, want %v", test.args, got, test.want)
+			}
+		})
 	}
 	t.Setenv("CDP_MACGO_PERMISSIONS", "1")
 	if !shouldStartMacgo(nil) {
