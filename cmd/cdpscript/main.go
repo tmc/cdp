@@ -55,10 +55,6 @@ func scriptEnvironment() []string {
 	return os.Environ()
 }
 
-func scriptHelpWanted(args []string) bool {
-	return cdpscript.HelpWanted(args)
-}
-
 func scriptExitCode(err error) int {
 	return cdpscript.ExitCode(err)
 }

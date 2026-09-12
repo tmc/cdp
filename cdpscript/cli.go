@@ -72,7 +72,7 @@ func RunCLI(ctx context.Context, args []string, cfg CLIConfig) error {
 
 	scriptPath := fs.Arg(0)
 	scriptArgs := fs.Args()[1:]
-	if HelpWanted(scriptArgs) {
+	if helpWanted(scriptArgs) {
 		text, err := helpTextForPath(scriptPath, cfg.Stdin)
 		if err != nil {
 			return err
@@ -105,8 +105,8 @@ func RunCLI(ctx context.Context, args []string, cfg CLIConfig) error {
 	return engine.ExecuteTxtar(ctx, scriptPath, scriptArgs)
 }
 
-// HelpWanted reports whether script arguments request script-scoped help.
-func HelpWanted(args []string) bool {
+// helpWanted reports whether script arguments request script-scoped help.
+func helpWanted(args []string) bool {
 	for _, arg := range args {
 		if arg == "-h" || arg == "--help" {
 			return true
