@@ -15,6 +15,13 @@ Usage:
 
 With no -url and no -js, cdp starts in interactive shell mode.
 
+# Testing
+
+Tests that launch a browser run serially to avoid competing for browser
+profiles and DevTools ports. Run the package's browser tests with:
+
+	go test -p 1 ./cmd/cdp
+
 # Connection
 
 By default cdp discovers a running browser and prefers it, falling back to

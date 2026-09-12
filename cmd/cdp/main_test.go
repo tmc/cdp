@@ -200,7 +200,8 @@ func TestBrowserDisplayName(t *testing.T) {
 	}
 }
 
-// skipIfNoBrowser skips the test if Chrome is not available or if running in short mode
+// skipIfNoBrowser skips a serial browser test when Chrome is not available or
+// when running in short mode.
 func skipIfNoBrowser(t testing.TB) {
 	t.Helper()
 
@@ -261,7 +262,6 @@ func TestCDP_Build(t *testing.T) {
 }
 
 func TestCDP_ShowHelp(t *testing.T) {
-	t.Parallel()
 	cdpPath := buildCDP(t)
 
 	tests := []struct {
@@ -291,8 +291,6 @@ func TestCDP_ShowHelp(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
 
@@ -531,7 +529,6 @@ func captureStderr(t *testing.T, fn func()) string {
 }
 
 func TestCDP_ListBrowsers(t *testing.T) {
-	t.Parallel()
 	cdpPath := buildCDP(t)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -672,7 +669,6 @@ func TestCDP_AliasExpansion(t *testing.T) {
 }
 
 func TestCDP_JavaScriptExecution(t *testing.T) {
-	t.Parallel()
 	skipIfNoBrowser(t)
 
 	cdpPath := buildCDP(t)
@@ -861,7 +857,6 @@ func TestCDP_RemoteEnhancedHARWritesFile(t *testing.T) {
 }
 
 func TestCDP_HARRecording(t *testing.T) {
-	t.Parallel()
 	skipIfNoBrowser(t)
 
 	cdpPath := buildCDP(t)
