@@ -181,14 +181,17 @@ func (s *mcpSession) contextOutputDir() string {
 // Automatically: starts a HAR tag range, adds a note annotation,
 // and takes a coverage start snapshot (if active).
 // Returns the new output directory path.
-func (s *mcpSession) pushContext(name string) string {
+func (s *mcpSession) pushContext(name string) (string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if err := validPathSegment("context name", name); err != nil {
+		return "", err
+	}
 	s.contextStack = append(s.contextStack, name)
 	dir := s.contextOutputDir()
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		log.Printf("error creating context dir: %v", err)
-		return dir
+		return dir, nil
 	}
 	if s.recorder != nil {
 		s.recorder.SetOutputDir(dir)
@@ -203,7 +206,7 @@ func (s *mcpSession) pushContext(name string) string {
 			log.Printf("coverage: auto-snapshot %s: %v", snapName, err)
 		}
 	}
-	return dir
+	return dir, nil
 }
 
 // popContext pops the current context and updates the output directory.

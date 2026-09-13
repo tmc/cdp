@@ -1266,6 +1266,10 @@ func (im *InteractiveMode) pushContext(name string) {
 		fmt.Println("No --output-dir configured; push-context has no effect.")
 		return
 	}
+	if err := validPathSegment("context name", name); err != nil {
+		fmt.Printf("%v\n", err)
+		return
+	}
 	im.contextStack = append(im.contextStack, name)
 	dir := im.contextOutputDir()
 	if err := os.MkdirAll(dir, 0755); err != nil {

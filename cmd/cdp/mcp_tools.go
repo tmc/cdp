@@ -827,7 +827,10 @@ func registerContextTools(server *mcp.Server, s *mcpSession) {
 		Name:        "push_context",
 		Description: "Push a new recording context to isolate traffic",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input PushContextInput) (*mcp.CallToolResult, ContextOutput, error) {
-		path := s.pushContext(input.Name)
+		path, err := s.pushContext(input.Name)
+		if err != nil {
+			return nil, ContextOutput{}, fmt.Errorf("push_context: %w", err)
+		}
 		return nil, ContextOutput{Path: path}, nil
 	})
 

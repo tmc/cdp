@@ -157,6 +157,13 @@ func registerDefineToolMeta(server *mcp.Server, session *mcpSession, toolsDir st
 			}, nil, nil
 		}
 
+		if err := validPathSegment("tool name", input.Name); err != nil {
+			return &mcp.CallToolResult{
+				Content: []mcp.Content{&mcp.TextContent{Text: err.Error()}},
+				IsError: true,
+			}, nil, nil
+		}
+
 		toolName := input.Name
 		if builtinToolNames[toolName] {
 			toolName = "custom_" + toolName
