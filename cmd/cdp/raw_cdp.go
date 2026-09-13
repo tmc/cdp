@@ -87,11 +87,24 @@ func validateRawCDPMethod(method string) (string, error) {
 	if strings.ContainsAny(method, " \t\r\n") || strings.Count(method, ".") != 1 {
 		return "", fmt.Errorf("invalid method %q", method)
 	}
-	switch method {
-	case "Browser.close", "Target.closeTarget":
-		return "", fmt.Errorf("%s is not allowed", method)
+	if rawCDPDeniedMethods[method] {
+		return "", fmt.Errorf("%s is not allowed; use the new_tab and close_tab tools", method)
 	}
 	return method, nil
+}
+
+// rawCDPDeniedMethods are the CDP methods raw_cdp refuses to issue. Tab and
+// browser lifecycle belongs to the session, which keeps at most one MCP-owned
+// tab and one browser and cancels the previous one when it is replaced. A raw
+// call that creates a target or a browser context produces one the session
+// does not track and never closes; a raw call that closes one destroys what
+// the other tools still point at. Both directions are refused, so lifecycle
+// runs through new_tab and close_tab, which are tracked.
+var rawCDPDeniedMethods = map[string]bool{
+	"Browser.close":               true,
+	"Target.closeTarget":          true,
+	"Target.createTarget":         true,
+	"Target.createBrowserContext": true,
 }
 
 func isRawCDPCommandName(name string) bool {

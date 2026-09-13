@@ -93,6 +93,9 @@ func TestValidateRawCDPInput(t *testing.T) {
 		{name: "invalid target", input: RawCDPInput{Method: "Runtime.evaluate", Target: "page"}, wantErr: true},
 		{name: "block browser close", input: RawCDPInput{Method: "Browser.close", Target: "browser"}, wantErr: true},
 		{name: "block target close", input: RawCDPInput{Method: "Target.closeTarget", Target: "browser"}, wantErr: true},
+		{name: "block target create", input: RawCDPInput{Method: "Target.createTarget", Target: "browser"}, wantErr: true},
+		{name: "block browser context create", input: RawCDPInput{Method: "Target.createBrowserContext", Target: "browser"}, wantErr: true},
+		{name: "allow target info", input: RawCDPInput{Method: "Target.getTargets", Target: "browser"}, wantMethod: "Target.getTargets", wantTarget: "browser"},
 	}
 
 	for _, tt := range tests {
