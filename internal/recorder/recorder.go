@@ -871,6 +871,18 @@ func (r *Recorder) scrubEntry(entry *har.Entry) {
 		if entry.Request.URL != "" {
 			entry.Request.URL = scrubURL(r.scrubber, entry.Request.URL)
 		}
+		if entry.Request.PostData != nil {
+			// Request bodies carry credentials directly: form logins, OAuth
+			// token exchanges, GraphQL mutations holding an API key.
+			if entry.Request.PostData.Text != "" {
+				entry.Request.PostData.Text, _ = r.scrubber.ScrubText(entry.Request.PostData.Text)
+			}
+			for _, p := range entry.Request.PostData.Params {
+				if p != nil {
+					p.Value = r.scrubber.ScrubQueryParam(p.Name, p.Value)
+				}
+			}
+		}
 	}
 	if entry.Response != nil {
 		for i := range entry.Response.Headers {
