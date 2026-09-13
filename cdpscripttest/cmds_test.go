@@ -31,6 +31,44 @@ func TestDefaultCmdsHyphenatedNamesAndAliases(t *testing.T) {
 	}
 }
 
+// aliasGroups are the command names DefaultCmds registers as aliases of one
+// another, canonical name first. Presence alone is not enough: a refactor that
+// pointed goto at a different command than navigate would still satisfy a test
+// that only checked both keys exist.
+var aliasGroups = [][]string{
+	{"navigate", "goto"},
+	{"wait-visible", "wait", "waitVisible"},
+	{"wait-not-visible", "waitNotVisible"},
+	{"send-keys", "type", "fill", "sendKeys"},
+	{"eval", "js"},
+	{"evalfile", "jsfile"},
+	{"screenrecord", "screen-record", "video"},
+	{"sleep", "pause"},
+	{"set-base-url", "setBaseURL"},
+}
+
+func TestDefaultCmdsAliasesResolveToSameCommand(t *testing.T) {
+	cmds := DefaultCmds()
+	for _, group := range aliasGroups {
+		canonical := group[0]
+		want, ok := cmds[canonical]
+		if !ok {
+			t.Errorf("DefaultCmds()[%q] missing", canonical)
+			continue
+		}
+		for _, name := range group[1:] {
+			got, ok := cmds[name]
+			if !ok {
+				t.Errorf("DefaultCmds()[%q] missing", name)
+				continue
+			}
+			if got != want {
+				t.Errorf("DefaultCmds()[%q] resolves to a different command than %q", name, canonical)
+			}
+		}
+	}
+}
+
 func TestPackageDocMentionsDefaultCDPCommands(t *testing.T) {
 	data, err := os.ReadFile("doc.go")
 	if err != nil {

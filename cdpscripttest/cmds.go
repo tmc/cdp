@@ -56,7 +56,7 @@ func DefaultCmds() map[string]script.Cmd {
 
 	wv := WaitVisible()
 	cmds["wait-visible"] = wv
-	cmds["wait"] = wv // alias: matches cmd/cdp shell
+	cmds["wait"] = wv // alias: matches cmd/cdp shell; shadows script.Wait
 	cmds["waitVisible"] = wv
 
 	wnv := WaitNotVisible()

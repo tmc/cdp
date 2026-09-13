@@ -101,6 +101,28 @@
 //	source
 //	tag, har, note, capture
 //
+// # Two Command Vocabularies
+//
+// The harness and the cdpscript engine keep separate command tables, and a
+// script runs under exactly one of them. The entry point decides which:
+// Execute, Run, RunFiles and Test use the harness table from DefaultCmds;
+// RunCDPScript hands the archive to the cdpscript engine and uses the runtime
+// surface listed above.
+//
+// The two tables are deliberate. The
+// engine vocabulary is the short spelling an operator types into the cmd/cdp
+// shell: goto, js, fill. The harness vocabulary is hyphenated and reads as a
+// test script: navigate, eval, send-keys. The harness also registers the
+// engine spellings as aliases, so the two can be read interchangeably. The
+// alias table below is the complete mapping, and TestDefaultCmdsAliasesResolveToSameCommand
+// pins it: every name in a group must resolve to one command, not merely
+// exist.
+//
+// One inherited name changes meaning here. In the harness table wait is
+// wait-visible, replacing rsc.io/script's wait, which waits for backgrounded
+// commands. That agrees with the engine's wait, but a script cannot reach the
+// inherited behavior through this table.
+//
 // # Commands
 //
 // The default command set includes scripttest's defaults (env, echo, exec,
