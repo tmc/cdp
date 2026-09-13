@@ -23,10 +23,17 @@ type domNode struct {
 	Children []*domNode        `json:"children,omitempty"`
 }
 
-// domSnapshotStore holds named DOM snapshots.
+// maxDomSnapshots bounds the store. Names are chosen by the caller, so without
+// a cap an agent taking a snapshot per page in a crawl retains every DOM tree
+// it ever captured. Diffing needs a handful of named snapshots at a time.
+const maxDomSnapshots = 32
+
+// domSnapshotStore holds named DOM snapshots, evicting the oldest once
+// maxDomSnapshots names are live.
 type domSnapshotStore struct {
 	mu        sync.Mutex
 	snapshots map[string]*domNode
+	order     []string
 }
 
 func newDomSnapshotStore() *domSnapshotStore {
@@ -38,7 +45,15 @@ func newDomSnapshotStore() *domSnapshotStore {
 func (ds *domSnapshotStore) save(name string, root *domNode) {
 	ds.mu.Lock()
 	defer ds.mu.Unlock()
+	if _, ok := ds.snapshots[name]; !ok {
+		ds.order = append(ds.order, name)
+	}
 	ds.snapshots[name] = root
+	for len(ds.order) > maxDomSnapshots {
+		oldest := ds.order[0]
+		ds.order = ds.order[1:]
+		delete(ds.snapshots, oldest)
+	}
 }
 
 func (ds *domSnapshotStore) get(name string) *domNode {
