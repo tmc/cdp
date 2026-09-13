@@ -348,6 +348,52 @@ containing a main.cdp file:
 See skills/writing-cdp-scripts/references/script-format.md for the script
 format, and the cdpscripttest package for running scripts as tests.
 
+# Trust model
+
+Cdp drives a real browser with the privileges of the user who starts it. It is
+not a sandbox and does not try to be one.
+
+On the command line and in .cdp scripts the operator is the author. Js, jsfile
+and the shell's eval run arbitrary JavaScript in the page. Goto reaches any URL
+the host can reach, including file:// and localhost; there is no allowlist here
+(-allow-url and -allow-domain exist in churl and chrome-to-har, not in cdp).
+Screenshot, pdf, har and download-dir write where they are pointed, taking
+absolute paths verbatim and resolving relative ones against -output-dir without
+confining the result. That is the intended power of a browser automation tool.
+A .cdp script is not a shell, though: the engine registers only the commands
+documented in the cdpscript package, not rsc.io/script's defaults, so there is
+no exec, rm or cp.
+
+Under -mcp the author changes. The caller is an agent, and every capability
+above reaches it, along with three that are stronger than running JavaScript in
+a page:
+
+	evaluate, raw_cdp  the full page JS and CDP surfaces. Raw_cdp is
+	                   restricted only by target and a short denylist of tab
+	                   and browser lifecycle methods.
+	upload_file        reads any absolute path on the host and hands it to a
+	                   page the same agent can navigate.
+	run_cdpscript      runs agent-supplied script text with the server's own
+	                   environment exposed as ${NAME}, credentials included.
+
+Tool and context names are validated, so define_tool and push_context stay
+inside -tools-dir and -output-dir, but artifact paths are not confined. Start
+the server with an environment and a working directory you would hand to
+whatever is on the other end of the protocol.
+
+The MCP transport is stdio and opens no port. The coverage API binds loopback
+when enabled and answers with Access-Control-Allow-Origin: *, so any page the
+browser visits can read coverage data from it. -pprof-listen is off unless
+given an address.
+
+Captures are redacted by default. Request headers and URL query parameters,
+request and response bodies, WebSocket frames and saved sources all pass
+through the scrubber unless -no-scrub is set. Two limits apply:
+text larger than 512 KiB is passed through unscrubbed, a deliberate trade for
+capture speed on large bundles, and scrubbing covers captured artifacts rather
+than tool results, so get_cookies returns cookie values as they are and
+save_state writes them to disk in cleartext.
+
 # Exit status
 
 	0  success

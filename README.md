@@ -218,6 +218,18 @@ The module is pre-v1, so nothing here carries a v1 compatibility promise yet. Th
 
 Anything reached only under the `cdp` build tag — the screen recorder, the WebRTC shim, screenshot-comparison thresholds — is test-harness machinery and tracks the browser behavior it wraps. Baseline images and pixel thresholds are not a compatibility contract.
 
+## Trust Model
+
+`cdp` drives a real browser with the privileges of the user who starts it. It is not a sandbox.
+
+**On the command line and in `.cdp` scripts, the operator is the author.** `js`/`jsfile`/`eval` run arbitrary JavaScript in the page, `goto` reaches any URL the host can reach including `file://` and localhost, and `screenshot`/`pdf`/`har`/`download-dir` write where they are pointed — absolute paths verbatim, relative paths under `-output-dir`, unconfined either way. That is the intended power of a browser automation tool. A `.cdp` script is not a shell: the engine registers only its own commands, not `rsc.io/script`'s defaults, so there is no `exec`, `rm`, or `cp`.
+
+**Under `--mcp` the author changes.** The caller is an agent, and everything above reaches it. Three tools are stronger than "run JavaScript in a page": `evaluate` and `raw_cdp` expose the full page-JS and CDP surfaces, `upload_file` reads any absolute path on the host and can hand it to a page the same agent navigated to, and `run_cdpscript` runs agent-supplied script text with the server's own environment — credentials included — exposed as `${NAME}`. Tool and context names are validated so `define_tool` and `push_context` stay inside their directories, but artifact paths are not confined. Run the server with an environment and working directory you would hand to whatever is on the other end.
+
+**Captures are redacted by default** — request headers and query parameters, request and response bodies, WebSocket frames, and saved sources, unless `--no-scrub` is set. Text over 512 KiB passes through unscrubbed (a deliberate trade for capture speed on large bundles), and scrubbing covers captured artifacts rather than tool results: `get_cookies` returns cookie values as they are, and `save_state` writes them to disk in cleartext.
+
+Full statement: `go doc github.com/tmc/cdp/cmd/cdp`, section "Trust model".
+
 ## Documentation
 
 - [docs/usage.md](docs/usage.md)
