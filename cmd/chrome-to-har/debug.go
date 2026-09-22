@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-// Debug script to check Chrome installation and launch
+// runChromeDebug checks that Chrome is installed and can be launched.
 func runChromeDebug() error {
 	chromePath := "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 	fmt.Println("=== Chrome Debug Information ===")

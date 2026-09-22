@@ -11,7 +11,7 @@ between two runs of the same page.
 
 Usage:
 
-	chrome-to-har [flags] [URL...]
+	chrome-to-har [flags]
 
 # Capture
 
@@ -92,9 +92,10 @@ pages is well after the load event.
 	-wait-stable
 	    Wait until both network and DOM go quiet.
 	-wait-for-stability
-	    Use the enhanced stability detector rather than the simple one.
+	    Wait for network, DOM, and resources to settle, rather than only the network.
 	-network-idle-timeout ms
-	    How long the network must be quiet. (default 500)
+	    How long to wait for the network to go idle. This is a fixed
+	    sleep; network activity is not observed. (default 500)
 	-stable-timeout seconds
 	    Maximum time to wait for stability overall. (default 30)
 	-resource-timeout seconds

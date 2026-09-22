@@ -196,7 +196,7 @@ func findBrowser() string {
 }
 
 // browserCandidates returns a prioritized list of browser executable paths
-// for the current OS. Brave is preferred per project conventions.
+// for the current OS. Brave is tried first.
 func browserCandidates() []string {
 	switch runtime.GOOS {
 	case "darwin":
@@ -502,7 +502,7 @@ func (p *printer) fileHeader(file string) {
 //	matched: ...         — internal noise, skip
 //	[condition ...]      — internal noise, skip
 //
-// Rendering rules (Russ Cox style — minimal, functional):
+// Rendering rules:
 //   - # comments: dim gray, timing stripped
 //   - CDP commands (navigate, click, …): dim — they're the script, not results
 //   - stdout/stderr assertion commands: skipped — noise, output already visible
@@ -714,5 +714,3 @@ func writeKittyImage(w io.Writer, data []byte) {
 	}
 	fmt.Fprintln(w)
 }
-
-// Ensure unused import doesn't linger.

@@ -31,8 +31,6 @@ import (
 	"github.com/tmc/cdp/internal/recorder"
 )
 
-// Custom code implementing JavaScript interactive CLI mode
-
 type options struct {
 	profileDir      string
 	outputFile      string
@@ -55,7 +53,7 @@ type options struct {
 	stableTimeout   int    // Max time in seconds to wait for stability
 	waitSelector    string // Wait for specific CSS selector to appear
 
-	// Enhanced stability detection options
+	// Stability detection options.
 	waitForStability   bool // Use enhanced stability detection
 	networkIdleTimeout int  // Network idle timeout in milliseconds
 	resourceTimeout    int  // Resource loading timeout in seconds
@@ -208,15 +206,15 @@ func main() {
 	flag.Int64Var(&opts.maxBodyBytes, "max-body-bytes", 0, "Maximum response body bytes to keep in HAR/HARL (0 keeps full bodies)")
 	flag.BoolVar(&opts.interactiveMode, "interactive", false, "Run in interactive CLI mode")
 	flag.IntVar(&opts.debugPort, "debug-port", 0, "Use specific port for Chrome DevTools (0 for auto)")
-	flag.IntVar(&opts.timeout, "timeout", 180, "Global timeout in seconds (default: 180)")
+	flag.IntVar(&opts.timeout, "timeout", 180, "Global timeout in seconds")
 	flag.StringVar(&opts.chromePath, "chrome-path", "", "Path to Chrome executable")
 	flag.BoolVar(&opts.debugMode, "debug-chrome", false, "Run Chrome debugging diagnostics")
 	flag.BoolVar(&opts.waitStable, "wait-stable", false, "Wait until page is stable (network and DOM)")
 	flag.IntVar(&opts.stableTimeout, "stable-timeout", 30, "Max time in seconds to wait for stability")
 	flag.StringVar(&opts.waitSelector, "wait-for", "", "Wait for specific CSS selector to appear")
 
-	// Enhanced stability detection flags
-	flag.BoolVar(&opts.waitForStability, "wait-for-stability", false, "Use enhanced stability detection system")
+	// Stability detection flags.
+	flag.BoolVar(&opts.waitForStability, "wait-for-stability", false, "Wait for network, DOM, and resources to settle")
 	flag.IntVar(&opts.networkIdleTimeout, "network-idle-timeout", 500, "Network idle timeout in milliseconds")
 	flag.IntVar(&opts.resourceTimeout, "resource-timeout", 10, "Resource loading timeout in seconds")
 	flag.BoolVar(&opts.waitForImages, "wait-for-images", true, "Wait for all images to load")
@@ -384,15 +382,13 @@ func (r *Runner) Run(ctx context.Context, opts options) error {
 	copts := []chromedp.ExecAllocatorOption{
 		chromedp.NoFirstRun,
 		chromedp.NoDefaultBrowserCheck,
-		// CRITICAL: Set UserDataDir to ensure profile is properly initialized and initial tab is created
-		// This fixes the issue where Brave doesn't expose tabs via DevTools Protocol when using existing profiles
-		// See bead chrome-to-har-95: Root Cause: Browser Tab Creation Delayed or Blocked with Existing Profile
+		// Set UserDataDir so the profile initializes and opens its first tab;
+		// with an existing profile, Brave otherwise exposes no tabs over CDP.
 		chromedp.UserDataDir(r.pm.WorkDir()),
 		// Increase timeouts to handle complex sites
-		chromedp.WSURLReadTimeout(180 * time.Second), // Increase from 90 to 180 seconds
+		chromedp.WSURLReadTimeout(180 * time.Second),
 		// Disable GPU for better stability
 		chromedp.DisableGPU,
-		// Set Chrome path if specified
 		// Add additional stability flags
 		chromedp.Flag("disable-background-networking", true),
 		chromedp.Flag("enable-features", "NetworkService,NetworkServiceInProcess"),
@@ -435,7 +431,7 @@ func (r *Runner) Run(ctx context.Context, opts options) error {
 
 	// Add remote debugging port if specified
 	if opts.debugPort > 0 {
-		// Convert int to string to avoid type errors
+		// The flag value must be a string.
 		portStr := fmt.Sprintf("%d", opts.debugPort)
 		copts = append(copts, chromedp.Flag("remote-debugging-port", portStr))
 		if opts.verbose {
@@ -752,16 +748,14 @@ func splitAndTrim(s, sep string) []string {
 	return parts
 }
 
-// waitForEnhancedStability uses the new stability detection system
+// waitForEnhancedStability waits for the page to settle as configured by opts.
 func waitForEnhancedStability(ctx context.Context, opts options) error {
-	// Create a simple enhanced stability detection using chromedp directly
-	// This is a simplified version since we're working with chromedp context directly
 
 	stableCtx, cancel := context.WithTimeout(ctx, time.Duration(opts.stableTimeout)*time.Second)
 	defer cancel()
 
 	if opts.verbose {
-		log.Println("Starting enhanced stability detection...")
+		log.Println("waiting for page to stabilize")
 	}
 
 	// Enable network domain for monitoring
@@ -798,20 +792,19 @@ func waitForEnhancedStability(ctx context.Context, opts options) error {
 	}
 
 	if opts.verbose {
-		log.Println("Enhanced stability detection completed")
+		log.Println("page stable")
 	}
 
 	return nil
 }
 
-// waitForNetworkIdle waits for network activity to become idle
+// waitForNetworkIdle sleeps for opts.networkIdleTimeout.
 func waitForNetworkIdle(ctx context.Context, opts options) error {
 	if opts.verbose {
 		log.Println("Waiting for network idle...")
 	}
 
-	// Use a simplified network idle detection
-	// This waits for the network idle timeout duration
+	// This does not observe the network: it waits for the idle timeout.
 	idleTimeout := time.Duration(opts.networkIdleTimeout) * time.Millisecond
 
 	// Wait for the specified idle timeout

@@ -171,8 +171,7 @@ func TestProxyIntegration(t *testing.T) {
 	})
 
 	t.Run("ProxyBypass", func(t *testing.T) {
-		// Note: This test would require more complex setup to properly test bypass
-		// For now, just verify the flag is accepted
+		// Only checks that the flag is accepted; bypass behavior is not tested.
 		cmd := exec.Command(binPath,
 			"--proxy", proxyServer.URL,
 			"--proxy-bypass", "localhost,127.0.0.1",

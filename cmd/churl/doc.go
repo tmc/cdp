@@ -3,12 +3,12 @@ Churl fetches URLs through a real browser.
 
 Churl is shaped like curl and wget, but every request runs in Chrome or Brave,
 so JavaScript executes and single-page applications render before the content
-is read. It prints the rendered page, extracts it as text, Markdown, or JSON,
+is read. It prints the rendered page, extracts it as text or JSON, renders it as PDF,
 and can write a HAR alongside any of those.
 
 Usage:
 
-	churl [flags] URL...
+	churl [flags] URL
 
 Short and long spellings of the same flag are listed together; either works.
 
@@ -252,7 +252,7 @@ request log, so churl can watch the socket directly.
 
 # Examples
 
-Print a rendered page, then convert it to Markdown:
+Print a rendered page, then its text:
 
 	churl https://example.com
 	churl -output-format text https://example.com

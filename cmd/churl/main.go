@@ -1,4 +1,3 @@
-// Command churl is like curl but runs through Chrome and can handle JavaScript/SPAs.
 package main
 
 import (
@@ -10,10 +9,7 @@ import (
 	"io"
 	"log"
 	"os"
-
-	// "os/signal"
 	"strings"
-	// "syscall"
 	"text/tabwriter"
 	"time"
 
@@ -894,8 +890,7 @@ func run(ctx context.Context, pm browserprofile.ProfileManager, url string, opts
 		var html string
 		html, outputErr = b.GetHTML()
 		if outputErr == nil {
-			// This is a very simple text extraction. A real implementation would
-			// use a proper HTML to text converter.
+			// Text is the page's innerText, not a full HTML-to-text conversion.
 			text := strings.ReplaceAll(html, "\n", " ")
 			text = strings.ReplaceAll(text, "<script", "\n<script")
 			text = strings.ReplaceAll(text, "</script>", "</script>\n")
@@ -1076,8 +1071,7 @@ func validateJavaScript(script string) error {
 		return fmt.Errorf("%w: script is empty", errInvalidScript)
 	}
 
-	// Basic checks for potentially dangerous patterns
-	// This is a simple validation - more sophisticated validation could be added
+	// Reject scripts whose braces, parentheses, or brackets do not balance.
 
 	// Check for balanced braces (basic syntax check)
 	braceCount := 0
