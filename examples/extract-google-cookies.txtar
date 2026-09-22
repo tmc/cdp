@@ -9,7 +9,6 @@
 # Extracts authentication cookies from a logged-in Google session.
 # These can be used for automation that needs browser-like access.
 #
-# Usage: cdp run extract-google-cookies.txtar
 # Requires: User logged into Google in the browser
 
 log Navigating to Google...

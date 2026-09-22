@@ -5,9 +5,6 @@
 
 -- main.cdp --
 # AI Studio Function Call Auto-Handler
-#
-# Usage: cdp run examples/aistudio-fc.txtar --tab <TAB_ID>
-#    or: cdp run examples/aistudio-fc.txtar --url https://aistudio.google.com/prompts/<ID>
 
 # Inject the function call handler from embedded file
 jsfile fc-handler.js

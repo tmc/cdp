@@ -9,7 +9,6 @@
 # Extracts authentication tokens from a logged-in Slack session.
 # These tokens can be used by slackdump for backup automation.
 #
-# Usage: cdp run extract-slack-tokens.txtar
 # Requires: User logged into Slack in the browser
 
 log Navigating to Slack...
@@ -87,7 +86,7 @@ log Done! Check output above for token values.
     }
   }
 
-  // Extract the 'd' cookie which is critical for Slack API auth
+  // Extract the 'd' cookie, which Slack API auth requires
   const cookies = document.cookie.split(';').reduce((acc, cookie) => {
     const [name, ...valueParts] = cookie.trim().split('=');
     if (name) {
@@ -98,7 +97,7 @@ log Done! Check output above for token values.
 
   results.cookies = cookies;
 
-  // The 'd' cookie is essential for slackdump
+  // slackdump needs the 'd' cookie
   if (cookies.d) {
     console.log('\n=== d Cookie (for slackdump) ===');
     console.log('d=' + cookies.d);

@@ -5,8 +5,6 @@
 
 -- main.cdp --
 # Google Doc to Markdown Converter
-# Usage: Set GDOC_URL env var to your Google Doc URL
-# Example: GDOC_URL="https://docs.google.com/document/d/abc123/edit" cdp run gdoc-to-markdown.txtar
 
 goto ${GDOC_URL}
 

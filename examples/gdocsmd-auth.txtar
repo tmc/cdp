@@ -6,27 +6,24 @@
 -- main.cdp --
 # gdocsmd OAuth Token Generator
 #
-# Generates a token.json for gdocsmd by automating the OAuth consent flow.
-# Uses your existing browser login - no manual clicking needed.
+# Drives the OAuth consent flow for gdocsmd and prints the authorization code.
+# Uses your existing browser login.
 #
 # Prerequisites:
-#   1. credentials.json from Google Cloud Console (OAuth 2.0 Client ID)
+#   1. An OAuth 2.0 Client ID from Google Cloud Console, set as window.__oauth_client_id
 #   2. Logged into Google in this browser
 #
-# Usage:
-#   cdp run --tab <existing-tab-id> gdocsmd-auth.txtar
-#
 # The script will:
-#   1. Build OAuth URL from credentials.json
+#   1. Build OAuth URL from window.__oauth_client_id
 #   2. Navigate to Google consent screen
 #   3. Auto-click through consent (uses existing login)
 #   4. Capture the auth code from callback
-#   5. Exchange for token and save to token.json
+#   5. Print the auth code from the callback URL
 
 log === gdocsmd OAuth Token Generator ===
 
-# First, we need to start a local server to receive the callback
-# and build the OAuth URL from credentials
+# Build the OAuth URL. The redirect to localhost:8080 is read from the
+# address bar; nothing listens there.
 log Step 1: Reading credentials and building OAuth URL...
 jsfile build-oauth-url.js
 
