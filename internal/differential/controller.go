@@ -264,8 +264,7 @@ func (dc *DifferentialController) RunDifferentialComparison(ctx context.Context,
 		}
 	}
 
-	// If no baseline found, this would require integration with the capture process
-	// For now, we'll assume captures are created externally and we're just comparing
+	// Captures are created externally; this only compares existing ones.
 
 	// Find comparison capture
 	var compareCapture *CaptureMetadata

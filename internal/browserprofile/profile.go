@@ -108,9 +108,7 @@ func (pm *profileManager) CopyProfile(name string, cookieDomains []string) error
 	return pm.copyProfileImpl(srcDir, name, cookieDomains)
 }
 
-// CopyProfileFromDir copies a profile from a custom directory path
-// This method supports custom/non-standard profile locations
-// Useful for testing, non-standard installations, and multiple profile locations
+// CopyProfileFromDir copies the profile at srcDir, for profiles outside the default locations.
 func (pm *profileManager) CopyProfileFromDir(srcDir string, cookieDomains []string) error {
 	if pm.workDir == "" {
 		return profileSetup("working directory not set up")
@@ -180,7 +178,7 @@ func (pm *profileManager) copyProfileImpl(srcDir, profileName string, cookieDoma
 		}
 	}
 
-	// Essential profile components
+	// Profile files needed for a usable session.
 	essentials := map[string]bool{
 		"Cookies":                  false, // Session cookies for authentication
 		"Login Data":               false,
@@ -308,28 +306,26 @@ func runSQLite(dbPath, query string) error {
 	return nil
 }
 
-// getChromeProfileDir detects and returns the base directory for browser profiles
-// This function searches for Chrome, Brave, Chromium, and Edge profiles
-// Brave profiles are searched FIRST on all platforms for priority detection
+// getChromeProfileDir returns the base directory for browser profiles. It
+// checks Brave's directory first, then Chrome's.
 func getChromeProfileDir() (string, error) {
 	var candidates []string
 
 	switch runtime.GOOS {
 	case "windows":
-		// Brave first, then Chrome (for priority Brave detection)
+		// Brave first, then Chrome.
 		candidates = []string{
 			filepath.Join(os.Getenv("LOCALAPPDATA"), "BraveSoftware", "Brave-Browser"),
 			filepath.Join(os.Getenv("LOCALAPPDATA"), "Google", "Chrome", "User Data"),
 		}
 	case "darwin":
-		// Brave first, then Chrome (for priority Brave detection)
-		// This ensures Brave is preferred if both are installed
+		// Brave first, then Chrome.
 		candidates = []string{
 			filepath.Join(os.Getenv("HOME"), "Library", "Application Support", "BraveSoftware", "Brave-Browser"),
 			filepath.Join(os.Getenv("HOME"), "Library", "Application Support", "Google", "Chrome"),
 		}
 	case "linux":
-		// Brave first, then Chrome (for priority Brave detection)
+		// Brave first, then Chrome.
 		candidates = []string{
 			filepath.Join(os.Getenv("HOME"), ".config", "BraveSoftware", "Brave-Browser"),
 			filepath.Join(os.Getenv("HOME"), ".config", "google-chrome"),
@@ -568,7 +564,7 @@ func (pm *profileManager) copyProfileToDir(srcDir, dstDir, profileName string, c
 		}
 	}
 
-	// Essential profile components
+	// Profile files needed for a usable session.
 	essentials := map[string]bool{
 		"Cookies":                  false, // Session cookies for authentication
 		"Login Data":               false,

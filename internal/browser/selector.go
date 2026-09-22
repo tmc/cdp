@@ -155,11 +155,11 @@ func (s Selector) ToChromedpSelector() (string, chromedp.QueryOption) {
 		}
 		return fmt.Sprintf("//*[contains(text(), '%s')]", s.Value), chromedp.BySearch
 	case TextRegex:
-		// For regex, we'll need to use JavaScript evaluation
+		// Regex selectors are resolved by JavaScript evaluation.
 		// This returns an XPath that will be post-processed
 		return fmt.Sprintf("regex:%s", s.Value), chromedp.ByJSPath
 	case Role:
-		// Enhanced role selector with hierarchy support
+		// Role selector with ARIA attribute fallbacks.
 		return buildRoleSelector(s.Value), chromedp.ByQuery
 	case TestID:
 		// Convert test-id selector to CSS
@@ -179,7 +179,7 @@ func normalizeWhitespace(text string) string {
 	return strings.TrimSpace(re.ReplaceAllString(text, " "))
 }
 
-// buildRoleSelector builds an enhanced role selector
+// buildRoleSelector returns a CSS selector matching elements with the given ARIA role.
 func buildRoleSelector(role string) string {
 	// Support for common ARIA roles with proper attributes
 	roleMap := map[string]string{

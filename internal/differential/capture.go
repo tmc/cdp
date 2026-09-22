@@ -327,8 +327,7 @@ func (cm *CaptureManager) updateFileMetadata(capture *CaptureMetadata) error {
 	return nil
 }
 
-// Cleanup removes temporary files and data
+// Cleanup does nothing.
 func (cm *CaptureManager) Cleanup() error {
-	// This could be extended to clean up old captures, temporary files, etc.
 	return nil
 }

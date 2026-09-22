@@ -618,8 +618,7 @@ func (st *StateTracker) ExportStates(filename string) error {
 
 // hashString creates a simple hash of a string
 func hashString(s string) []byte {
-	// Simple hash function for demonstration
-	// In production, you might want to use a more robust hash function
+	// Not a cryptographic hash; used only to detect DOM changes.
 	h := make([]byte, 8)
 	for i, b := range []byte(s) {
 		h[i%8] ^= b

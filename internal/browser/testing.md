@@ -1,6 +1,6 @@
 # Browser Package Integration Tests
 
-This directory contains comprehensive integration tests for the `internal/browser` package, which provides Chrome browser automation capabilities.
+This directory contains integration tests for the `internal/browser` package.
 
 ## Test Files Overview
 
@@ -10,10 +10,13 @@ This directory contains comprehensive integration tests for the `internal/browse
 - **element_test.go**: Tests element querying, manipulation, attributes, and interactions
 - **network_test.go**: Tests network interception, request routing, response modification, and request/response waiting
 
-### Advanced Tests
+### Remote and Performance Tests
 - **remote_test.go**: Tests remote Chrome connectivity, debugging protocol, and multi-tab remote operations
 - **performance_test.go**: Performance benchmarks and stress tests including memory leak detection, concurrent operations, and large DOM handling
 - **testutil_test.go**: Test utilities and helper functions for browser testing
+
+### Other Tests
+- accessibility, challenge, http, integration, pdf, proxy, remote_lifecycle, stability, stddev, stress, websocket, and websocket_match (`*_test.go`)
 
 ## Running Tests
 
@@ -50,13 +53,10 @@ go test -v -run TestRemote ./internal/browser/
 ## Test Environment Requirements
 
 ### Chrome Installation
-Tests require Google Chrome or Chromium to be installed. The test suite looks for Chrome in common locations:
-- macOS: `/Applications/Google Chrome.app/Contents/MacOS/Google Chrome`
-- Linux: `/usr/bin/google-chrome`, `/usr/bin/chromium`
-- Windows: `C:\Program Files\Google\Chrome\Application\chrome.exe`
+Tests require a Chromium-based browser. `internal/discovery` finds Chrome, Chromium, Brave, Edge, Opera, or Vivaldi in standard locations; set `CHROME_EXECUTABLE_PATH` to override.
 
 ### CI Environment
-Tests detect CI environments via the `CI` environment variable and may skip certain tests on non-Linux platforms in CI.
+Browser tests skip in `-short` mode and when `CI` or `SKIP_BROWSER_TESTS` is set.
 
 ## Test Coverage Areas
 
@@ -120,10 +120,9 @@ The test suite includes several utility functions:
 
 ## Known Issues and Limitations
 
-1. **Platform Differences**: Some tests may behave differently on different operating systems
-2. **Chrome Versions**: Tests are designed to work with recent Chrome versions (90+)
-3. **Timing Sensitivity**: Some tests involve timing and may be flaky under heavy system load
-4. **Resource Usage**: Performance tests can be resource-intensive
+- Some tests behave differently across operating systems.
+- Timing-dependent tests can flake under heavy system load.
+- Performance tests are resource-intensive.
 
 ## Debugging Failed Tests
 
@@ -136,7 +135,7 @@ go test -v -run TestName ./internal/browser/
 Run tests with `-v` flag to enable debug screenshot capture:
 ```bash
 go test -v ./internal/browser/
-# Screenshots saved to /tmp/browser-test-*.png
+# Screenshots saved to $TMPDIR/browser-test-*.png
 ```
 
 ### Disable Headless Mode
@@ -150,13 +149,3 @@ Enable Chrome logging in tests:
 ```go
 b, cleanup := createTestBrowser(t, browser.WithVerbose(true))
 ```
-
-## Contributing
-
-When adding new tests:
-1. Follow existing test patterns and naming conventions
-2. Use test utilities for common operations
-3. Include both positive and negative test cases
-4. Add performance benchmarks for new features
-5. Ensure tests are reliable and not flaky
-6. Document any special requirements or setup

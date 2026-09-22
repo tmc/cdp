@@ -1,5 +1,4 @@
 //go:build stress
-// +build stress
 
 // Stress tests for browser package - run with: go test -tags stress
 

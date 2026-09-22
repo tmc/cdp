@@ -1,4 +1,4 @@
-// Package validation provides comprehensive input validation for security hardening.
+// Package validation checks user-supplied names, paths, URLs, and headers before use.
 package validation
 
 import (

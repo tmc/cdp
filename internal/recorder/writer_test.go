@@ -17,9 +17,9 @@ import (
 )
 
 // TestWriterDoesNotBlockOnRecorderLock verifies that disk I/O is decoupled
-// from r.Mutex. Pre-fix, writeRawToDomainFile required the lock and ran
-// synchronous os.OpenFile/Fprintln inside it; a slow disk would freeze the
-// chromedp event loop. This test holds r.Lock() from a side goroutine while
+// from r.Mutex. If writeRawToDomainFile took the lock and ran synchronous
+// os.OpenFile/Fprintln inside it, a slow disk would freeze the chromedp
+// event loop. This test holds r.Lock() from a side goroutine while
 // dispatching events; the writer goroutine must still write to disk because
 // it owns its own per-host file handles and does not contend on r.Mutex.
 func TestWriterDoesNotBlockOnRecorderLock(t *testing.T) {
@@ -43,8 +43,8 @@ func TestWriterDoesNotBlockOnRecorderLock(t *testing.T) {
 	}()
 
 	// Drive a write directly through the writer path, bypassing the network
-	// event handler (which would itself want the lock). Pre-fix, this call
-	// would block waiting on r.Lock(); post-fix it is non-blocking.
+	// event handler (which would itself want the lock). The call must not
+	// block on r.Lock().
 	done := make(chan struct{})
 	go func() {
 		_ = r.writeRawToDomainFile("https://example.com/a", dir, []byte(`{"x":1}`))
@@ -207,15 +207,8 @@ func TestWriterDropsOnSaturation(t *testing.T) {
 	}
 	defer r.Close()
 
-	// Block the writer goroutine by injecting a sentinel that holds it. We
-	// do this by sending a closeAll without an ack channel followed by a
-	// large burst — but a cleaner approach is to fill the buffer faster
-	// than the writer can drain by sending past capacity from a tight loop
-	// while the writer is briefly stalled on a synthetic op.
-	//
-	// Simpler: send capacity+overflow synchronously and count drops.
-	// The writer will drain some during the burst, but if we exceed
-	// capacity by enough, drops are guaranteed.
+	// Send far more than the queue holds. The writer drains some during
+	// the burst, but the overflow guarantees drops.
 
 	// Fill the queue plus large overflow.
 	const overflow = 4096

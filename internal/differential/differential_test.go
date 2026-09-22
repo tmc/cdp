@@ -259,8 +259,7 @@ func TestReportGenerator(t *testing.T) {
 
 func TestStateTracker(t *testing.T) {
 	t.Parallel()
-	// Note: This test would require a real Chrome context to work properly
-	// For now, we'll test the basic functionality without Chrome
+	// Runs without Chrome; covers option handling only.
 
 	options := &StateTrackingOptions{
 		TrackDOM:          true,

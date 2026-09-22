@@ -314,8 +314,7 @@ func TestSOCKS5Proxy(t *testing.T) {
 		t.Skip("Skipping SOCKS5 proxy test in short mode")
 	}
 
-	// Note: This test requires a real SOCKS5 proxy or a mock implementation
-	// For now, we'll just test that the option is accepted
+	// Without a SOCKS5 proxy, this only checks that the option is accepted.
 
 	b, cleanup := createTestBrowser(t,
 		browser.WithProxy("socks5://localhost:1080"),

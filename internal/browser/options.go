@@ -50,8 +50,8 @@ type Options struct {
 	BlockedURLPatterns   []string // URL patterns to block
 	BlockedDomains       []string // Domains to block
 	BlockedRegexPatterns []string // Regex patterns to block
-	AllowedURLs          []string // URLs to allow (whitelist)
-	AllowedDomains       []string // Domains to allow (whitelist)
+	AllowedURLs          []string // URLs to allow (allowlist)
+	AllowedDomains       []string // Domains to allow (allowlist)
 	BlockingRuleFile     string   // File containing blocking rules
 	BlockCommonAds       bool     // Block common ad domains
 	BlockCommonTracking  bool     // Block common tracking domains
@@ -472,7 +472,7 @@ func WithBlockedRegexPattern(pattern string) Option {
 	}
 }
 
-// WithAllowedURLs sets URLs to allow (whitelist)
+// WithAllowedURLs sets URLs to allow (allowlist)
 func WithAllowedURLs(urls []string) Option {
 	return func(o *Options) error {
 		o.AllowedURLs = append(o.AllowedURLs, urls...)
@@ -491,7 +491,7 @@ func WithAllowedURL(url string) Option {
 	}
 }
 
-// WithAllowedDomains sets domains to allow (whitelist)
+// WithAllowedDomains sets domains to allow (allowlist)
 func WithAllowedDomains(domains []string) Option {
 	return func(o *Options) error {
 		o.AllowedDomains = append(o.AllowedDomains, domains...)

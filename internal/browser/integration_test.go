@@ -13,9 +13,6 @@ import (
 	"github.com/tmc/cdp/internal/testutil"
 )
 
-// Integration tests for the complete browser package functionality
-// These tests verify end-to-end browser automation capabilities
-
 // TestBrowserFullWorkflow tests complete browser lifecycle
 func TestBrowserFullWorkflow(t *testing.T) {
 	skipIfNoChromish(t)
@@ -769,11 +766,6 @@ func TestStressScenarios(t *testing.T) {
 		}
 	})
 }
-
-// Helper functions for option compatibility
-
-// Use the compatibility functions from page_options.go
-// NavigateWithTimeout and ClickWithTimeout are available in the browser package
 
 // TypeWithTimeout creates a type option with timeout
 func TypeWithTimeout(timeout time.Duration) browser.TypeOption {

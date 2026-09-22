@@ -22,7 +22,7 @@ type WebSocketPerformanceMonitor struct {
 	stopChan       chan struct{}
 }
 
-// WebSocketPerformanceMetrics contains comprehensive performance metrics
+// WebSocketPerformanceMetrics holds latency, throughput, and error metrics for WebSocket connections.
 type WebSocketPerformanceMetrics struct {
 	// Connection metrics
 	ConnectionLatency time.Duration `json:"connection_latency"`
@@ -203,7 +203,6 @@ func (wpm *WebSocketPerformanceMonitor) takeSample() {
 	}
 
 	connections := wpm.page.GetWebSocketConnections()
-	_ = wpm.page.GetWebSocketStats() // stats may be used in future versions
 
 	sample := WebSocketPerformanceSample{
 		Timestamp:       time.Now(),
@@ -282,17 +281,13 @@ func (wpm *WebSocketPerformanceMonitor) calculateCurrentLatency(connections map[
 	return total / time.Duration(len(latencies))
 }
 
-// getCPUUsage gets CPU usage (simplified implementation)
+// getCPUUsage is not implemented and returns 0.
 func (wpm *WebSocketPerformanceMonitor) getCPUUsage() float64 {
-	// In a real implementation, this would measure actual CPU usage
-	// For now, return a placeholder value
 	return 0.0
 }
 
-// getMemoryUsage gets memory usage (simplified implementation)
+// getMemoryUsage is not implemented and returns 0.
 func (wpm *WebSocketPerformanceMonitor) getMemoryUsage() int64 {
-	// In a real implementation, this would measure actual memory usage
-	// For now, return a placeholder value
 	return 0
 }
 
@@ -667,7 +662,7 @@ func (wpm *WebSocketPerformanceMonitor) GenerateReport() *WebSocketPerformanceRe
 	}
 }
 
-// WebSocketPerformanceReport represents a comprehensive performance report
+// WebSocketPerformanceReport is a summary of WebSocket performance metrics.
 type WebSocketPerformanceReport struct {
 	Metrics WebSocketPerformanceMetrics  `json:"metrics"`
 	Samples []WebSocketPerformanceSample `json:"samples"`

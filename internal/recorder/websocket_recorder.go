@@ -403,8 +403,7 @@ func (r *WebSocketRecorder) streamWebSocketError(conn *browser.WebSocketConnecti
 
 // streamTemplatedEvent streams events using a template
 func (r *WebSocketRecorder) streamTemplatedEvent(event map[string]interface{}) {
-	// This would use the same template mechanism as the base recorder
-	// For now, fallback to JSON
+	// Templates are not applied to WebSocket events; they are written as JSON.
 	json.NewEncoder(os.Stdout).Encode(event)
 }
 

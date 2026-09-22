@@ -410,7 +410,7 @@ func (f *WebSocketHARFilter) matchesMessageFilter(msg WebSocketHARMessage) bool 
 
 // Helper functions
 func matchesPattern(text, pattern string) bool {
-	// Simple pattern matching - can be enhanced with regex
+	// Exact match or "*".
 	return text == pattern || pattern == "*"
 }
 

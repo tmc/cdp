@@ -190,7 +190,7 @@ func (p *Page) Navigate(url string, opts ...NavigateOption) error {
 			return fmt.Errorf("waiting for DOM: %w", err)
 		}
 	case "networkidle":
-		// Use the new stability detector for network idle
+		// Wait for network idle using the stability detector.
 		if err := p.WaitForLoadState(ctx, LoadStateNetworkIdle); err != nil {
 			return fmt.Errorf("waiting for network idle: %w", err)
 		}
@@ -964,7 +964,7 @@ func (p *Page) TypeByRole(role, name, text string, nth int, opts ...TypeOption) 
 		return fmt.Errorf(fmt.Sprintf("finding element with role=%s name=%q nth=%d", role, name, nth)+": %w", err)
 	}
 
-	// Now clear and type using the selector
+	// Clear the field, then type.
 	if err := chromedp.Run(ctx,
 		chromedp.Clear(selector),
 		chromedp.SendKeys(selector, text),

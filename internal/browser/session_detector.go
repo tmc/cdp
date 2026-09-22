@@ -1,4 +1,3 @@
-// Package browser provides session detection utilities for Brave and Chromium browsers.
 package browser
 
 import (
@@ -261,7 +260,7 @@ func (sd *SessionDetector) NeedsBraveSessionIsolation(ctx context.Context, brows
 	return sd.DetectBraveSession(ctx)
 }
 
-// ImportantWarning returns a user-friendly warning message when session isolation is needed.
+// ImportantWarning returns a warning to show when session isolation is needed.
 func (sd *SessionDetector) ImportantWarning() string {
 	return `
 ╔════════════════════════════════════════════════════════════════════════════╗

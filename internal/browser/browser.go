@@ -237,7 +237,6 @@ func (b *Browser) Launch(ctx context.Context) error {
 	// Store context and cancel functions
 	b.ctx = browserCtx
 	b.cancelFunc = func() {
-		// Removed verbose logging to reduce noise in tests
 		browserCancel()
 		allocCancel()
 	}
@@ -246,29 +245,6 @@ func (b *Browser) Launch(ctx context.Context) error {
 		b.cancelFunc()
 		return fmt.Errorf("launching browser: %w", err)
 	}
-
-	// Add monitoring for context cancellation if verbose
-	// DISABLED: This monitoring goroutine is causing noise in tests
-	// if b.opts.Verbose {
-	// 	go func() {
-	// 		<-b.ctx.Done()
-	// 		log.Printf("Browser context was canceled: %v", b.ctx.Err())
-	// 	}()
-	// }
-
-	// Test connection with a simple evaluation to ensure browser launches properly
-	// DISABLED FOR DEBUGGING - This seems to interfere with Brave Browser navigation
-	// if b.opts.Verbose {
-	// 	log.Println("Testing Chrome connection...")
-	// }
-
-	// testCtx, testCancel := context.WithTimeout(browserCtx, 5*time.Second)
-	// defer testCancel()
-
-	// var result bool
-	// if err := chromedp.Run(testCtx, chromedp.Evaluate(`true`, &result)); err != nil {
-	// 	b.cancelFunc()
-	// }
 
 	if b.opts.Verbose {
 		log.Printf("Successfully launched Chrome browser")
@@ -304,10 +280,8 @@ func (b *Browser) Navigate(url string) error {
 		log.Printf("Navigating to: %s", url)
 	}
 
-	// NOTE: Creating a timeout context from b.ctx causes issues with Brave Browser
-	// For now, we use b.ctx directly for navigation
-	// TODO: Investigate why Brave doesn't handle timeout contexts properly
-	_ = time.Duration(b.opts.Timeout) * time.Second // Keep for future fix
+	// Navigation uses b.ctx directly: a timeout context derived from it
+	// breaks navigation in Brave. b.opts.Timeout is therefore not applied here.
 
 	// Enable network events if we need to wait for network idle
 	if b.opts.Verbose {
@@ -392,7 +366,7 @@ func (b *Browser) Navigate(url string) error {
 
 	// If waiting for full page stability
 	if b.opts.WaitForStability {
-		// Use the new stability detection system
+		// Wait for page stability (see stability.go).
 		pages, err := b.Pages()
 		if err != nil || len(pages) == 0 {
 			// If we can't get pages, fall back to creating a page context
@@ -684,7 +658,6 @@ func (b *Browser) getSecureChromeOptions() []chromedp.ExecAllocatorOption {
 	baseOpts := []chromedp.ExecAllocatorOption{
 		chromedp.NoFirstRun,
 		chromedp.NoDefaultBrowserCheck,
-		// chromedp.WSURLReadTimeout(180 * time.Second), // This seems to cause issues with Brave
 	}
 
 	// Security-focused options based on profile
@@ -695,7 +668,7 @@ func (b *Browser) getSecureChromeOptions() []chromedp.ExecAllocatorOption {
 		return append(baseOpts, b.getBalancedSecurityOptions()...)
 	case "permissive":
 		if b.opts.Verbose {
-			log.Println("WARNING: Running with permissive security settings. This should only be used for testing!")
+			log.Println("warning: permissive security settings; use only for testing")
 		}
 		return append(baseOpts, b.getPermissiveSecurityOptions()...)
 	default:
@@ -709,7 +682,7 @@ func (b *Browser) getSecureChromeOptions() []chromedp.ExecAllocatorOption {
 // getStrictSecurityOptions returns the most secure Chrome options
 func (b *Browser) getStrictSecurityOptions() []chromedp.ExecAllocatorOption {
 	opts := []chromedp.ExecAllocatorOption{
-		// Enable sandboxing (CRITICAL SECURITY FIX)
+		// Keep the sandbox enabled.
 		chromedp.Flag("no-sandbox", false),             // Ensure sandbox is NOT disabled
 		chromedp.Flag("disable-setuid-sandbox", false), // Keep setuid sandbox enabled
 
@@ -734,7 +707,7 @@ func (b *Browser) getStrictSecurityOptions() []chromedp.ExecAllocatorOption {
 		chromedp.Flag("disable-extensions", true),
 		chromedp.Flag("disable-default-apps", true),
 
-		// Essential stability flags (security-neutral)
+		// Stability flags (no security effect).
 		chromedp.Flag("disable-background-networking", true),
 		chromedp.Flag("disable-background-timer-throttling", true),
 		chromedp.Flag("disable-backgrounding-occluded-windows", true),
@@ -778,7 +751,7 @@ func (b *Browser) getBalancedSecurityOptions() []chromedp.ExecAllocatorOption {
 		chromedp.Flag("site-per-process", true),
 		chromedp.Flag("enable-features", "SitePerProcess,NetworkServiceSandbox,"+OptimizationGuideOnDeviceModelFeatures),
 
-		// Essential security
+		// Security flags.
 		chromedp.Flag("disable-web-security", false),
 		chromedp.Flag("block-new-web-contents", true),
 
