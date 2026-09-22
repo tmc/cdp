@@ -11,12 +11,12 @@
 //   - cmd/cdpscript and cmd/cdpscripttest for script execution and testing
 //
 // Most consumers will use one of those commands directly. The root package
-// exists to document the module and to house shared code used by those tools.
+// exists only to document the module.
 //
 // Internal packages provide most of the implementation:
 //
 //   - internal/browser manages browser discovery, launch, and interaction
-//   - internal/recorder handles HAR and enhanced traffic capture
+//   - internal/recorder records HAR, streamed HARL, WebSocket, and WebRTC traffic
 //   - internal/differential compares capture runs
 //   - internal/browserprofile discovers and manages browser profiles
 //

@@ -1,4 +1,3 @@
-// Package cdpscript provides a CDP script engine based on rsc.io/script.
 package cdpscript
 
 import (

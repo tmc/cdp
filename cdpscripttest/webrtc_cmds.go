@@ -197,7 +197,7 @@ func RTCState() script.Cmd {
 }
 
 // RTCWait waits until any tracked peer connection reaches a target state.
-// Polls from Go every 500ms, which handles connection retries gracefully.
+// It polls from Go every 500ms, so a connection that fails and retries is still observed.
 // On success, updates the selected peer to the first matching connection.
 //
 // Usage: rtc-wait <state> [timeout]

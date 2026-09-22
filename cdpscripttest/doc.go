@@ -169,9 +169,8 @@
 //	video start [options] [filename]                           alias for screenrecord
 //
 // All screenshot commands support --blur <selector> to mask dynamic content
-// before capture. Blurred elements have their text replaced with a fixed
-// placeholder and a mild CSS blur applied, producing identical pixels across
-// runs while still showing that content was present. Repeatable.
+// before capture. Matching elements get a 10px CSS blur filter for the
+// capture, which is removed afterwards. Repeatable.
 //
 // screenrecord captures Chrome screencast frames from the active tab. It writes
 // GIF, PNG, WebM, or numbered PNG frame artifacts. WebM uses ffmpeg found in
@@ -313,7 +312,7 @@
 // <dir>/<script-name>/ with no _artifacts/<hash> nesting. For example:
 //
 //	CDPSCRIPTTEST_ARTIFACTS=./out go test -tags cdp ./...
-//	# produces: ./out/fleet-view/fleet-full-page.png
+//	# produces: ./out/login/login-page.png
 //
 // # Flags
 //
