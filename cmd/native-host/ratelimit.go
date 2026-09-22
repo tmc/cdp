@@ -1,4 +1,3 @@
-// Rate limiting for DoS protection
 package main
 
 import (

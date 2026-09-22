@@ -1,4 +1,3 @@
-// Capability-based permission system
 package main
 
 import (

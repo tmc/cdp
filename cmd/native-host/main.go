@@ -155,7 +155,7 @@ func main() {
 		defer logFile.Close()
 	}
 
-	log.Println("Native messaging host started with security hardening")
+	log.Println("native messaging host started")
 
 	// Initialize security configuration
 	securityConfig := DefaultSecurityConfig()
@@ -163,7 +163,7 @@ func main() {
 	if secret := os.Getenv("NATIVE_HOST_HMAC_SECRET"); secret != "" {
 		securityConfig.HMACSecret = secret
 	} else {
-		// Fallback for testing - should be set in production
+		// No secret configured: use a fixed test secret.
 		securityConfig.HMACSecret = "default-test-secret-change-in-production"
 		log.Println("WARNING: Using default HMAC secret - set NATIVE_HOST_HMAC_SECRET environment variable in production")
 	}
@@ -181,14 +181,9 @@ func main() {
 	// Initialize message processor with retry logic
 	processor := NewMessageProcessor()
 
-	log.Println("Security hardening enabled:")
-	log.Println("  ✓ HMAC-SHA256 message authentication")
-	log.Println("  ✓ Nonce and timestamp validation")
-	log.Println("  ✓ Audit logging")
-	log.Println("  ✓ Capability-based permissions")
-	log.Println("  ✓ Rate limiting")
+	log.Println("security: audit logging, capability checks, rate limiting")
 
-	// Main message loop with enhanced error handling and security
+	// Read and handle messages until stdin closes.
 	for {
 		// Read raw message first
 		rawMessage, err := readMessageWithRetry()
@@ -434,7 +429,7 @@ func handleMessage(message Message) Message {
 	}
 }
 
-// handleAIRequest processes AI-related requests with enhanced error handling
+// handleAIRequest handles an ai_request message. The response is simulated.
 func handleAIRequest(message Message) Message {
 	// Parse the AI request
 	var request AIRequest
@@ -475,11 +470,7 @@ func handleAIRequest(message Message) Message {
 		}
 	}
 
-	// For now, simulate AI processing
-	// In a real implementation, this would:
-	// 1. Validate the request
-	// 2. Call the actual AI service
-	// 3. Return the response
+	// The AI call is simulated: the response echoes the prompt.
 
 	response := AIResponse{
 		Success:  true,
@@ -500,10 +491,3 @@ func handleAIRequest(message Message) Message {
 		Data: response,
 	}
 }
-
-// TODO: Implement actual AI proxy functionality
-// This would involve:
-// 1. Managing Chrome instances
-// 2. Executing JavaScript to call AI APIs
-// 3. Bridging responses back to the extension
-// 4. Error handling and retry logic

@@ -1,4 +1,3 @@
-// Audit logging for security events
 package main
 
 import (

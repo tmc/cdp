@@ -12,20 +12,19 @@ The host answers three message types:
 
 	ping         Liveness check
 	status       Report host status
-	ai_request   Perform an AI operation on behalf of the extension
+	ai_request   Return a simulated AI response
 
 # Security
 
-The host runs outside the browser sandbox with the user's privileges, so it
-authenticates what the extension asks of it rather than trusting the channel.
-Requests are authenticated with HMAC, checked against a per-principal
-capability set, rate limited with a token bucket to bound the damage a runaway
-or hostile caller can do, and recorded in an audit log.
+The host runs outside the browser sandbox with the user's privileges. Each
+request is checked against a per-principal capability set, rate limited with
+a token bucket to bound the damage a runaway or hostile caller can do, and
+recorded in an audit log.
 
-The HMAC secret comes from NATIVE_HOST_HMAC_SECRET, which the extension sets at
-install time. If that variable is unset the host falls back to a well-known
-development secret and logs a warning; it must be set for real use, as the
-fallback authenticates nobody.
+HMAC verification of requests is implemented in security.go but not applied
+to incoming messages. The secret comes from NATIVE_HOST_HMAC_SECRET; if that
+variable is unset the host falls back to a fixed development secret and logs
+a warning.
 
 # Installation
 

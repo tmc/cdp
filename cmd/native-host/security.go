@@ -1,4 +1,3 @@
-// Security primitives for native messaging host
 package main
 
 import (
