@@ -226,9 +226,7 @@ func (bm *BreakpointManager) setFunctionBreakpoint(ctx context.Context, bp *Brea
 			}
 
 			if result.Value != nil {
-				// Function exists, set breakpoint
-				// This would use debugger.setBreakpointOnFunctionCall in newer CDP versions
-				// For now, we'll use a workaround
+				// Function exists; set the breakpoint on its location.
 				return bm.setFunctionBreakpointWorkaround(ctx, bp)
 			}
 
@@ -271,7 +269,7 @@ func (bm *BreakpointManager) setFunctionBreakpointWorkaround(ctx context.Context
 
 // setPendingBreakpoint sets a breakpoint that will be resolved when the script loads
 func (bm *BreakpointManager) setPendingBreakpoint(ctx context.Context, bp *Breakpoint) error {
-	// For now, we'll use setBreakpointByURL with a pattern
+	// Use setBreakpointByURL so the breakpoint binds when the script loads.
 	locationParts := strings.Split(bp.Location, ":")
 	fileName := locationParts[0]
 
@@ -437,10 +435,6 @@ func (bm *BreakpointManager) breakpointFilename() (string, error) {
 
 // getScripts retrieves all parsed scripts
 func (bm *BreakpointManager) getScripts(ctx context.Context) ([]*debugger.EventScriptParsed, error) {
-	// In a real implementation, we would listen to scriptParsed events
-	// and maintain a list of scripts. For now, we'll use a workaround.
-
-	// This is a simplified version - in production, you'd maintain
-	// a list of scripts from debugger.EventScriptParsed events
+	// TODO: track Debugger.scriptParsed events. Until then this returns no scripts.
 	return []*debugger.EventScriptParsed{}, nil
 }

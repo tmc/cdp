@@ -147,9 +147,8 @@ func (nd *NodeDebugger) Attach(ctx context.Context, port string) error {
 
 // enableDebugger enables the Node.js debugger using direct CDP calls
 func (nd *NodeDebugger) enableDebugger(ctx context.Context) error {
-	// Since chromedp's context initialization calls Chrome-specific methods,
-	// we'll implement a basic test that validates the connection works
-	// without relying on full chromedp initialization
+	// chromedp's context setup calls Chrome-only methods, so check the
+	// connection with direct CDP calls instead.
 
 	// Try to evaluate a simple expression to test the connection
 	err := chromedp.Run(nd.session.ChromeCtx,
@@ -184,7 +183,7 @@ func (nd *NodeDebugger) enableDebugger(ctx context.Context) error {
 	)
 
 	if err != nil {
-		// If the full chromedp context doesn't work, we can fall back to basic connection
+		// The chromedp context is optional; the basic connection is enough.
 		if nd.verbose {
 			log.Printf("Warning: Full chromedp context failed (%v), but basic connection works", err)
 		}
@@ -674,15 +673,11 @@ func (nd *NodeDebugger) SearchInAllScripts(ctx context.Context, term string) ([]
 			}
 		}
 
-		// Client-side Fallback if API returned no results
-		// Only enable if verbose for now to avoid perf hit, or strictly for cli.js
+		// V8's searchInContent can return nothing for large scripts. When it
+		// finds no match, fetch the source on a fresh connection and search it
+		// here; a fresh connection avoids the shared connection's timeout and
+		// buffer limits.
 		if !found {
-			// Optimization: only do this for the problematic file for now to save bandwidth
-			// Or we can do it always if nd.verbose is on, or always for safety.
-			// Let's do it always for cli.js for now.
-			// Fallback: If API returned no results, verify client-side using a fresh connection.
-			// This handles cases where V8 silently fails (e.g. large files) or returns partial results.
-			// Using a fresh connection avoids timeout/buffer limits on the main shared connection.
 			if nd.verbose {
 				log.Printf("Dialing fresh connection for %s (Fallback)...", scriptID)
 			}

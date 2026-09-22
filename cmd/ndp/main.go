@@ -1,5 +1,3 @@
-// Package main implements the NDP (Node Debug Protocol) CLI tool for unified
-// debugging of Node.js and Chrome applications using the Chrome DevTools Protocol.
 package main
 
 import (
@@ -32,8 +30,7 @@ var (
 var rootCmd = &cobra.Command{
 	Use:   "ndp",
 	Short: "Node Debug Protocol - Unified debugger for Node.js and Chrome",
-	Long: `NDP provides a powerful command-line interface for debugging Node.js
-applications using the V8 Inspector Protocol.
+	Long: `NDP debugs Node.js applications using the V8 Inspector Protocol.
 
 Features:
 - Attach to running Node.js processes (--inspect port)
@@ -102,24 +99,17 @@ var callCmd = &cobra.Command{
 
 		// If target not specified, look for session or env var
 		if targetID == "" {
-			targetID = os.Getenv("NDP_SESSION_ID") // Simple env var for now
+			targetID = os.Getenv("NDP_SESSION_ID")
 		}
 
-		// Connect to target (or get existing session)
-		// For now, we assume direct attach if target is provided
-		// TODO: Implement cleaner session loading
+		// Attach directly to the given target.
 		debugger := NewNodeDebugger(verbose)
 		if targetID != "" {
 			if err := debugger.Attach(ctx, targetID); err != nil {
 				log.Fatalf("Failed to attach: %v", err)
 			}
 		} else {
-			// Try to find a sensible default (e.g. only one node process)
-			// For generic call, we might require explicit target for safety,
-			// but for now let's try auto-attach if one exists?
-			// Better: Assume user must provide target or use 'ndp repl' to discovery
-			// log.Fatalf("Target ID required (use --target or set NDP_SESSION_ID)")
-			// Auto-discovery logic similar to 'node attach'
+			// No target given: attach to the default one, as 'node attach' does.
 			if err := debugger.Attach(ctx, "9229"); err != nil {
 				log.Fatalf("No default target found: %v", err)
 			}
@@ -309,9 +299,7 @@ var runtimeEvalCmd = &cobra.Command{
 	Aliases: []string{"eval"},
 	Args:    cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		// Reuse logic from callCmd but pre-format params
-		// ... (Simplified for brevity, implemented via shared helper in real code)
-		// For implementation speed, just re-invoke callCmd logic or better yet, make callCmd run function reusable.
+		// Same as callCmd, with params built from the flags.
 
 		callCmd.Run(cmd, []string{"Runtime.evaluate", fmt.Sprintf(`{"expression": %q, "includeCommandLineAPI": true}`, args[0])})
 	},

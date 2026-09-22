@@ -411,7 +411,7 @@ func (r *REPL) connectToTarget(ctx context.Context, targetID string) error {
 		if err := r.connectToTargetRaw(ctx, target); err != nil {
 			return err
 		}
-		fmt.Printf("✓ Connected to %s: %s (Raw WS)\n", target.Type, target.Title)
+		fmt.Printf("Connected to %s: %s (raw WebSocket)\n", target.Type, target.Title)
 		return nil
 	}
 
@@ -429,7 +429,7 @@ func (r *REPL) connectToTarget(ctx context.Context, targetID string) error {
 		return err
 	}
 
-	fmt.Printf("✓ Connected to %s: %s\n", target.Type, target.Title)
+	fmt.Printf("Connected to %s: %s\n", target.Type, target.Title)
 
 	// Setup event listeners for Chrome
 	chromedp.ListenTarget(session.ChromeCtx, func(ev interface{}) {
@@ -480,7 +480,7 @@ func (r *REPL) disconnect() error {
 	}
 
 	r.session = nil
-	fmt.Println("✓ Disconnected")
+	fmt.Println("Disconnected")
 
 	return nil
 }
@@ -766,7 +766,7 @@ func (r *REPL) navigate(ctx context.Context, url string) error {
 	_, err := r.session.Execute(ctx, expression)
 
 	if err == nil {
-		fmt.Printf("✓ Navigated to: %s\n", url)
+		fmt.Printf("Navigated to %s\n", url)
 	}
 
 	return err
@@ -829,9 +829,7 @@ func (r *REPL) printBacktrace() {
 		r.mu.Unlock()
 
 		if ok {
-			// CDP lines are 0-based, sourcemap expects 1-based?
-			// go-sourcemap Source(line, column)
-			// checking standard usage: commonly 1-based line.
+			// CDP lines are 0-based; the sourcemap consumer's are 1-based.
 			source, name, line, col, ok := consumer.Source(int(frame.Location.LineNumber)+1, int(frame.Location.ColumnNumber))
 			if ok {
 				sourceLoc := fmt.Sprintf("%s:%d:%d", source, line, col)
@@ -883,8 +881,7 @@ func (r *REPL) printArgs(ctx context.Context) error {
 		return errors.New("not paused")
 	}
 
-	// In JS, arguments are often just locals. We interpret this request as inspecting local scope
-	// or potentially "Closure" scopes if meaningful. For now, aliases to vars.
+	// JavaScript arguments are locals, so this is the same as vars.
 	fmt.Println("(Note: Arguments are typically included in Local Variables in JS)")
 	return r.printVars(ctx)
 }
@@ -1066,7 +1063,6 @@ func (r *REPL) readLoop() {
 			// Extract params properly
 			var params json.RawMessage
 			if p, ok := m["params"]; ok {
-				// Re-marshal params to RawMessage? Efficient?
 				// Better: unmarshal m with params as RawMessage?
 				// For now simple way:
 				b, _ := json.Marshal(p)
@@ -1166,7 +1162,7 @@ func (r *REPL) loadSourceMap(scriptID string, scriptURL string, sourceMapURL str
 	// Resolve absolute URL
 	var absoluteURL string
 	if strings.HasPrefix(sourceMapURL, "data:") {
-		// TODO: Handle data URIs
+		// TODO: decode inline data: source maps; they are skipped.
 		return
 	}
 
@@ -1254,7 +1250,7 @@ func (r *REPL) dumpSources() {
 			}
 		} else {
 			// Chrome path (using chromedp)
-			// TODO: Implement Chrome path if needed, requires keeping track of context or using separate action
+			// TODO: support Chrome targets; this needs the chromedp context.
 			if r.verbose {
 				fmt.Println("Sources dump not fully implemented for Chrome targets yet (requires script tracking)")
 			}
@@ -1293,9 +1289,7 @@ func (r *REPL) watchLoop() {
 }
 
 func (r *REPL) reloadScript(path string) {
-	// Simple heuristic for file URL construction
-	// In a real app we might need exact matching of what node reported.
-	// But usually we just check if any known script URL (which is file://) matches this path.
+	// Match the path against the file:// URLs Node reported for its scripts.
 
 	content, err := os.ReadFile(path)
 	if err != nil {
@@ -1360,7 +1354,7 @@ func (r *REPL) openDevTools() {
 		fmt.Printf("Opening DevTools (via Proxy %s): %s\n", proxyAddr, dtURL)
 	}
 
-	// Launch Chrome (MacOS)
+	// Launch Chrome. The path lookup is macOS-only.
 	cmd := exec.Command("open", "-a", "Google Chrome", "--args", "--new-window", dtURL)
 
 	if err := cmd.Start(); err != nil {
@@ -1481,7 +1475,7 @@ func (r *REPL) handleProxyConnection(w http.ResponseWriter, req *http.Request) {
 		// Intercept Debugger.setScriptSource
 		// Inspect message
 		var m map[string]interface{}
-		// We ignore unmarshal errors here for speed/robustness unless we need to act
+		// Unmarshal errors are ignored: a malformed event is skipped.
 		if err := json.Unmarshal(msg, &m); err == nil {
 			if method, ok := m["method"].(string); ok && method == "Debugger.setScriptSource" {
 				// Intercepted!

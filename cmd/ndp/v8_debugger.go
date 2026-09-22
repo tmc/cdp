@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-// V8Debugger provides comprehensive debugging capabilities matching Chrome DevTools
+// V8Debugger debugs a Node.js process over the V8 Inspector protocol.
 type V8Debugger struct {
 	client *V8InspectorClient
 }

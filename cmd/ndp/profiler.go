@@ -83,8 +83,6 @@ type Profiler struct {
 	rawConn      *websocket.Conn
 }
 
-// ... NewProfiler remains same ...
-
 // executeRaw runs a raw CDP method via WebSocket
 func (p *Profiler) executeRaw(ctx context.Context, method string, params interface{}) (interface{}, error) {
 	if p.session == nil || p.session.Target.WebSocketDebuggerURL == "" {
@@ -253,7 +251,6 @@ func (p *Profiler) stopCPUProfiling(ctx context.Context) (*CPUProfile, error) {
 		if resMap, ok := res.(map[string]interface{}); ok {
 			if profileMap, ok := resMap["profile"]; ok {
 				// Marshal back to JSON to unmarshal into struct
-				// Efficient? No. Reliable? Yes.
 				bytes, _ := json.Marshal(profileMap)
 				profile = &profiler.Profile{}
 				if err := json.Unmarshal(bytes, profile); err != nil {
@@ -386,7 +383,7 @@ func (p *Profiler) printCPUProfileSummary() {
 	}
 
 	// Sort by hit count
-	// Simple bubble sort for top 10
+	// Sort by hit count, descending.
 	for i := 0; i < len(stats) && i < 10; i++ {
 		for j := i + 1; j < len(stats); j++ {
 			if stats[j].hitCount > stats[i].hitCount {
@@ -516,14 +513,10 @@ func (p *Profiler) takeHeapSnapshotNode(ctx context.Context) (*HeapSnapshot, err
 
 	var chunks []string
 
-	// We need a specialized executeRaw that captures events
-	// Or we create a one-off loop here.
+	// Heap snapshot chunks arrive as events on the raw connection; make sure
+	// it is open.
 	if p.rawConn == nil {
-		// Should have been connected by ensureSession -> executeRaw
-		// But ensureSession calls executeRaw, which dials.
-		// If executeRaw closes it? No.
-		// So p.rawConn should be valid or we redial.
-		if _, err := p.executeRaw(ctx, "Runtime.enable", nil); err != nil { // Dummy to ensure conn
+		if _, err := p.executeRaw(ctx, "Runtime.enable", nil); err != nil {
 			return nil, err
 		}
 	}
@@ -558,7 +551,6 @@ func (p *Profiler) takeHeapSnapshotNode(ctx context.Context) (*HeapSnapshot, err
 				if chunk, ok := params["chunk"].(string); ok {
 					chunks = append(chunks, chunk)
 					if p.verbose {
-						// log.Printf("Chunk: %d bytes", len(chunk))
 					}
 				}
 			case "HeapProfiler.reportHeapSnapshotProgress":
@@ -599,9 +591,7 @@ func (p *Profiler) processSnapshotChunks(chunks []string) (*HeapSnapshot, error)
 
 	// Parse snapshot
 	var snapshotObj interface{}
-	// Only unmarshal if reasonable size to avoid OOM in tool?
-	// Heap snapshots can be 50MB+.
-	// We'll try.
+	// Heap snapshots can exceed 50 MB; this holds the whole thing in memory.
 	if err := json.Unmarshal([]byte(snapshotData), &snapshotObj); err != nil {
 		if p.verbose {
 			log.Printf("Warning: failed to parse heap snapshot: %v", err)

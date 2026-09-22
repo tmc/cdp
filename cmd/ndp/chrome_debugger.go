@@ -455,7 +455,7 @@ func (cd *ChromeDebugger) EvaluateJS(ctx context.Context, expression string, tab
 	return result, nil
 }
 
-// Helper function to safely get string from map
+// getString returns m[key] as a string, or "" if it is missing or not a string.
 func getString(m map[string]interface{}, key string) string {
 	if val, ok := m[key]; ok {
 		if str, ok := val.(string); ok {

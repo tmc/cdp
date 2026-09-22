@@ -11,18 +11,18 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// Global V8 client instance for commands
+// V8 Inspector clients shared by the v8 subcommands.
 var v8Client *V8InspectorClient
 var v8Debugger *V8Debugger
 var v8Runtime *V8Runtime
 var v8Profiler *V8Profiler
 
-// V8 command group - comprehensive Node.js debugging commands
+// v8Cmd groups the V8 Inspector subcommands.
 var v8Cmd = &cobra.Command{
 	Use:   "v8 [command]",
-	Short: "Advanced V8 Inspector debugging (Chrome DevTools compatible)",
-	Long: `Advanced Node.js debugging using the V8 Inspector Protocol.
-This provides comprehensive debugging capabilities matching Chrome DevTools:
+	Short: "Debug Node.js over the V8 Inspector protocol",
+	Long: `Debug Node.js using the V8 Inspector protocol.
+The subcommands cover:
 - Breakpoint management and stepping
 - Runtime evaluation and object inspection
 - CPU and memory profiling

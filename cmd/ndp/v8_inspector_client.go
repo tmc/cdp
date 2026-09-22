@@ -16,7 +16,7 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-// V8InspectorClient provides a comprehensive Node.js debugging client
+// V8InspectorClient is a client for the V8 Inspector protocol.
 // that matches Chrome DevTools capabilities using direct WebSocket connections
 type V8InspectorClient struct {
 	host  string

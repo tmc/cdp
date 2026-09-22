@@ -27,9 +27,7 @@ var profileStopCmd = &cobra.Command{
 	Use:   "stop",
 	Short: "Stop CPU profiling and save",
 	Run: func(cmd *cobra.Command, args []string) {
-		// This needs custom handling to save the profile
-		// So we can't just use callCmd directly for the output part
-		// Implement specialized logic later or rely on generic output
+		// The profile is printed as raw JSON; it is not saved to a file.
 		callCmd.Run(cmd, []string{"Profiler.stop", "{}"})
 	},
 }

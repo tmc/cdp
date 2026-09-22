@@ -198,9 +198,7 @@ func (sbs *SimpleBreakpointSetter) ListBreakpoints(ctx context.Context) error {
 		return fmt.Errorf("failed to enable debugger: %w", err)
 	}
 
-	// Note: CDP doesn't have a direct "list breakpoints" command
-	// Breakpoints are tracked by the debugger domain internally
-	// We'd need to maintain our own list or listen to breakpoint events
+	// CDP has no command to list breakpoints.
 
 	fmt.Printf("Breakpoints for session on port %s:\n", sbs.port)
 	fmt.Println("(Note: CDP doesn't expose a list breakpoints API - breakpoints are managed internally)")

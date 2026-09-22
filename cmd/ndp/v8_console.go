@@ -431,7 +431,7 @@ func (c *V8Console) isIncompleteExpression(line string) bool {
 	return false
 }
 
-// Enhanced console with event handling
+// SetupEventHandlers prints debugger and runtime events as they arrive.
 func (c *V8Console) SetupEventHandlers() {
 	// Handle debugger events
 	c.client.OnEvent("Debugger.paused", func(params map[string]interface{}) {
