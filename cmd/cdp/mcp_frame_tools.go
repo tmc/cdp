@@ -82,17 +82,7 @@ func registerFrameTools(server *mcp.Server, s *mcpSession) {
 			return nil, nil, fmt.Errorf("switch_frame: %w", err)
 		}
 
-		// Create a new chromedp context targeting the frame's page target.
-		// For iframes, we use the frame's target ID if it's an OOPIF,
-		// or navigate within the existing context.
-		// chromedp doesn't have direct frame targeting, so we use the
-		// iframe's content document via evaluate in the frame's execution context.
-
-		// For same-origin frames, we can use chromedp.WithExistingTarget if the
-		// frame has its own target. Otherwise, we'll set a frame execution
-		// context via the Page domain.
-
-		// The simplest reliable approach: find the target for the frame ID.
+		// An out-of-process iframe has its own target; attach to it directly.
 		targets, err := chromedp.Targets(s.browserCtx)
 		if err != nil {
 			return nil, nil, fmt.Errorf("switch_frame: list targets: %w", err)

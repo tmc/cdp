@@ -16,7 +16,7 @@ import (
 	"github.com/tmc/cdp/internal/htmltomd"
 )
 
-// Command represents a CDP command with metadata
+// Command represents a CDP command with metadata.
 type Command struct {
 	Name        string
 	Category    string
@@ -27,21 +27,21 @@ type Command struct {
 	Aliases     []string
 }
 
-// CommandCategory represents a group of related commands
+// CommandCategory represents a group of related commands.
 type CommandCategory struct {
 	Name        string
 	Description string
 	Commands    []*Command
 }
 
-// CommandRegistry holds all available commands organized by category
+// CommandRegistry holds all available commands organized by category.
 type CommandRegistry struct {
 	categories map[string]*CommandCategory
 	commands   map[string]*Command
 	aliases    map[string]string
 }
 
-// NewCommandRegistry creates a new command registry with all built-in commands
+// NewCommandRegistry creates a new command registry with all built-in commands.
 func NewCommandRegistry() *CommandRegistry {
 	r := &CommandRegistry{
 		categories: make(map[string]*CommandCategory),
@@ -64,7 +64,7 @@ func NewCommandRegistry() *CommandRegistry {
 	return r
 }
 
-// RegisterCommand adds a command to the registry
+// RegisterCommand adds a command to the registry.
 func (r *CommandRegistry) RegisterCommand(cmd *Command) {
 	// Get or create category
 	cat, exists := r.categories[cmd.Category]
@@ -88,7 +88,7 @@ func (r *CommandRegistry) RegisterCommand(cmd *Command) {
 	}
 }
 
-// GetCommand retrieves a command by name or alias
+// GetCommand retrieves a command by name or alias.
 func (r *CommandRegistry) GetCommand(name string) (*Command, bool) {
 	// Check direct command
 	if cmd, ok := r.commands[name]; ok {
@@ -103,7 +103,7 @@ func (r *CommandRegistry) GetCommand(name string) (*Command, bool) {
 	return nil, false
 }
 
-// ListCategories returns all command categories
+// ListCategories returns all command categories.
 func (r *CommandRegistry) ListCategories() []*CommandCategory {
 	var categories []*CommandCategory
 	for _, cat := range r.categories {
@@ -112,7 +112,7 @@ func (r *CommandRegistry) ListCategories() []*CommandCategory {
 	return categories
 }
 
-// registerNavigationCommands adds navigation-related commands
+// registerNavigationCommands adds navigation-related commands.
 func (r *CommandRegistry) registerNavigationCommands() {
 	r.RegisterCommand(&Command{
 		Name:        "navigate",
@@ -178,7 +178,7 @@ func (r *CommandRegistry) registerNavigationCommands() {
 	})
 }
 
-// registerDOMCommands adds DOM manipulation commands
+// registerDOMCommands adds DOM manipulation commands.
 func (r *CommandRegistry) registerDOMCommands() {
 	r.RegisterCommand(&Command{
 		Name:        "click",
@@ -333,7 +333,7 @@ func (r *CommandRegistry) registerDOMCommands() {
 	})
 }
 
-// registerNetworkCommands adds network-related commands
+// registerNetworkCommands adds network-related commands.
 func (r *CommandRegistry) registerNetworkCommands() {
 	r.RegisterCommand(&Command{
 		Name:        "cookies",
@@ -423,7 +423,7 @@ func (r *CommandRegistry) registerNetworkCommands() {
 	})
 }
 
-// registerDebugCommands adds debugging commands
+// registerDebugCommands adds debugging commands.
 func (r *CommandRegistry) registerDebugCommands() {
 	r.RegisterCommand(&Command{
 		Name:        "pause",
@@ -457,7 +457,7 @@ func (r *CommandRegistry) registerDebugCommands() {
 	})
 }
 
-// registerPerformanceCommands adds performance monitoring commands
+// registerPerformanceCommands adds performance monitoring commands.
 func (r *CommandRegistry) registerPerformanceCommands() {
 	r.RegisterCommand(&Command{
 		Name:        "metrics",
@@ -500,7 +500,7 @@ func (r *CommandRegistry) registerPerformanceCommands() {
 	})
 }
 
-// registerEmulationCommands adds device emulation commands
+// registerEmulationCommands adds device emulation commands.
 func (r *CommandRegistry) registerEmulationCommands() {
 	r.RegisterCommand(&Command{
 		Name:        "mobile",
@@ -585,7 +585,7 @@ func (r *CommandRegistry) registerEmulationCommands() {
 	})
 }
 
-// registerStorageCommands adds local storage and session storage commands
+// registerStorageCommands adds local storage and session storage commands.
 func (r *CommandRegistry) registerStorageCommands() {
 	r.RegisterCommand(&Command{
 		Name:        "localStorage",
@@ -675,7 +675,7 @@ func (r *CommandRegistry) registerStorageCommands() {
 	})
 }
 
-// registerSecurityCommands adds security-related commands
+// registerSecurityCommands adds security-related commands.
 func (r *CommandRegistry) registerSecurityCommands() {
 	r.RegisterCommand(&Command{
 		Name:        "csp",
@@ -715,7 +715,7 @@ func (r *CommandRegistry) registerSecurityCommands() {
 	})
 }
 
-// registerPageCommands adds page information commands
+// registerPageCommands adds page information commands.
 func (r *CommandRegistry) registerPageCommands() {
 	r.RegisterCommand(&Command{
 		Name:        "title",
@@ -848,7 +848,7 @@ func (r *CommandRegistry) registerPageCommands() {
 	})
 }
 
-// registerConsoleCommands adds console/logging commands
+// registerConsoleCommands adds console/logging commands.
 func (r *CommandRegistry) registerConsoleCommands() {
 	r.RegisterCommand(&Command{
 		Name:        "log",

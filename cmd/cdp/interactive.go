@@ -33,7 +33,7 @@ const interactiveHistoryLimit = 1000
 
 var errLineInterrupted = errors.New("line interrupted")
 
-// InteractiveMode represents an interactive CDP session
+// InteractiveMode represents an interactive CDP session.
 type InteractiveMode struct {
 	browserCtx        context.Context // browser-level context for creating/listing tabs
 	ctx               context.Context // active tab context for executing commands
@@ -888,7 +888,7 @@ func rawCDPNeedsContinuation(line string) bool {
 	return depth > 0 || inString
 }
 
-// Run starts the interactive session
+// Run starts the interactive session.
 func (im *InteractiveMode) Run() error {
 	if im.cfg.APIPort > 0 {
 		go startCoverageAPI(im.cfg.APIPort, im)
@@ -1001,7 +1001,7 @@ func (im *InteractiveMode) Run() error {
 	return nil
 }
 
-// showWelcome displays the welcome message
+// showWelcome displays the welcome message.
 func (im *InteractiveMode) showWelcome() {
 	fmt.Println("\n╭─────────────────────────────────────────────────────────╮")
 	fmt.Println("│      Welcome to CDP Interactive Mode                    │")
@@ -1020,7 +1020,7 @@ func (im *InteractiveMode) showWelcome() {
 	fmt.Println()
 }
 
-// handleSpecialCommand handles special non-CDP commands
+// handleSpecialCommand handles special non-CDP commands.
 func (im *InteractiveMode) handleSpecialCommand(line string) bool {
 	parts := strings.Fields(line)
 	if len(parts) == 0 {
@@ -1387,7 +1387,7 @@ func isDisconnected(err error) bool {
 		strings.Contains(msg, "use of closed network connection")
 }
 
-// executeCommand executes a CDP command
+// executeCommand executes a CDP command.
 func (im *InteractiveMode) executeCommand(line string) error {
 	parts := strings.Fields(line)
 	if len(parts) == 0 {
@@ -1779,7 +1779,7 @@ func (im *InteractiveMode) navigate(ctx context.Context, args []string, nav *nav
 	return nav.wait(ctx, im.cfg.WaitMode)
 }
 
-// executeRawCDP executes a raw CDP command
+// executeRawCDP executes a raw CDP command.
 func (im *InteractiveMode) executeRawCDP(command string) error {
 	method, params, err := parseRawCDPCommand(command)
 	if err != nil {
@@ -1802,7 +1802,7 @@ func (im *InteractiveMode) executeRawCDP(command string) error {
 	return nil
 }
 
-// showHistory displays command history
+// showHistory displays command history.
 func (im *InteractiveMode) showHistory() {
 	if len(im.history) == 0 {
 		fmt.Println("No command history")
@@ -1817,19 +1817,19 @@ func (im *InteractiveMode) showHistory() {
 	fmt.Println()
 }
 
-// clearScreen clears the terminal screen
+// clearScreen clears the terminal screen.
 func (im *InteractiveMode) clearScreen() {
 	// ANSI escape code to clear screen
 	fmt.Print("\033[2J\033[H")
 	im.showWelcome()
 }
 
-// TabComplete provides tab completion for commands
+// TabComplete provides tab completion for commands.
 func (im *InteractiveMode) TabComplete(partial string) []string {
 	return im.help.GetCompletions(partial)
 }
 
-// ExecuteScript executes a script file
+// ExecuteScript executes a script file.
 func (im *InteractiveMode) ExecuteScript(filename string) error {
 	file, err := os.Open(filename)
 	if err != nil {
@@ -1868,7 +1868,7 @@ func (im *InteractiveMode) ExecuteScript(filename string) error {
 	return nil
 }
 
-// BatchExecute executes multiple commands in batch
+// BatchExecute executes multiple commands in batch.
 func (im *InteractiveMode) BatchExecute(commands []string) error {
 	fmt.Println("Executing batch commands:")
 	fmt.Println("─────────────────────────")
@@ -1885,7 +1885,7 @@ func (im *InteractiveMode) BatchExecute(commands []string) error {
 	return nil
 }
 
-// SaveSession saves the current session to a file
+// SaveSession saves the current session to a file.
 func (im *InteractiveMode) SaveSession(filename string) error {
 	file, err := os.Create(filename)
 	if err != nil {
@@ -1904,7 +1904,7 @@ func (im *InteractiveMode) SaveSession(filename string) error {
 	return nil
 }
 
-// LoadSession loads and executes a saved session
+// LoadSession loads and executes a saved session.
 func (im *InteractiveMode) LoadSession(filename string) error {
 	return im.ExecuteScript(filename)
 }
@@ -2284,13 +2284,11 @@ func (im *InteractiveMode) sourcemapServe(bundleURL string) error {
 		fmt.Printf("Already serving sourcemap for %s (rule %s)\n", bundleURL, sm.InterceptID)
 		return nil
 	}
-	// Note: actual Fetch intercept requires the MCP interceptor plumbing.
+	// Serving the map through a Fetch intercept needs the MCP interceptor.
 	// In interactive mode, print the map URL and instructions.
 	mapURL := bundleURL + ".map"
 	fmt.Printf("Sourcemap ready at %s (%d bytes)\n", mapURL, len(sm.MapJSON))
-	fmt.Println("To activate in DevTools, paste in console:")
-	fmt.Printf("  document.querySelectorAll('script').forEach(s => { if(s.src.includes('%s')) console.log('found bundle') })\n", bundleURL)
-	fmt.Println("\nNote: Full Fetch intercept serving requires MCP mode (cdp --mcp).")
+	fmt.Println("Serving it to DevTools requires MCP mode (cdp -mcp, tool serve_sourcemap).")
 	return nil
 }
 

@@ -17,7 +17,7 @@ type inferredFile = sourcemap.File
 type inferredFunc = sourcemap.Function
 
 // sourcemapDiskPath returns the on-disk path for a bundle URL's .map file.
-// Follows the same layout as sources: outputDir/origin/_compiled/path.map
+// Follows the same layout as sources: outputDir/origin/_compiled/path.map.
 func sourcemapDiskPath(sourcesDir, bundleURL string) string {
 	return sourcemap.DiskPath(sourcesDir, bundleURL)
 }

@@ -42,7 +42,7 @@ info
 Performance.getMetrics {}
 
 # Clear device emulation
-clear-emulation
+desktop
 
 # Execute some complex JavaScript
 Runtime.evaluate {"expression": "Array.from(document.querySelectorAll('a')).map(a => ({href: a.href, text: a.textContent}))"}

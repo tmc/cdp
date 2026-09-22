@@ -19,7 +19,7 @@ import (
 	"github.com/tmc/cdp/internal/testutil"
 )
 
-// TestMain adds global test setup and teardown for browser cleanup
+// TestMain adds global test setup and teardown for browser cleanup.
 func TestMain(m *testing.M) {
 	// Clean up before tests
 	testutil.CleanupOrphanedBrowsers(&testing.T{})
@@ -222,7 +222,7 @@ func skipIfNoBrowser(t testing.TB) {
 	}
 }
 
-// buildCDP builds the cdp binary for testing
+// buildCDP builds the cdp binary for testing.
 func buildCDP(t *testing.T) string {
 	t.Helper()
 
@@ -905,13 +905,8 @@ func TestCDP_HARRecording(t *testing.T) {
 	fullOutput := output + stderrOutput
 	t.Logf("CDP output: %s", fullOutput)
 
-	// The HAR file should be created even if no specific recording message is shown
-	// Just verify the process ran without major errors
-
-	// Verify HAR file was created
 	if _, err := os.Stat(harFile); err != nil {
-		// HAR file wasn't created - this might be expected if the CDP tool doesn't support HAR recording
-		// or if the browser didn't have enough time to generate network traffic
+		// about:blank may produce no traffic before the kill, so no HAR is written.
 		t.Skipf("HAR file not created: %v (this may be expected for about:blank)", err)
 		return
 	}
@@ -1143,7 +1138,7 @@ func TestCDP_CommandParsing(t *testing.T) {
 	}
 }
 
-// BenchmarkBrowserDiscovery benchmarks the browser discovery process
+// BenchmarkBrowserDiscovery benchmarks the browser discovery process.
 func BenchmarkBrowserDiscovery(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		_, err := discoverBrowsers(false)
@@ -1153,7 +1148,7 @@ func BenchmarkBrowserDiscovery(b *testing.B) {
 	}
 }
 
-// BenchmarkAliasLookup benchmarks alias lookup performance
+// BenchmarkAliasLookup benchmarks alias lookup performance.
 func BenchmarkAliasLookup(b *testing.B) {
 	testAliases := []string{"goto", "title", "reload", "screenshot", "mobile"}
 

@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-// TestOutputWriter tests the OutputWriter struct
+// TestOutputWriter tests the OutputWriter struct.
 func TestOutputWriter(t *testing.T) {
 	tmpDir := t.TempDir()
 
@@ -142,7 +142,7 @@ func TestOutputWriterBinary(t *testing.T) {
 	})
 }
 
-// TestOutputWriterAtomicWrites tests that writes are atomic
+// TestOutputWriterAtomicWrites tests that writes are atomic.
 func TestOutputWriterAtomicWrites(t *testing.T) {
 	tmpDir := t.TempDir()
 	testFile := pathpkg.Join(tmpDir, "atomic.txt")

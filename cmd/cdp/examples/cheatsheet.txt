@@ -18,7 +18,6 @@ title                               # Get page title
 url                                 # Get current URL
 cookies                             # Get all cookies
 html                                # Get page HTML
-info                                # Get browser info
 Page.getResourceTree {}             # Get page resources
 
 # DOM INTERACTION
@@ -31,22 +30,20 @@ DOM.getOuterHTML {"nodeId": 123}    # Get element HTML
 
 # SCREENSHOTS & PDF
 screenshot                          # Take a screenshot
-screenshot-full                     # Take a full-page screenshot
 pdf                                 # Generate PDF
 Page.captureScreenshot {"format": "png", "quality": 100} # Full screenshot command
 Page.printToPDF {"landscape": false, "printBackground": true} # PDF with options
 
 # DEVICE EMULATION
 mobile                              # Emulate mobile device
-desktop                             # Emulate desktop device
-clear-emulation                     # Clear emulation
+desktop                             # Clear device emulation
+tablet                              # Emulate tablet device
 Emulation.setDeviceMetricsOverride {"width": 375, "height": 812, "deviceScaleFactor": 3, "mobile": true}
 
 # NETWORK
 offline                             # Go offline
 online                              # Go online
-slow-3g                             # Simulate slow 3G
-fast-3g                             # Simulate faster 3G
+throttle 50000 20000 400            # Throttle: download B/s, upload B/s, latency ms
 Network.enable {}                   # Enable network events
 Network.setCacheDisabled {"cacheDisabled": true} # Disable cache
 Network.setUserAgentOverride {"userAgent": "Custom User Agent"} # Set user agent
@@ -64,19 +61,16 @@ Debugger.setBreakpoint {"location": {"scriptId": "123", "lineNumber": 42}} # Set
 Debugger.setBreakpointByUrl {"url": "https://example.com/script.js", "lineNumber": 42} # URL breakpoint
 
 # COVERAGE ANALYSIS
-covjs_start                         # Start JS coverage
-covjs_take                          # Take JS coverage
-covjs_stop                          # Stop JS coverage
-covcss_start                        # Start CSS coverage
-covcss_take                         # Take CSS coverage
-covcss_stop                         # Stop CSS coverage
+coverage_start                      # Start JS coverage
+coverage_take                       # Take JS coverage
+coverage_stop                       # Stop JS coverage
 
 # PERFORMANCE
 Performance.enable {}               # Enable performance metrics
 Performance.getMetrics {}           # Get performance metrics
 
 # BROWSER MANAGEMENT
-targets                             # List all targets
+Target.getTargets {}                # List all targets
 Browser.getVersion {}               # Get browser version
 Browser.getWindowForTarget {"targetId": "123"} # Get window for target
 Target.createTarget {"url": "about:blank"} # Create new tab/target

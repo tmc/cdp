@@ -1,4 +1,3 @@
-// The CDP command-line tool for Chrome DevTools Protocol interaction.
 package main
 
 import (
@@ -45,7 +44,7 @@ import (
 	"github.com/tmc/macgo"
 )
 
-// stringSlice implements flag.Value for multiple string values
+// stringSlice implements flag.Value for multiple string values.
 type stringSlice []string
 
 func (s *stringSlice) String() string {
@@ -193,18 +192,18 @@ const (
 	ErrorTypeNetwork    = "network_error"
 )
 
-// CDPError represents a machine-parseable error with type and message
+// CDPError represents a machine-parseable error with type and message.
 type CDPError struct {
 	Type    string `json:"type"`
 	Message string `json:"message"`
 	Code    int    `json:"code"`
 }
 
-// Global format flag for errors (set during flag parsing)
+// errorFormat is the -format value exitWithError uses; main sets it after flag parsing.
 var errorFormat = "text"
 
 // exitWithError prints an error message and exits with the specified code
-// Uses consistent format: machine-parseable with type information
+// Uses consistent format: machine-parseable with type information.
 func exitWithError(code int, errorType string, format string, args ...interface{}) {
 	message := fmt.Sprintf(format, args...)
 
@@ -224,7 +223,7 @@ func exitWithError(code int, errorType string, format string, args ...interface{
 	os.Exit(code)
 }
 
-// filteredLogf filters out known unhandled chromedp events that are noisy but harmless
+// filteredLogf filters out known unhandled chromedp events that are noisy but harmless.
 func filteredLogf(format string, args ...interface{}) {
 	msg := fmt.Sprintf(format, args...)
 	// Filter out known unhandled events from chromedp that haven't been implemented yet
@@ -235,7 +234,7 @@ func filteredLogf(format string, args ...interface{}) {
 	log.Print(msg)
 }
 
-// filteredErrorf filters out noisy chromedp error messages
+// filteredErrorf filters out noisy chromedp error messages.
 func filteredErrorf(format string, args ...interface{}) {
 	msg := fmt.Sprintf(format, args...)
 	// Filter out noisy DOM event messages
@@ -279,7 +278,7 @@ var aliases = map[string]string{
 	"coverage_take":  `Profiler.takePreciseCoverage {}`,
 	"coverage_stop":  `Profiler.stopPreciseCoverage {}`,
 
-	// Enhanced aliases for Playwright-like commands
+	// Playwright-style commands, dispatched to enhancedCommands by the @ prefix
 	"wait":     `@wait $1`, // Custom command prefix @
 	"waitfor":  `@waitfor $1`,
 	"text":     `@text $1`,
@@ -339,7 +338,7 @@ var aliases = map[string]string{
 	"fullscreen": `Emulation.setDeviceMetricsOverride {"width":1920,"height":1080,"deviceScaleFactor":1,"mobile":false}`,
 	"tablet":     `Emulation.setDeviceMetricsOverride {"width":768,"height":1024,"deviceScaleFactor":2,"mobile":true}`,
 
-	// Advanced debugging
+	// Profiling and timing
 	"heap":         `HeapProfiler.takeHeapSnapshot {}`,
 	"startcpu":     `Profiler.start {}`,
 	"stopcpu":      `Profiler.stop {}`,
@@ -351,7 +350,7 @@ var aliases = map[string]string{
 	"waitresponse": `@waitresponse $1`,
 }
 
-// BrowserCandidate represents a potential browser installation
+// BrowserCandidate represents a potential browser installation.
 type BrowserCandidate struct {
 	Name      string
 	Path      string
@@ -361,7 +360,7 @@ type BrowserCandidate struct {
 	DebugPort int
 }
 
-// ChromeTab represents a Chrome tab
+// ChromeTab represents a Chrome tab.
 type ChromeTab struct {
 	ID    string `json:"id"`
 	Title string `json:"title"`
@@ -369,7 +368,7 @@ type ChromeTab struct {
 	Type  string `json:"type"`
 }
 
-// HAREntry represents a single HAR entry
+// HAREntry represents a single HAR entry.
 type HAREntry struct {
 	StartedDateTime string                 `json:"startedDateTime"`
 	Request         map[string]interface{} `json:"request"`
@@ -377,7 +376,7 @@ type HAREntry struct {
 	Time            float64                `json:"time"`
 }
 
-// HARLog represents the HAR log structure
+// HARLog represents the HAR log structure.
 type HARLog struct {
 	Version string        `json:"version"`
 	Creator interface{}   `json:"creator"`
@@ -385,32 +384,32 @@ type HARLog struct {
 	Entries []HAREntry    `json:"entries"`
 }
 
-// HAR represents the top-level HAR structure
+// HAR represents the top-level HAR structure.
 type HAR struct {
 	Log HARLog `json:"log"`
 }
 
-// NetworkRecorder records network events for HAR generation
+// NetworkRecorder records network events for HAR generation.
 type NetworkRecorder struct {
 	entries []HAREntry
 	mu      sync.RWMutex
 }
 
-// AddEntry adds a new HAR entry to the recorder
+// AddEntry adds a new HAR entry to the recorder.
 func (nr *NetworkRecorder) AddEntry(entry HAREntry) {
 	nr.mu.Lock()
 	defer nr.mu.Unlock()
 	nr.entries = append(nr.entries, entry)
 }
 
-// GetEntries returns all recorded HAR entries
+// GetEntries returns all recorded HAR entries.
 func (nr *NetworkRecorder) GetEntries() []HAREntry {
 	nr.mu.RLock()
 	defer nr.mu.RUnlock()
 	return append([]HAREntry(nil), nr.entries...)
 }
 
-// SaveHAR saves the recorded entries to a HAR file
+// SaveHAR saves the recorded entries to a HAR file.
 func (nr *NetworkRecorder) SaveHAR(filename string) error {
 	entries := nr.GetEntries()
 	har := HAR{
@@ -456,7 +455,7 @@ func saveHAR(filename, mode string, enhanced *harrecorder.Recorder, simple *Netw
 	return nil
 }
 
-// checkRunningChrome checks if Chrome is running on a specific port and returns browser info
+// checkRunningChrome checks if Chrome is running on a specific port and returns browser info.
 func checkRunningChrome(port int) (bool, string) {
 	client := &http.Client{Timeout: 2 * time.Second}
 	resp, err := client.Get(fmt.Sprintf("http://localhost:%d/json/version", port))
@@ -505,7 +504,7 @@ func browserDisplayName(path string) string {
 	}
 }
 
-// getChromeTabs gets list of available tabs from Chrome
+// getChromeTabs gets list of available tabs from Chrome.
 func getChromeTabs(port int) ([]ChromeTab, error) {
 	return getChromeTabsFrom("localhost", port)
 }
@@ -529,7 +528,7 @@ func getChromeTabsFrom(host string, port int) ([]ChromeTab, error) {
 	return tabs, nil
 }
 
-// discoverBrowsers finds all available browser installations and running processes
+// discoverBrowsers finds all available browser installations and running processes.
 func discoverBrowsers(verbose bool) ([]BrowserCandidate, error) {
 	var candidates []BrowserCandidate
 
@@ -568,7 +567,7 @@ func isMainBrowserExecutable(path string) bool {
 	return true
 }
 
-// findRunningBrowsers detects currently running browser processes
+// findRunningBrowsers detects currently running browser processes.
 func findRunningBrowsers(verbose bool) ([]BrowserCandidate, error) {
 	var candidates []BrowserCandidate
 
@@ -653,7 +652,7 @@ func findRunningBrowsers(verbose bool) ([]BrowserCandidate, error) {
 	return candidates, nil
 }
 
-// findInstalledBrowsers looks for browser installations on the system
+// findInstalledBrowsers looks for browser installations on the system.
 func findInstalledBrowsers(verbose bool) ([]BrowserCandidate, error) {
 	var candidates []BrowserCandidate
 
@@ -669,7 +668,7 @@ func findInstalledBrowsers(verbose bool) ([]BrowserCandidate, error) {
 	}
 }
 
-// findMacOSBrowsers finds browser installations on macOS
+// findMacOSBrowsers finds browser installations on macOS.
 func findMacOSBrowsers(verbose bool) ([]BrowserCandidate, error) {
 	var candidates []BrowserCandidate
 
@@ -729,7 +728,7 @@ func findMacOSBrowsers(verbose bool) ([]BrowserCandidate, error) {
 	return candidates, nil
 }
 
-// findLinuxBrowsers finds browser installations on Linux
+// findLinuxBrowsers finds browser installations on Linux.
 func findLinuxBrowsers(verbose bool) ([]BrowserCandidate, error) {
 	var candidates []BrowserCandidate
 
@@ -768,7 +767,7 @@ func findLinuxBrowsers(verbose bool) ([]BrowserCandidate, error) {
 	return candidates, nil
 }
 
-// findWindowsBrowsers finds browser installations on Windows
+// findWindowsBrowsers finds browser installations on Windows.
 func findWindowsBrowsers(verbose bool) ([]BrowserCandidate, error) {
 	var candidates []BrowserCandidate
 
@@ -808,7 +807,7 @@ func findWindowsBrowsers(verbose bool) ([]BrowserCandidate, error) {
 	return candidates, nil
 }
 
-// extractExecutablePath extracts the full executable path from a process line
+// extractExecutablePath extracts the full executable path from a process line.
 func extractExecutablePath(processLine, browserName string) string {
 	// Look for .app/Contents/MacOS/ pattern which is standard for macOS apps
 	if strings.Contains(processLine, ".app/Contents/MacOS/") {
@@ -845,7 +844,7 @@ func extractExecutablePath(processLine, browserName string) string {
 	return ""
 }
 
-// extractFlag extracts a flag value from a command line
+// extractFlag extracts a flag value from a command line.
 func extractFlag(commandLine, flag string) string {
 	index := strings.Index(commandLine, flag)
 	if index == -1 {
@@ -861,7 +860,7 @@ func extractFlag(commandLine, flag string) string {
 	return commandLine[start : start+end]
 }
 
-// extractVersionFromPath extracts version information from a path
+// extractVersionFromPath extracts version information from a path.
 func extractVersionFromPath(path string) string {
 	// Extract version from paths like "chrome/mac_arm-131.0.6778.204"
 	parts := strings.Split(path, "/")
@@ -874,7 +873,7 @@ func extractVersionFromPath(path string) string {
 	return "unknown"
 }
 
-// splitAndTrim splits a string by separator and trims whitespace
+// splitAndTrim splits a string by separator and trims whitespace.
 func splitAndTrim(s, sep string) []string {
 	if s == "" {
 		return nil
@@ -888,7 +887,7 @@ func splitAndTrim(s, sep string) []string {
 	return parts
 }
 
-// getBrowserVersion attempts to get the version of a browser executable
+// getBrowserVersion attempts to get the version of a browser executable.
 func getBrowserVersion(browserPath string) string {
 	cmd := exec.Command(browserPath, "--version")
 	output, err := cmd.Output()
@@ -906,7 +905,7 @@ func getBrowserVersion(browserPath string) string {
 	return "unknown"
 }
 
-// selectBestBrowser chooses the best browser from available candidates
+// selectBestBrowser chooses the best browser from available candidates.
 func selectBestBrowser(candidates []BrowserCandidate, verbose bool) *BrowserCandidate {
 	if len(candidates) == 0 {
 		return nil
@@ -967,7 +966,7 @@ func selectBestBrowser(candidates []BrowserCandidate, verbose bool) *BrowserCand
 }
 
 // setCustomHeaders enables network interception and sets custom HTTP headers
-// This must be called before any navigation
+// This must be called before any navigation.
 func setCustomHeaders(ctx context.Context, headers map[string]interface{}) error {
 	if len(headers) == 0 {
 		return nil // No headers to set
@@ -993,7 +992,7 @@ func setCustomHeaders(ctx context.Context, headers map[string]interface{}) error
 }
 
 // parseHeaders converts header strings to a map for network.SetExtraHTTPHeaders
-// Each header string should be in format "Name: value"
+// Each header string should be in format "Name: value".
 func parseHeaders(headersList stringSlice) map[string]interface{} {
 	headers := make(map[string]interface{})
 	for _, headerStr := range headersList {
@@ -1009,7 +1008,7 @@ func parseHeaders(headersList stringSlice) map[string]interface{} {
 	return headers
 }
 
-// High-level commands that use the Page API
+// enhancedCommands are the @-prefixed shell commands, run through the Page API.
 var enhancedCommands = map[string]func(*browser.Page, []string) error{
 	"wait": func(p *browser.Page, args []string) error {
 		if len(args) < 1 {
@@ -1109,7 +1108,7 @@ var enhancedCommands = map[string]func(*browser.Page, []string) error{
 	},
 }
 
-// AllTabsMonitor handles monitoring network traffic from all browser tabs
+// AllTabsMonitor handles monitoring network traffic from all browser tabs.
 type AllTabsMonitor struct {
 	cancel          context.CancelFunc
 	pending         sync.WaitGroup
@@ -1120,7 +1119,7 @@ type AllTabsMonitor struct {
 	mu              sync.Mutex
 }
 
-// NewAllTabsMonitor creates a new monitor for all tabs
+// NewAllTabsMonitor creates a new monitor for all tabs.
 func NewAllTabsMonitor(ctx context.Context, recorder *harrecorder.Recorder, verbose bool) *AllTabsMonitor {
 	return newAllTabsMonitor(ctx, verbose, func(targetCtx context.Context) error {
 		chromedp.ListenTarget(targetCtx, recorder.HandleNetworkEvent(targetCtx))
@@ -1139,11 +1138,11 @@ func newAllTabsMonitor(ctx context.Context, verbose bool, attach func(context.Co
 	}
 }
 
-// Start begins monitoring all tabs
+// Start begins monitoring all tabs.
 func (m *AllTabsMonitor) Start() error {
 	// Enable target discovery to get notified of all targets
 	if err := chromedp.Run(m.ctx, target.SetDiscoverTargets(true)); err != nil {
-		return fmt.Errorf("failed to enable target discovery: %w", err)
+		return fmt.Errorf("enable target discovery: %w", err)
 	}
 
 	// Listen for new targets
@@ -1198,7 +1197,7 @@ func (m *AllTabsMonitor) attachTarget(targetID target.ID) {
 	}
 }
 
-// attachToTarget attaches to a target and enables network monitoring
+// attachToTarget attaches to a target and enables network monitoring.
 func (m *AllTabsMonitor) attachToTarget(targetID target.ID) error {
 	m.mu.Lock()
 	if err := m.ctx.Err(); err != nil {
@@ -1232,7 +1231,7 @@ func (m *AllTabsMonitor) attachToTarget(targetID target.ID) error {
 	return nil
 }
 
-// Stop stops monitoring all tabs
+// Stop stops monitoring all tabs.
 func (m *AllTabsMonitor) Stop() {
 	m.cancel()
 	m.mu.Lock()
@@ -1333,7 +1332,7 @@ func main() {
 		autoDiscover bool
 		pprofListen  string
 
-		// New features
+		// Capture and execution
 		jsScripts         stringSlice // Support multiple --js flags
 		tabID             string
 		harFile           string
@@ -1353,17 +1352,17 @@ func main() {
 		showChromeFlags   bool
 		outputDir         string // Directory to write domain-organized logs to
 
-		// Profile management features
+		// Profile management
 		useProfile      string
 		cookieDomains   string
 		listProfiles    bool
 		connectExisting bool
 
-		// URL monitoring features
+		// URL monitoring
 		waitForURLChange  bool
 		monitorURLPattern string
 
-		// CSS selector extraction features
+		// CSS selector extraction
 		extractSelector string
 		extractMode     string
 
@@ -1373,7 +1372,7 @@ func main() {
 		// HTTP headers flag
 		headers stringSlice
 
-		// Window control features
+		// Window control
 		shell          bool
 		windowPosition string
 		windowSize     string
@@ -1381,7 +1380,7 @@ func main() {
 		proxy          string
 		chromeFlags    string
 
-		// CDP proxy feature
+		// CDP proxy
 		cdpProxyEnabled     bool
 		cdpProxyObserveSelf bool
 
@@ -1434,13 +1433,13 @@ func main() {
 	flag.BoolVar(&autoDiscover, "auto-discover", true, "Automatically discover and prefer running browsers")
 	flag.StringVar(&pprofListen, "pprof-listen", "", "Serve net/http/pprof on this address (e.g. localhost:6060) for live profiling")
 
-	// New flags
+	// Capture and execution flags
 	flag.Var(&jsScripts, "js", "JavaScript code to execute in console (can be used multiple times)")
 	flag.StringVar(&tabID, "tab", "", "Target specific tab ID")
 	flag.StringVar(&proxy, "proxy", "", "Proxy server URL")
 	flag.StringVar(&chromeFlags, "chrome-flags", "", "Additional Chrome flags (space-separated)")
 	flag.StringVar(&harFile, "har", "", "Save HAR file to this path")
-	flag.StringVar(&harMode, "har-mode", "enhanced", "HAR capture mode: enhanced (complete headers/bodies/POST data) or simple (fast, basic)")
+	flag.StringVar(&harMode, "har-mode", "enhanced", "HAR capture mode: enhanced (headers, bodies, and POST data) or simple (faster, records less)")
 	flag.BoolVar(&harlStream, "harl", false, "Stream HAR entries as NDJSON")
 	flag.StringVar(&harlFile, "harl-file", "output.har.jsonl", "File to stream NDJSON to (use '-' for stdout)")
 	flag.Int64Var(&maxBodyBytes, "max-body-bytes", 0, "Maximum response body bytes to keep in HAR/HARL (0 keeps full bodies)")
@@ -1487,7 +1486,7 @@ func main() {
 
 	// CSS selector extraction flags
 	flag.StringVar(&extractSelector, "extract", "", "Extract content using CSS selector (e.g., 'p', 'h1', '.class', '#id')")
-	flag.StringVar(&extractMode, "extract-mode", "text", "Extraction mode: text, html, attr:name, count (default: text)")
+	flag.StringVar(&extractMode, "extract-mode", "text", "Extraction mode: text, html, attr:name, or count")
 	flag.StringVar(&renderSelector, "render", "", "Render page as markdown (optional CSS selector, use 'body' for full page)")
 
 	// Custom HTTP headers flags
@@ -1496,7 +1495,7 @@ func main() {
 
 	// CDP proxy flags
 	flag.BoolVar(&cdpProxyEnabled, "cdp-proxy", false, "Enable CDP proxy with observer UI at http://localhost:<debug-port>/_/")
-	flag.BoolVar(&cdpProxyObserveSelf, "cdp-proxy-self", false, "When using cdp-proxy, also observe the browser driven by this command")
+	flag.BoolVar(&cdpProxyObserveSelf, "cdp-proxy-self", false, "Alias for -cdp-proxy-observe-self")
 	flag.BoolVar(&cdpProxyObserveSelf, "cdp-proxy-observe-self", false, "Route cdp's own CDP traffic through the proxy (requires --cdp-proxy)")
 
 	// MCP server mode
@@ -2988,7 +2987,7 @@ func main() {
 				}
 
 				// Enable network events BEFORE any navigation
-				// This is critical: network.Enable() and listener attachment must happen before
+				// network.Enable() and listener attachment must happen before
 				// any navigation to ensure we capture the initial page request and all network events
 				if verbose {
 					log.Printf("Enabling network recording and attaching event listeners...")
@@ -3331,7 +3330,7 @@ func main() {
 
 			// If HAR capture without JS and NOT in shell mode, navigate and wait for user interaction
 			if (harFile != "" || harlStream) && !shell {
-				// CRITICAL: Navigate to URL with network monitoring active
+				// Navigate only after network monitoring is active.
 				// This ensures we capture all network events including the initial page request
 				if verbose {
 					log.Printf("Network monitoring is active, proceeding with navigation...")
@@ -4099,8 +4098,7 @@ func handleSourcesCommand(ctx context.Context, parts []string) error {
 				}
 				filename = fmt.Sprintf("%s/%s%s", saveDir, src.URL, ext)
 			} else {
-				// For external sources, we'd need to fetch them
-				// For now, just save the URL reference
+				// External sources are not fetched; report the URL and skip.
 				fmt.Printf("  [%d/%d] Skipping external source: %s (use curl or wget to fetch)\n", i+1, len(sources), src.URL)
 				continue
 			}
@@ -4210,10 +4208,8 @@ func consoleListener(verbose, showStacks bool) func(interface{}) {
 	}
 }
 
-// startConsoleMonitor enables Runtime domain and installs a listener for
-// console API calls and uncaught exceptions.
-// handleScreenshotCommand captures a screenshot and saves to file or outputs as JSON.
-// args format: "[--json] [selector] [filename]"
+// handleScreenshotCommand captures a screenshot and saves it to a file or
+// prints it as JSON. args has the form "[--json] [selector] [filename]".
 func handleScreenshotCommand(ctx context.Context, args string, outputFormat string) error {
 	fields := strings.Fields(args)
 	jsonOutput := outputFormat == "json"
@@ -4280,6 +4276,8 @@ func handleScreenshotCommand(ctx context.Context, args string, outputFormat stri
 	return nil
 }
 
+// startConsoleMonitor enables the Runtime domain and installs a listener for
+// console API calls and uncaught exceptions.
 func startConsoleMonitor(ctx context.Context, verbose, showStacks bool) {
 	chromedp.ListenTarget(ctx, consoleListener(verbose, showStacks))
 	if err := chromedp.Run(ctx, runtime.Enable()); err != nil {
@@ -4348,7 +4346,6 @@ func printHelp() {
 	fmt.Println("\nSession commands:")
 	fmt.Println("  help              - Show this help")
 	fmt.Println("  help aliases      - List all alias commands")
-	fmt.Println("  help enhanced     - List enhanced commands (remote Chrome only)")
 	fmt.Println("  hup               - Detach from browser (leave browser running)")
 	fmt.Println("  exit / quit       - Exit the program (closes launched browser unless --keep-open)")
 
@@ -4410,7 +4407,7 @@ func requiresEnhancedMode(fullCapture, keepOpen bool, command string) bool {
 	return fullCapture || keepOpen || command != ""
 }
 
-// isNonBrowserCommand checks if a command can run without browser setup
+// isNonBrowserCommand checks if a command can run without browser setup.
 func isNonBrowserCommand(cmdName string) bool {
 	nonBrowserCommands := map[string]bool{
 		"help":   true,
@@ -4427,7 +4424,8 @@ func isNonBrowserCommand(cmdName string) bool {
 	return nonBrowserCommands[cmdName]
 }
 
-// handleEnhancedMode handles the new enhanced command mode
+// handleEnhancedMode runs command, or the interactive shell when command is
+// empty, on a browser from setupChromeForEnhanced.
 func handleEnhancedMode(command string, interactive bool, cfg fullCaptureConfig) {
 	started := time.Now()
 	registry := NewCommandRegistry()
@@ -4910,12 +4908,10 @@ func resolveLaunchDebugPort(ctx context.Context, port int, verbose bool) int {
 	return port
 }
 
-// setupChromeForEnhanced sets up Chrome context for enhanced commands.
-// It discovers available browsers, optionally connects to a running instance
-// with a debug port, or launches a new non-headless browser.
-// setupChromeForEnhanced returns (ctx, cancel, launched, error).
-// launched is true if we started a new browser process (and should kill it on exit),
-// false if we connected to an existing one.
+// setupChromeForEnhanced returns a browser context for the enhanced launcher.
+// It connects to a running browser with a debug port when one is found, and
+// otherwise launches a new non-headless browser. launched reports whether this
+// process started the browser and so should stop it on exit.
 func setupChromeForEnhanced(ctx context.Context, cfg fullCaptureConfig) (context.Context, context.CancelFunc, bool, error) {
 	started := time.Now()
 	verbose := cfg.Verbose
@@ -5075,10 +5071,10 @@ func setupChromeForEnhanced(ctx context.Context, cfg fullCaptureConfig) (context
 			browserprofile.WithVerbose(verbose),
 		)
 		if err != nil {
-			return nil, nil, false, fmt.Errorf("failed to create profile manager: %w", err)
+			return nil, nil, false, fmt.Errorf("create profile manager: %w", err)
 		}
 		if err := pm.SetupWorkdir(); err != nil {
-			return nil, nil, false, fmt.Errorf("failed to setup profile working directory: %w", err)
+			return nil, nil, false, fmt.Errorf("set up profile working directory: %w", err)
 		}
 
 		var cookieDomains []string
@@ -5189,7 +5185,7 @@ func setupChromeForEnhanced(ctx context.Context, cfg fullCaptureConfig) (context
 		if profileCleanup != nil {
 			profileCleanup()
 		}
-		return nil, nil, false, fmt.Errorf("failed to start browser: %w", err)
+		return nil, nil, false, fmt.Errorf("start browser: %w", err)
 	}
 	if verbose {
 		log.Printf("startup: browser launch and CDP readiness took %v", time.Since(started))
@@ -5350,7 +5346,7 @@ func runStartupAction(ctx context.Context, action func() error) error {
 	}
 }
 
-// buildExtractionScript builds a JavaScript extraction script based on mode
+// buildExtractionScript builds a JavaScript extraction script based on mode.
 func buildExtractionScript(selector, mode string) string {
 	// Handle attr:attrName mode
 	if strings.HasPrefix(mode, "attr:") {
@@ -5398,7 +5394,7 @@ if (elements.length === 0) {
 	}
 }
 
-// monitorURLChanges monitors for URL changes and outputs matching URLs
+// monitorURLChanges monitors for URL changes and outputs matching URLs.
 func monitorURLChanges(ctx context.Context, pattern string, verbose bool) error {
 	var regex *regexp.Regexp
 	var err error
@@ -5413,7 +5409,7 @@ func monitorURLChanges(ctx context.Context, pattern string, verbose bool) error 
 	var lastURL string
 	// Get initial URL
 	if err := chromedp.Run(ctx, chromedp.Location(&lastURL)); err != nil {
-		return fmt.Errorf("failed to get initial URL: %v", err)
+		return fmt.Errorf("get initial URL: %w", err)
 	}
 
 	if verbose {

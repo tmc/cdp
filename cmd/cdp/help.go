@@ -6,19 +6,19 @@ import (
 	"strings"
 )
 
-// HelpSystem provides context-aware help for the CDP tool
+// HelpSystem prints shell help from a CommandRegistry.
 type HelpSystem struct {
 	registry *CommandRegistry
 }
 
-// NewHelpSystem creates a new help system
+// NewHelpSystem creates a new help system.
 func NewHelpSystem(registry *CommandRegistry) *HelpSystem {
 	return &HelpSystem{
 		registry: registry,
 	}
 }
 
-// ShowHelp displays general help or help for a specific command
+// ShowHelp displays general help or help for a specific command.
 func (h *HelpSystem) ShowHelp(args []string) {
 	if len(args) == 0 {
 		h.showGeneralHelp()
@@ -27,7 +27,7 @@ func (h *HelpSystem) ShowHelp(args []string) {
 	}
 }
 
-// showGeneralHelp displays the main help screen
+// showGeneralHelp displays the main help screen.
 func (h *HelpSystem) showGeneralHelp() {
 	fmt.Println("\n╭─────────────────────────────────────────────────╮")
 	fmt.Println("│         CDP - Chrome DevTools Protocol CLI      │")
@@ -106,13 +106,13 @@ func (h *HelpSystem) showGeneralHelp() {
 	fmt.Println("\nTips:")
 	fmt.Println("─────")
 	fmt.Println("  • Use 'help <command>' for detailed command information")
-	fmt.Println("  • Most commands have shorter aliases for convenience")
+	fmt.Println("  • Most commands have shorter aliases, shown in brackets")
 	fmt.Println("  • Commands support tab completion (when available)")
-	fmt.Println("  • Use -v or --verbose for detailed output")
+	fmt.Println("  • Use 'verbose' to toggle verbose output, or start cdp with -verbose")
 	fmt.Println()
 }
 
-// showCommandHelp displays detailed help for a specific command
+// showCommandHelp displays detailed help for a specific command.
 func (h *HelpSystem) showCommandHelp(cmdName string) {
 	cmd, found := h.registry.GetCommand(cmdName)
 	if !found {
@@ -165,7 +165,7 @@ func (h *HelpSystem) showCommandHelp(cmdName string) {
 	fmt.Println()
 }
 
-// ListCommands displays all available commands
+// ListCommands displays all available commands.
 func (h *HelpSystem) ListCommands() {
 	fmt.Println("\nAll Available Commands:")
 	fmt.Println("───────────────────────")
@@ -193,7 +193,7 @@ func (h *HelpSystem) ListCommands() {
 	fmt.Println()
 }
 
-// SearchCommands searches for commands matching a term
+// SearchCommands searches for commands matching a term.
 func (h *HelpSystem) SearchCommands(term string) {
 	term = strings.ToLower(term)
 	var matches []*Command
@@ -251,7 +251,7 @@ func (h *HelpSystem) SearchCommands(term string) {
 	fmt.Println()
 }
 
-// findSimilarCommands finds commands with similar names
+// findSimilarCommands finds commands with similar names.
 func (h *HelpSystem) findSimilarCommands(name string) []string {
 	var similar []string
 	name = strings.ToLower(name)
@@ -288,7 +288,7 @@ func (h *HelpSystem) findSimilarCommands(name string) []string {
 	return similar
 }
 
-// findRelatedCommands finds commands in the same category
+// findRelatedCommands finds commands in the same category.
 func (h *HelpSystem) findRelatedCommands(cmd *Command) []*Command {
 	var related []*Command
 
@@ -308,7 +308,7 @@ func (h *HelpSystem) findRelatedCommands(cmd *Command) []*Command {
 	return related
 }
 
-// ShowQuickReference displays a quick reference card
+// ShowQuickReference displays a quick reference card.
 func (h *HelpSystem) ShowQuickReference() {
 	fmt.Println("\n╭───────────────────────────────────────────────────────────╮")
 	fmt.Println("│                   CDP Quick Reference                      │")
@@ -340,7 +340,7 @@ func (h *HelpSystem) ShowQuickReference() {
 	fmt.Println()
 }
 
-// GetCompletions returns command completions for a partial input
+// GetCompletions returns command completions for a partial input.
 func (h *HelpSystem) GetCompletions(partial string) []string {
 	var completions []string
 	partial = strings.ToLower(partial)
@@ -367,7 +367,7 @@ func (h *HelpSystem) GetCompletions(partial string) []string {
 	return completions
 }
 
-// contains checks if a slice contains a string
+// contains checks if a slice contains a string.
 func contains(slice []string, item string) bool {
 	for _, s := range slice {
 		if s == item {

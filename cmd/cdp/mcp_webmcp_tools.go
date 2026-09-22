@@ -112,7 +112,7 @@ func (w *webMCPCollector) listInvocations(last int) []webMCPInvocation {
 // enableWebMCP enables the WebMCP domain and starts listening for events.
 // Falls back to JS API mode if the CDP domain is unavailable (-32601).
 //
-// Note: all CDP calls here use chromedp.ActionFunc + direct protocol calls
+// All CDP calls here use chromedp.ActionFunc and direct protocol calls
 // rather than sequential chromedp.Run calls. This avoids deadlocks: chromedp
 // serializes actions through a single executor per target, so if webmcp.Enable
 // hangs, subsequent chromedp.Run calls on the same context would block forever.
@@ -142,9 +142,7 @@ func enableWebMCP(ctx context.Context) (*webMCPCollector, error) {
 		return collector, nil
 	}
 
-	// CDP domain failed. Probe JS APIs using runtime.Evaluate directly
-	// to avoid blocking on the chromedp executor (which may still be held
-	// by the timed-out webmcp.Enable goroutine).
+	// CDP domain failed. Probe the JS APIs with runtime.Evaluate instead.
 	type jsProbe struct {
 		hasContext bool
 		hasTesting bool
@@ -153,11 +151,9 @@ func enableWebMCP(ctx context.Context) (*webMCPCollector, error) {
 	jsCh := make(chan jsProbe, 1)
 	go func() {
 		var p jsProbe
-		// Use chromedp.Run with ActionFunc to get the cdp executor context,
-		// then call runtime.Evaluate directly. This queues behind the hung
-		// Enable only if the executor is truly blocked — but since Enable
-		// sends a CDP command and waits for a response, the executor is
-		// released between commands.
+		// Run an ActionFunc to get the executor context, then call
+		// runtime.Evaluate directly. The executor is released while the
+		// timed-out Enable waits for its reply, so this does not queue behind it.
 		p.err = chromedp.Run(ctx, chromedp.ActionFunc(func(ectx context.Context) error {
 			// Check modelContext.
 			res, _, err := runtime.Evaluate(`typeof navigator.modelContext !== 'undefined'`).Do(ectx)

@@ -101,7 +101,7 @@ func TestSourcemapPipeline_EndToEnd(t *testing.T) {
 	browserCtx, browserCancel := chromedp.NewContext(allocCtx)
 	defer browserCancel()
 
-	// coverage.Start now wraps CDP calls in chromedp.Run internally,
+	// coverage.Start wraps CDP calls in chromedp.Run internally,
 	// so we can pass the outer browserCtx directly.
 	cov := coverage.New(true)
 
