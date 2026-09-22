@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+	"strings"
 	"time"
 
 	"errors"
@@ -207,7 +208,7 @@ func (p *Page) checkWebSocketCondition(condition WebSocketWaitCondition, options
 					return conn, true
 				}
 			case WebSocketError:
-				// This would require additional error tracking
+				// Errors are not tracked per connection; never matches.
 				return conn, false
 			}
 		}
@@ -222,17 +223,13 @@ func (p *Page) matchesURLPattern(url, pattern string) bool {
 		return true
 	}
 
-	// Simple pattern matching - can be enhanced with regex
+	// Exact match first, then treat pattern as a regular expression.
 	if pattern == url {
 		return true
 	}
 
-	// Check if pattern is a regex
-	if regexp.MustCompile(pattern).MatchString(url) {
-		return true
-	}
-
-	return false
+	re, err := regexp.Compile(pattern)
+	return err == nil && re.MatchString(url)
 }
 
 // hasMatchingMessage checks if a connection has a matching message
@@ -335,17 +332,12 @@ func (p *Page) matchesMessageCriteria(frame WebSocketFrame, options *WebSocketWa
 
 // matchesPattern checks if text matches a pattern
 func (p *Page) matchesPattern(text, pattern string, caseSensitive bool) (bool, error) {
-	if !caseSensitive {
-		text = regexp.MustCompile(`(?i)`).ReplaceAllString(text, "${1}")
-		pattern = regexp.MustCompile(`(?i)`).ReplaceAllString(pattern, "${1}")
-	}
-
-	// Try exact match first
-	if text == pattern {
+	if text == pattern || !caseSensitive && strings.EqualFold(text, pattern) {
 		return true, nil
 	}
-
-	// Try regex match
+	if !caseSensitive {
+		pattern = "(?i)" + pattern
+	}
 	re, err := regexp.Compile(pattern)
 	if err != nil {
 		return false, err
@@ -508,7 +500,7 @@ func (p *Page) hasRecentWebSocketActivity(since time.Time, options *WebSocketWai
 	return false
 }
 
-// WebSocketEventWaiter provides advanced WebSocket event waiting
+// WebSocketEventWaiter waits for WebSocket events matching a condition.
 type WebSocketEventWaiter struct {
 	page    *Page
 	options *WebSocketWaitOptions
