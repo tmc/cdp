@@ -190,7 +190,7 @@ func unregisterServiceWorker(ctx context.Context, scope, tabID string) error {
 		return err
 	}
 
-	fmt.Printf("✓ Unregistered service worker for scope: %s\n", scope)
+	fmt.Printf("Unregistered service worker for scope %s\n", scope)
 	return nil
 }
 
@@ -207,7 +207,7 @@ func updateServiceWorker(ctx context.Context, scope, tabID string) error {
 		return err
 	}
 
-	fmt.Printf("✓ Triggered update for service worker: %s\n", scope)
+	fmt.Printf("Triggered update for service worker %s\n", scope)
 	return nil
 }
 
@@ -256,6 +256,6 @@ func postMessageToServiceWorker(ctx context.Context, scope, message, tabID strin
 		return err
 	}
 
-	fmt.Printf("✓ Posted message to service worker (%s): %s\n", scope, message)
+	fmt.Printf("Posted message to service worker (%s): %s\n", scope, message)
 	return nil
 }

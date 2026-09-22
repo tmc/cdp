@@ -53,13 +53,7 @@ func manageCookies(ctx context.Context, tabID string) error {
 	// List cookies
 	var cookies []*network.Cookie
 	if err := chromedp.Run(debugger.chromeCtx, chromedp.ActionFunc(func(ctx context.Context) error {
-		// Use GetCookies which returns cookies for current URL context
-		// Alternatively GetAllCookies returns everything.
-		// Let's rely on what the browser considers "cookies for this page" if we can,
-		// but GetCookies() usually needs a list of URLs.
-		// GetAllCookies() is generally what "Application -> Cookies" shows (all of them or filtered).
-		// Let's stick to GetCookies() if we can default to current URL?
-		// Actually GetCookies returns cookies for the current URL.
+		// GetCookies returns the cookies for the current page's URL.
 		var err error
 		cookies, err = network.GetCookies().Do(ctx)
 		return err

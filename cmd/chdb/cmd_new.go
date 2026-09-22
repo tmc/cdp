@@ -35,7 +35,7 @@ func createNewTarget(ctx context.Context, url string) error {
 		return err
 	}
 
-	fmt.Printf("✓ Created new target: %s\n", target.ID)
+	fmt.Printf("Created target %s\n", target.ID)
 	fmt.Printf("  Title: %s\n", target.Title)
 	fmt.Printf("  Type: %s\n", target.Type)
 

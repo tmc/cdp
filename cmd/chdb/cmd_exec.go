@@ -47,7 +47,7 @@ func executeJavaScript(ctx context.Context, expression string, tabID string) err
 		return err
 	}
 
-	fmt.Printf("✓ Executed: %s\n", expression)
+	fmt.Printf("Executed: %s\n", expression)
 	fmt.Printf("Result: %v\n", result)
 
 	// Give Chrome a moment to complete any pending operations

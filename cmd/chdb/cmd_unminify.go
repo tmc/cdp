@@ -20,8 +20,8 @@ var (
 
 var unminifyCmd = &cobra.Command{
 	Use:   "unminify <url>",
-	Short: "Backfill sourcemaps using AI",
-	Long:  `Downloads a minified script, beautifies it, uses AI to rename variables, and generates a sourcemap.`,
+	Short: "Download a minified script and reformat it",
+	Long:  `Downloads a minified script and writes a reformatted copy. AI-assisted renaming (--api-key) is not implemented.`,
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		ctx := createContext()
@@ -37,8 +37,6 @@ func init() {
 	unminifyCmd.Flags().String("tab", "", "Target tab ID")
 	unminifyCmd.Flags().StringVarP(&unminifyOutDir, "out-dir", "o", "unminified", "Output directory")
 	unminifyCmd.Flags().StringVar(&unminifyApiKey, "api-key", os.Getenv("GEMINI_API_KEY"), "Gemini API Key")
-	// Register with root
-	// root.AddCommand(unminifyCmd) // Assuming main.go handles this or we add to a parent
 }
 
 func runUnminify(ctx context.Context, tabID, url string) error {
@@ -58,7 +56,6 @@ func runUnminify(ctx context.Context, tabID, url string) error {
 	log.Printf("Fetched %d bytes.", len(content))
 
 	// 2. Format (Beautify) & Generate Base Sourcemap
-	// Todo: Implement robust formatter
 	beautified, baseMap := fastBeautify(content, url)
 
 	// 3. AI Analysis (Rename)
@@ -74,8 +71,6 @@ func runUnminify(ctx context.Context, tabID, url string) error {
 		log.Printf("Applying %d renames...", len(renames))
 		finalCode, _ = applyRenames(beautified, baseMap, renames)
 	}
-
-	// For Prototype: Just save beautified
 
 	// Save
 	if err := os.MkdirAll(unminifyOutDir, 0755); err != nil {
@@ -159,8 +154,6 @@ func fetchScriptContent(ctx context.Context, d *ChromeDebugger, url string) (str
 	findResource(tree)
 
 	if !found {
-		// Fallback: If not found in tree, use Runtime.evaluate (maybe it's dynamically loaded?)
-		// But for now, just return error to be explicit
 		return "", fmt.Errorf("resource %s not found in resource tree", url)
 	}
 
@@ -168,8 +161,7 @@ func fetchScriptContent(ctx context.Context, d *ChromeDebugger, url string) (str
 }
 
 func fastBeautify(minified string, filename string) (string, string) {
-	// Very dumb "formatter" for prototype
-	// Just indent on { and ;
+	// Break lines after '{' and ';' and indent by brace depth.
 	var sb strings.Builder
 	depth := 0
 
@@ -184,7 +176,7 @@ func fastBeautify(minified string, filename string) (string, string) {
 			if depth < 0 {
 				depth = 0
 			}
-			sb.WriteRune('\n') // Pre-newline?
+			sb.WriteRune('\n')
 			sb.WriteString(strings.Repeat("  ", depth))
 		} else if r == ';' {
 			sb.WriteRune('\n')
@@ -192,11 +184,10 @@ func fastBeautify(minified string, filename string) (string, string) {
 		}
 	}
 
-	return sb.String(), "" // TODO: Sourcemap
+	return sb.String(), ""
 }
 
-// Placeholder for GenAI usage
-// analyzeRenames is disabled for now.
+// analyzeRenames is not implemented and returns no renames.
 func analyzeRenames(ctx context.Context, code string) (map[string]string, error) {
 	return nil, nil
 }

@@ -51,21 +51,13 @@ func runTrace(ctx context.Context, tabID string) error {
 	}
 
 	// Capture trace events
-	var traceEvents []interface{} // Using interface{} effectively captures raw JSON events
-	// Or we can use []tracing.Event if we want typed events.
-	// The Chrome trace viewer expects an array of event objects or a specific JSON structure.
-	// tracing.DataCollected provides []Event.
+	var traceEvents []interface{}
 
 	traceDone := make(chan struct{})
 
 	chromedp.ListenTarget(debugger.chromeCtx, func(ev interface{}) {
 		switch e := ev.(type) {
 		case *tracing.EventDataCollected:
-			// Append events
-			// Note: EventDataCollected contains []tracing.Event.
-			// We need to store them.
-			// However, simple appending might copy a lot.
-			// For CLI tool, this is fine.
 			for _, event := range e.Value {
 				traceEvents = append(traceEvents, event)
 			}
@@ -88,9 +80,7 @@ func runTrace(ctx context.Context, tabID string) error {
 	log.Println("Waiting for trace data collection...")
 	<-traceDone
 
-	// Write trace to file
-	// Format: {"traceEvents": [...]} or just [...] depending on viewer support.
-	// Standard trace format wraps events in "traceEvents".
+	// Write the trace in the {"traceEvents": [...]} form the trace viewer loads.
 	outputData := map[string]interface{}{
 		"traceEvents": traceEvents,
 	}

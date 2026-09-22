@@ -19,7 +19,7 @@ import (
 var bridgeCmd = &cobra.Command{
 	Use:   "bridge",
 	Short: "Start a multiplexing debug bridge",
-	Long: `Starts a WebSocket bridge that allows multiple clients (CLI, GUI, Scripts) 
+	Long: `Starts a WebSocket bridge that allows multiple clients (CLI, GUI, scripts)
 to share a single Chrome specific debugging session.
 
 It connects to a target Chrome instance and exposes a WebSocket server.
@@ -44,7 +44,7 @@ WORKFLOWS:
    - You debug manually in Chrome DevTools (via Bridge).
    - A script monitors events or runs audits in the background via the same Bridge.`,
 	Example: `  # 1. Start Chrome with remote debugging
-  ./start-chrome-debug.sh
+  google-chrome --remote-debugging-port=9222
 
   # 2. Start the Bridge (Default: :9229 -> :9222)
   chdb bridge
@@ -153,9 +153,7 @@ func runBridge(port, targetHost string, shouldOpen bool) error {
 		if json.NewDecoder(vResp.Body).Decode(&vInfo) == nil {
 			// Extract revision from "WebKit-Version": "537.36 (@d9d2e0...)"
 			if ver, ok := vInfo["WebKit-Version"].(string); ok {
-				// Simple extraction: find string between parens?
-				// Typically format is "537.36 (@<hash>)"
-				// Let's implement a robust extraction in a helper or inline
+				// The revision is in parentheses: "537.36 (@<hash>)".
 				start := -1
 				for i, r := range ver {
 					if r == '@' {
@@ -262,7 +260,8 @@ func runBridge(port, targetHost string, shouldOpen bool) error {
 		}
 	})
 
-	// API: Rename Symbol (Phase 2)
+	// /api/rename: rename a symbol. Not implemented: the handler reports
+	// the request as queued and does nothing.
 	http.HandleFunc("/api/rename", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" {
 			http.Error(w, "Method not allowed", 405)
@@ -294,7 +293,7 @@ func runBridge(port, targetHost string, shouldOpen bool) error {
 		json.NewEncoder(w).Encode(response)
 	})
 
-	// Magic Launch Handler (Triggers Chrome to open the URL via CDP)
+	// /open-inspector opens the URL in Chrome over CDP.
 	http.HandleFunc("/open-inspector", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" {
 			http.Error(w, "Method not allowed", 405)
@@ -492,8 +491,6 @@ func (b *Bridge) handleUpstreamMessage(message []byte) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	// ... (Existing ID logic kept simple for brevity, full broadcast) ...
-
 	// Broadcast to all clients
 	for client := range b.clients {
 		select {
@@ -566,8 +563,7 @@ func (c *Client) writePump() {
 func serveLandingPage(w http.ResponseWriter, r *http.Request, port, revision string) {
 	w.Header().Set("Content-Type", "text/html")
 
-	// Reverted to devtools:// scheme (AppSpot was 404ing).
-	// Fixed String formatting: ensure only PORT is passed if using %s
+	// Use the devtools:// scheme; the hosted frontend URL returns 404.
 	devtoolsURL := fmt.Sprintf("devtools://devtools/bundled/inspector.html?remoteFrontend=true&experiments=true&ws=127.0.0.1:%s", port)
 
 	html := fmt.Sprintf(`
@@ -668,7 +664,7 @@ function launchAuto() {
 	</div>
 
 	<div class="note">
-		Bridge Status: 🟢 Connected to Chrome
+		Bridge status: connected to Chrome
 	</div>
 </div>
 </body>

@@ -1,18 +1,17 @@
 # CHDB - Chrome Debugger
 
-CHDB is a comprehensive command-line debugger for Chrome and Chromium browsers that provides full access to Chrome DevTools Protocol functionality from the command line.
+chdb is a command-line debugger for Chrome and Chromium built on the Chrome DevTools Protocol.
 
 ## Features
 
-- **Complete DevTools Access**: Full Chrome DevTools functionality from command line
-- **DevTools-in-DevTools**: Open DevTools interface for any target
-- **Interactive Console**: JavaScript REPL with Chrome context
-- **Network Monitoring**: Real-time network request/response monitoring
-- **DOM Inspection**: Element inspection and manipulation
-- **Screenshot Capture**: Take screenshots of any target
-- **Breakpoint Management**: Set and manage JavaScript breakpoints
-- **Target Management**: Create, list, and connect to Chrome targets
-- **Performance Profiling**: CPU and heap profiling capabilities
+- Open DevTools for any target
+- JavaScript console attached to a page
+- Network monitoring
+- DOM inspection
+- Screenshots
+- JavaScript breakpoints
+- Target listing, creation, and attach
+- CPU and heap profiling
 
 ## Installation
 
@@ -81,7 +80,7 @@ chdb screenshot my-screenshot.png
 chdb screenshot --tab <tab-id> page.png
 ```
 
-### Advanced DevTools Features
+### Debugging Commands
 
 #### Open DevTools Interface
 ```bash
@@ -125,10 +124,10 @@ chdb monitor --duration 5m
 #### Set Breakpoints
 ```bash
 # Set simple breakpoint
-chdb break "script.js:42"
+chdb break set "script.js:42"
 
 # Set conditional breakpoint
-chdb break "app.js:100" --condition "user.isAdmin"
+chdb break set "app.js:100" --condition "user.isAdmin"
 ```
 
 #### Interactive Debugging
@@ -183,32 +182,6 @@ chdb profile heap
 chdb profile heap --output heap-snapshot.json
 ```
 
-## DevTools-in-DevTools Capability
-
-CHDB provides full access to Chrome DevTools through multiple methods:
-
-### 1. GUI DevTools Access
-```bash
-# Open full DevTools interface in browser
-chdb devtools --tab <tab-id>
-```
-
-### 2. Command-Line DevTools
-```bash
-# Use any DevTools feature via CLI
-chdb monitor          # Network panel
-chdb console          # Console panel
-chdb inspect <sel>    # Elements panel
-chdb profile cpu      # Performance panel
-chdb debug            # Sources panel
-```
-
-### 3. Programmatic Access
-```bash
-# Execute any DevTools command
-chdb exec "chrome.devtools.inspectedWindow.eval('document.title')"
-```
-
 ## Examples
 
 ### Web Development Workflow
@@ -232,7 +205,7 @@ chdb exec "window.myApp.runTests()"
 ### Debugging Session
 ```bash
 # 1. Set breakpoints
-chdb break "app.js:42" --condition "debug === true"
+chdb break set "app.js:42" --condition "debug === true"
 
 # 2. Start interactive debugging
 chdb debug
@@ -264,6 +237,8 @@ chdb monitor --duration 10s
 
 ## Command Reference
 
+Run `chdb help` for the full command list. Common commands:
+
 | Command | Description | Options |
 |---------|-------------|---------|
 | `list` | List Chrome targets | `--port` |
@@ -274,26 +249,11 @@ chdb monitor --duration 10s
 | `console` | Interactive console | `--tab` |
 | `inspect <selector>` | Inspect DOM element | `--tab` |
 | `monitor` | Monitor network | `--duration` |
-| `break <location>` | Set breakpoint | `--condition` |
+| `break set <location>` | Set breakpoint | `--condition`, `--tab` |
 | `debug` | Start debugging | `--tab` |
 | `new [url]` | Create new target | |
 | `attach [port]` | Attach to Chrome | |
 | `profile <type>` | CPU/heap profiling | `--duration`, `--output` |
-
-## Integration with Other Tools
-
-CHDB works well with other debugging tools:
-
-```bash
-# Use with existing CDP tools
-chdb exec "console.log('CHDB active')" && cdp-tool continue
-
-# Chain with curl for testing
-curl -s api.example.com | jq '.data' | chdb exec "console.log(JSON.parse('$(cat)'))"
-
-# Integration with build tools
-npm run build && chdb navigate http://localhost:3000 && chdb screenshot build-result.png
-```
 
 ## Troubleshooting
 
@@ -314,7 +274,3 @@ List available targets:
 ```bash
 chdb list
 ```
-
-## Advanced Usage
-
-For more advanced usage patterns and automation scripts, see the examples directory or visit the project documentation.

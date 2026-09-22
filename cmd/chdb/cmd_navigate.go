@@ -41,7 +41,7 @@ func navigateToURL(ctx context.Context, url string, tabID string) error {
 		return err
 	}
 
-	fmt.Printf("✓ Navigated to: %s\n", url)
+	fmt.Printf("Navigated to %s\n", url)
 
 	// Give Chrome a moment to complete navigation
 	// before closing the connection

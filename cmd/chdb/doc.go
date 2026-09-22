@@ -40,11 +40,11 @@ Every command has its own flags and help text:
 # Inspecting the page
 
 	dom            Dump the DOM tree, or one node
-	inspect <sel>  Inspect an element. Superseded by dom get
+	inspect <sel>  Inspect an element. See also dom --selector
 	css            Inspect computed styles
 	sources        Dump page sources, the resource tree and debugger scripts,
 	               as a txtar archive
-	unminify <url> Backfill source maps
+	unminify <url> Reformat a minified script
 	storage        Inspect local or session storage
 	cookies        Manage cookies
 	audit          Check the page for issues
@@ -59,7 +59,7 @@ Every command has its own flags and help text:
 
 # Performance
 
-	profile <type> Profile CPU or heap usage
+	profile <type> Not implemented; prints a placeholder
 	heap           Capture a heap snapshot
 	trace          Record a performance trace
 	animation      Debug and control animations

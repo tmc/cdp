@@ -79,10 +79,6 @@ func runMonitorXHR(ctx context.Context, tabID string) error {
 		case *debugger.EventPaused:
 			log.Printf("Paused! Reason: %s", e.Reason)
 
-			// Process the pause in a goroutine to not block the listener?
-			// Actually listener is sync, so we can do work here.
-			// But we need to use the context to make CDP calls.
-
 			// Dump state
 			if err := dumpStackState(debuggerClient.chromeCtx, e, monitorXHRDumpDir); err != nil {
 				log.Printf("Error dumping state: %v", err)
@@ -90,9 +86,7 @@ func runMonitorXHR(ctx context.Context, tabID string) error {
 
 			// Resume
 			go func() {
-				// Resume asynchronously to allow this listener to return
-				// (Though for Paused event, we usually want to handle it before resuming)
-				// Small delay to ensure dump writes? No need.
+				// Resume from a goroutine so the listener can return.
 				resumeChan <- true
 			}()
 		}

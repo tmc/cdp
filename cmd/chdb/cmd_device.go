@@ -264,7 +264,7 @@ func setDeviceProfile(ctx context.Context, profileName, tabID string) error {
 		return err
 	}
 
-	fmt.Printf("✓ Device profile set to: %s\n", profileName)
+	fmt.Printf("Device profile set to %s\n", profileName)
 	return nil
 }
 
@@ -281,7 +281,7 @@ func setCustomDevice(ctx context.Context, width, height int64, scaleFactor float
 		return err
 	}
 
-	fmt.Printf("✓ Custom device set: %dx%d (scale: %.1f, mobile: %t, touch: %t)\n",
+	fmt.Printf("Custom device set: %dx%d (scale: %.1f, mobile: %t, touch: %t)\n",
 		width, height, scaleFactor, mobile, touch)
 	return nil
 }
@@ -299,7 +299,7 @@ func resetDevice(ctx context.Context, tabID string) error {
 		return err
 	}
 
-	fmt.Println("✓ Device emulation reset to desktop")
+	fmt.Println("Device emulation reset to desktop")
 	return nil
 }
 
@@ -342,12 +342,12 @@ func simulateTouch(ctx context.Context, x, y float64, touchType, tabID string) e
 		if err := deviceCtrl.Tap(ctx, x, y); err != nil {
 			return err
 		}
-		fmt.Printf("✓ Tapped at coordinates (%.1f, %.1f)\n", x, y)
+		fmt.Printf("Tapped at coordinates (%.1f, %.1f)\n", x, y)
 	} else {
 		if err := deviceCtrl.SimulateTouch(ctx, x, y, touchType); err != nil {
 			return err
 		}
-		fmt.Printf("✓ Touch %s at coordinates (%.1f, %.1f)\n", touchType, x, y)
+		fmt.Printf("Touch %s at coordinates (%.1f, %.1f)\n", touchType, x, y)
 	}
 
 	return nil
@@ -366,7 +366,7 @@ func simulateSwipe(ctx context.Context, startX, startY, endX, endY float64, dura
 		return err
 	}
 
-	fmt.Printf("✓ Swiped from (%.1f, %.1f) to (%.1f, %.1f) in %dms\n",
+	fmt.Printf("Swiped from (%.1f, %.1f) to (%.1f, %.1f) in %dms\n",
 		startX, startY, endX, endY, duration)
 	return nil
 }
@@ -384,6 +384,6 @@ func setOrientation(ctx context.Context, orientation string, angle int64, tabID 
 		return err
 	}
 
-	fmt.Printf("✓ Orientation set to: %s (angle: %d°)\n", orientation, angle)
+	fmt.Printf("Orientation set to %s (angle %d°)\n", orientation, angle)
 	return nil
 }

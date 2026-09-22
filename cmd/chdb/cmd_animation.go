@@ -210,7 +210,7 @@ func listAnimations(ctx context.Context, tabID string) error {
 		fmt.Printf("  Full details: %s\n", formatJSON(anim))
 	}
 
-	fmt.Printf("\n📊 Total animations: %d\n", len(animations))
+	fmt.Printf("\nTotal animations: %d\n", len(animations))
 	return nil
 }
 
@@ -227,7 +227,7 @@ func pauseAnimation(ctx context.Context, animationID, tabID string) error {
 		return err
 	}
 
-	fmt.Printf("✓ Animation paused: %s\n", animationID)
+	fmt.Printf("Animation paused: %s\n", animationID)
 	return nil
 }
 
@@ -244,7 +244,7 @@ func resumeAnimation(ctx context.Context, animationID, tabID string) error {
 		return err
 	}
 
-	fmt.Printf("✓ Animation resumed: %s\n", animationID)
+	fmt.Printf("Animation resumed: %s\n", animationID)
 	return nil
 }
 
@@ -261,7 +261,7 @@ func pauseAllAnimations(ctx context.Context, tabID string) error {
 		return err
 	}
 
-	fmt.Println("✓ All animations paused")
+	fmt.Println("All animations paused")
 	return nil
 }
 
@@ -278,7 +278,7 @@ func resumeAllAnimations(ctx context.Context, tabID string) error {
 		return err
 	}
 
-	fmt.Println("✓ All animations resumed")
+	fmt.Println("All animations resumed")
 	return nil
 }
 
@@ -295,7 +295,7 @@ func setAnimationSpeed(ctx context.Context, speed float64, tabID string) error {
 		return err
 	}
 
-	fmt.Printf("✓ Animation speed set to: %.2fx\n", speed)
+	fmt.Printf("Animation speed set to %.2fx\n", speed)
 	return nil
 }
 
@@ -405,7 +405,7 @@ func showAnimationTimeline(ctx context.Context, tabID string) error {
 	return nil
 }
 
-// Helper function to format JSON for display
+// formatJSON formats data as indented JSON.
 func formatJSON(data interface{}) string {
 	if jsonBytes, err := json.MarshalIndent(data, "", "  "); err == nil {
 		return string(jsonBytes)

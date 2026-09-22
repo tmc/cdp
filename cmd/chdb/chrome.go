@@ -34,7 +34,7 @@ type ChromeTarget struct {
 	WebSocketURL string `json:"webSocketDebuggerUrl,omitempty"`
 }
 
-// ChromeDebugger provides comprehensive Chrome debugging capabilities
+// ChromeDebugger is a connection to a Chrome instance being debugged.
 type ChromeDebugger struct {
 	context       context.Context
 	cancel        context.CancelFunc

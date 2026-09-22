@@ -1,5 +1,3 @@
-// Package main implements the CHDB (Chrome Debugger) CLI tool for
-// Chrome and Chromium browser debugging using the Chrome DevTools Protocol.
 package main
 
 import (
@@ -22,9 +20,8 @@ var (
 
 var rootCmd = &cobra.Command{
 	Use:   "chdb",
-	Short: "Chrome Debugger - Advanced debugging for Chrome/Chromium browsers",
-	Long: `CHDB provides advanced debugging capabilities for Chrome and Chromium browsers
-using the Chrome DevTools Protocol.
+	Short: "Debug Chrome and Chromium over the DevTools protocol",
+	Long: `Chdb debugs Chrome and Chromium browsers using the Chrome DevTools Protocol.
 
 Features:
 - Attach to running Chrome instances
@@ -33,7 +30,7 @@ Features:
 - Network monitoring and interception
 - JavaScript execution and profiling
 - Performance analysis
-- Screenshot and PDF generation`,
+- Screenshots`,
 	Version: "1.0.0",
 }
 

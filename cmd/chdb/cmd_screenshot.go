@@ -52,7 +52,7 @@ func takeScreenshot(ctx context.Context, filename string, tabID string) error {
 		return err
 	}
 
-	fmt.Printf("✓ Screenshot saved: %s\n", filename)
+	fmt.Printf("Screenshot saved to %s\n", filename)
 
 	// Give Chrome a moment to complete any pending operations
 	// before closing the connection

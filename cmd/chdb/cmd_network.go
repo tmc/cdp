@@ -127,13 +127,12 @@ func runNetworkMonitor(ctx context.Context, tabID string) error {
 }
 
 func printEvent(typeStr string, ev interface{}) {
-	// Simple JSON output for now
 	data := map[string]interface{}{
 		"type":  typeStr,
 		"event": ev,
 	}
 	enc := json.NewEncoder(os.Stdout)
-	// enc.SetIndent("", "  ") // Keep it one lined for streaming
+	// One event per line, for streaming.
 	if err := enc.Encode(data); err != nil {
 		log.Printf("Failed to encode event: %v", err)
 	}

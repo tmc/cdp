@@ -51,14 +51,6 @@ func runEmulation(ctx context.Context, tabID string) error {
 	var actions []chromedp.Action
 
 	if emulateDeviceName != "" {
-		// Use chromedp/device to look up the device
-		// Note: chromedp/device defines constants/types, but might not have a string lookup map exported directly
-		// or easily accessible without a huge switch.
-		// Actually, device.Info isn't a map, it's a type.
-		// We might need to implement a simple lookup for common devices or check how chromedp does it.
-		// For simplicity/MVP, let's support a few hardcoded popular ones found in device package
-		// or allow the user to match exactly if we can iterate key mapping.
-		// `device.IPhone12` is a variable of type Info.
 
 		d, ok := lookupDevice(emulateDeviceName)
 		if !ok {
@@ -93,8 +85,7 @@ func runEmulation(ctx context.Context, tabID string) error {
 	return nil
 }
 
-// lookupDevice maps a string name to device.Info.
-// Expanding this list as needed.
+// lookupDevice returns the chromedp device preset with the given name.
 func lookupDevice(name string) (chromedp.Device, bool) {
 	switch name {
 	case "iPhone 12":

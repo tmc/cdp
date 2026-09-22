@@ -7,10 +7,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// Keep the original inspect command for backward compatibility
+// inspectCmd is the original element inspector, kept for compatibility.
 var inspectCmd = &cobra.Command{
 	Use:   "inspect <selector>",
-	Short: "Inspect DOM element (legacy, use 'dom get' instead)",
+	Short: "Inspect DOM element (see also dom --selector)",
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		ctx := createContext()

@@ -133,7 +133,7 @@ func setBreakpointNew(ctx context.Context, location string, condition string, ta
 		return err
 	}
 
-	fmt.Printf("✓ Breakpoint set:\n")
+	fmt.Printf("Breakpoint set:\n")
 	fmt.Printf("  ID: %s\n", bp.ID)
 	fmt.Printf("  Location: %s:%d\n", bp.URL, bp.LineNumber)
 	if bp.Condition != "" {
@@ -198,7 +198,7 @@ func removeBreakpoint(ctx context.Context, breakpointID string, tabID string) er
 		return err
 	}
 
-	fmt.Printf("✓ Breakpoint removed: %s\n", breakpointID)
+	fmt.Printf("Breakpoint removed: %s\n", breakpointID)
 
 	return nil
 }
@@ -228,7 +228,7 @@ func clearBreakpoints(ctx context.Context, tabID string) error {
 		}
 	}
 
-	fmt.Printf("✓ Cleared %d breakpoint(s)\n", len(breakpoints))
+	fmt.Printf("Cleared %d breakpoint(s)\n", len(breakpoints))
 
 	return nil
 }
@@ -245,7 +245,7 @@ func setXHRBreakpoint(ctx context.Context, pattern string, tabID string) error {
 		return err
 	}
 
-	fmt.Printf("✓ XHR Breakpoint set for: %s\n", pattern)
+	fmt.Printf("XHR breakpoint set for %s\n", pattern)
 	return nil
 }
 
@@ -261,6 +261,6 @@ func setEventBreakpoint(ctx context.Context, name string, tabID string) error {
 		return err
 	}
 
-	fmt.Printf("✓ Event Breakpoint set for: %s\n", name)
+	fmt.Printf("Event breakpoint set for %s\n", name)
 	return nil
 }

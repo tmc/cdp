@@ -116,7 +116,7 @@ func pauseExecution(ctx context.Context, tabID string) error {
 		return err
 	}
 
-	fmt.Println("✓ Execution paused")
+	fmt.Println("Execution paused")
 
 	return nil
 }
@@ -138,7 +138,7 @@ func resumeExecution(ctx context.Context, tabID string) error {
 		return err
 	}
 
-	fmt.Println("✓ Execution resumed")
+	fmt.Println("Execution resumed")
 
 	return nil
 }
@@ -160,7 +160,7 @@ func stepInto(ctx context.Context, tabID string) error {
 		return err
 	}
 
-	fmt.Println("✓ Stepped into function")
+	fmt.Println("Stepped into function")
 
 	return nil
 }
@@ -182,7 +182,7 @@ func stepOver(ctx context.Context, tabID string) error {
 		return err
 	}
 
-	fmt.Println("✓ Stepped over line")
+	fmt.Println("Stepped over line")
 
 	return nil
 }
@@ -204,7 +204,7 @@ func stepOut(ctx context.Context, tabID string) error {
 		return err
 	}
 
-	fmt.Println("✓ Stepped out of function")
+	fmt.Println("Stepped out of function")
 
 	return nil
 }

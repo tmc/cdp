@@ -25,7 +25,7 @@ func TestRootHelp(t *testing.T) {
 		t.Fatalf("unexpected stderr:\n%s", stderr.String())
 	}
 	for _, want := range []string{
-		"CHDB provides advanced debugging capabilities",
+		"Chdb debugs Chrome and Chromium browsers",
 		"Available Commands",
 		"attach",
 		"screenshot",

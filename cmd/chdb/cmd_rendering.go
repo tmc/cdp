@@ -225,15 +225,15 @@ func measureFrameRate(ctx context.Context, duration int, tabID string) error {
 
 	// Show summary
 	if fps, ok := frameRateInfo["fps"].(float64); ok {
-		fmt.Printf("\n📊 Summary:\n")
+		fmt.Printf("\nSummary:\n")
 		fmt.Printf("  Average FPS: %.2f\n", fps)
 
 		if fps >= 60 {
-			fmt.Printf("  Performance: 🟢 Excellent (60+ FPS)\n")
+			fmt.Printf("  Performance: good (60+ FPS)\n")
 		} else if fps >= 30 {
-			fmt.Printf("  Performance: 🟡 Good (30-60 FPS)\n")
+			fmt.Printf("  Performance: fair (30-60 FPS)\n")
 		} else {
-			fmt.Printf("  Performance: 🔴 Poor (<30 FPS)\n")
+			fmt.Printf("  Performance: poor (<30 FPS)\n")
 		}
 	}
 
@@ -257,7 +257,7 @@ func togglePaintFlashing(ctx context.Context, enabled bool, tabID string) error 
 	if enabled {
 		status = "enabled"
 	}
-	fmt.Printf("✓ Paint flashing %s\n", status)
+	fmt.Printf("Paint flashing %s\n", status)
 	return nil
 }
 
@@ -278,7 +278,7 @@ func toggleLayerBorders(ctx context.Context, enabled bool, tabID string) error {
 	if enabled {
 		status = "shown"
 	}
-	fmt.Printf("✓ Layer borders %s\n", status)
+	fmt.Printf("Layer borders %s\n", status)
 	return nil
 }
 
@@ -313,7 +313,7 @@ func showCompositingLayers(ctx context.Context, tabID string) error {
 		}
 	}
 
-	fmt.Printf("\n📊 Total layers: %d\n", len(layers))
+	fmt.Printf("\nTotal layers: %d\n", len(layers))
 	return nil
 }
 
@@ -330,7 +330,7 @@ func highlightRenderingElement(ctx context.Context, selector, tabID string) erro
 		return err
 	}
 
-	fmt.Printf("✓ Highlighted element: %s\n", selector)
+	fmt.Printf("Highlighted %s\n", selector)
 	return nil
 }
 
@@ -347,7 +347,7 @@ func clearRenderingHighlights(ctx context.Context, tabID string) error {
 		return err
 	}
 
-	fmt.Println("✓ Cleared all rendering highlights")
+	fmt.Println("Cleared rendering highlights")
 	return nil
 }
 
@@ -376,10 +376,10 @@ func showCompositingReasons(ctx context.Context, selector, tabID string) error {
 
 	// Show summary if triggers are available
 	if triggers, ok := compositingInfo["compositingTriggers"].(map[string]interface{}); ok {
-		fmt.Printf("\n📊 Compositing Triggers:\n")
+		fmt.Printf("\nCompositing triggers:\n")
 		for trigger, active := range triggers {
 			if isActive, ok := active.(bool); ok && isActive {
-				fmt.Printf("  ✓ %s\n", trigger)
+				fmt.Printf("  %s\n", trigger)
 			}
 		}
 	}
@@ -404,6 +404,6 @@ func showScrollBottlenecks(ctx context.Context, enabled bool, tabID string) erro
 	if enabled {
 		status = "highlighted"
 	}
-	fmt.Printf("✓ Scroll bottlenecks %s\n", status)
+	fmt.Printf("Scroll bottlenecks %s\n", status)
 	return nil
 }
