@@ -104,7 +104,6 @@ reload                        # Reload page
 wait <selector>               # Wait for element to appear
 wait 2s                       # Wait for duration
 wait 500ms                    # Millisecond precision
-wait h1                       # Wait for an h1 element
 ```
 
 ### DOM Interaction
@@ -153,10 +152,12 @@ viewport 390 640              # Set browser viewport size
 
 ### JavaScript
 ```
-js document.title             # Execute single-line JS
-js window.scrollTo(0, 500)    # Execute any JS
-jsfile helper.js              # Execute JS from embedded file
+js window.scrollTo(0, 500)    # Execute JS; the result is discarded
+jsfile helper.js              # Execute JS from embedded file; prints a non-null result
 ```
+
+Wrap JavaScript that contains `#` or `'` in single quotes and use double quotes
+inside it: `js 'document.querySelector("#go").click()'`.
 
 ### Extraction
 ```
@@ -221,7 +222,7 @@ snapshot                      # Full accessibility tree with refs
 snapshot -i                   # Interactive elements only
 snapshot --compact            # Remove structural noise
 snapshot --depth 3            # Limit depth
-snapshot --selector #main     # Scope to CSS selector
+snapshot --selector '#main'   # Scope to CSS selector
 ```
 
 Snapshot output includes refs like `@e1`, `@e2` that you can use with click/fill:
@@ -245,7 +246,7 @@ send-msg "Hello"                     # Call registered command
 Sourced scripts receive arguments as `${ARG1}`, `${ARG2}`, etc., and `${ARGC}`
 for count.
 
-### HAR Recording & Tagging (Advanced)
+### HAR Recording & Tagging
 ```
 tag login-flow                # Start tagging network requests
 note Starting login           # Add note to HAR
@@ -263,7 +264,7 @@ runner or from commands that set variables:
 ```text
 -- main.cdp --
 goto ${BASE_URL}/login
-fill #username ${USERNAME}
+fill '#username' ${USERNAME}
 ```
 
 Commands like `extract`, `title`, and `url` set environment variables
@@ -305,26 +306,26 @@ allowed failure.
 -- main.cdp --
 # Navigate to login page
 goto ${BASE_URL}/login
-wait #login-form
+wait '#login-form'
 screenshot 01-login-page.png
 
 # Fill credentials
-fill #email test@example.com
-fill #password testpass123
+fill '#email' test@example.com
+fill '#password' testpass123
 screenshot 02-filled-form.png
 
 # Submit
 click button[type="submit"]
-wait #dashboard
+wait '#dashboard'
 screenshot 03-dashboard.png
 
 # Verify
 assert text h1 Welcome
 title
+jsfile verify.js
 log Login test passed
 
 -- verify.js --
-// Additional verification script
 (function() {
   var token = localStorage.getItem('auth_token');
   return token ? 'authenticated' : 'not authenticated';
@@ -338,8 +339,8 @@ Place reusable `.cdp` and `.js` files in `examples/lib/`:
 ```
 examples/lib/
   screenshot.cdp      # screenshot $ARG1 + log
-  wait-for-load.cdp   # Standard page load wait
-  enable-fc.js        # JS helper for enabling features
+  wait-for-load.cdp   # wait 500ms + log
+  enable-fc.js        # turns on AI Studio's Function calling switch
 ```
 
 Use them with `source`:

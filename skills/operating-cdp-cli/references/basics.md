@@ -15,14 +15,14 @@ go build -o cdp ./cmd/cdp
 Launch the interactive shell to type CDP commands directly:
 
 ```bash
-# Launch with headless Chrome (default)
+# Launch or attach to a browser (add -headless for a headless launch)
 cdp
 
 # Connect to an already-running Chrome with remote debugging
 cdp --remote-host localhost --remote-port 9222 --shell
 
 # Verbose output for debugging
-cdp -v
+cdp -verbose
 ```
 
 At the `cdp>` prompt, type commands like `goto`, `click`, `screenshot`, etc.
@@ -39,12 +39,13 @@ cdp run --tab <tab-id> --port 9222 script.txtar
 
 ## Browser Connection
 
-The cdp tool can:
-- **Launch a new browser**: Default behavior, launches headless Chrome/Brave/Chromium.
-- **Connect to existing Chrome**: Use `--remote-host` and `--remote-port` to connect to Chrome started with `--remote-debugging-port`.
-- **Connect to a specific tab**: Use `--tab <id>` with the tab ID from `http://localhost:9222/json/list`.
+By default cdp attaches to a browser already listening on the debug port and
+otherwise launches one, headed unless `-headless` is set. Pass
+`-auto-discover=false` to always launch. To connect to a browser started with
+`--remote-debugging-port`, use `--remote-host` and `--remote-port`, and add
+`--tab <id>` to pick a tab (`cdp attach` prints the IDs).
 
-Browser discovery order: Brave > Chrome Canary > Chrome > Chrome Beta > Chromium > Edge.
+Browser discovery order on macOS: Brave > Chrome Canary > Chrome > Chrome Beta > Chrome Dev > Chromium > Edge, then Edge Beta, Edge Dev, Vivaldi, Opera, and Chrome for Testing.
 
 ## Existing Browser Attach
 

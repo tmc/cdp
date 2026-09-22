@@ -1,6 +1,6 @@
 # HAR & HARL Logging
 
-Network traffic capture using HAR (HTTP Archive) format and HARL (HAR Lines / NDJSON streaming) with both the `cdp` script engine and the repository's main capture CLI.
+Network traffic capture using HAR (HTTP Archive) format and HARL (HAR Lines / NDJSON streaming) with both the `cdp` script engine and `chrome-to-har`.
 
 ## Overview
 
@@ -8,15 +8,15 @@ Two tools handle HAR capture:
 
 | Tool | Use Case |
 |------|----------|
-| Main capture CLI | Navigate to a URL and capture network traffic to a HAR file |
+| `chrome-to-har` | Navigate to a URL and capture network traffic to a HAR file |
 | `cdp run` | Script engine: tag-based HAR recording within automation scripts |
 
-## Main CLI: Full HAR Capture
+## chrome-to-har: Full HAR Capture
 
 ### Building
 
 ```bash
-go build -o chrome-to-har .
+go build ./cmd/chrome-to-har
 ```
 
 ### Basic Usage
@@ -41,9 +41,9 @@ chrome-to-har -url https://example.com -stream
 | `-verbose` | false | Verbose logging |
 | `-stream` | false | Stream entries as NDJSON (one JSON object per line) |
 | `-profile` | | Chrome profile path to use |
-| `-cookies` | | Regex to filter cookies in HAR output |
-| `-omit` | | Regex of URLs to omit from HAR |
-| `-timeout` | 30 | Page load timeout in seconds |
+| `-cookie-domains` | | Comma-separated domains to copy cookies from |
+| `-filter` | | jq expression to filter HAR entries |
+| `-timeout` | 180 | Global timeout in seconds |
 
 ### HAR File Format
 
@@ -96,15 +96,17 @@ chrome-to-har -url https://example.com -stream | jq 'select(.request.url | conta
 chrome-to-har -url https://example.com -stream | jq -r '.response.content.mimeType' | sort | uniq -c
 ```
 
-The `.har.jsonl` extension is gitignored by default.
+This repository's `.gitignore` excludes `*.har.jsonl`.
 
 ### Domain-Separated Output
 
-The recorder supports writing separate JSONL files per domain/hostname:
+`cdp` can write separate JSONL files per page domain and request host.
+`--harl` turns on streaming; `--output-dir` routes the stream into per-host
+files instead of `--harl-file`:
 
 ```bash
-# Output goes to <outputDir>/<hostname>.jsonl
-chrome-to-har -url https://example.com -output-dir ./har-data
+# Output goes to <dir>/<page-domain>/<hostname>.jsonl
+cdp --url https://example.com --harl --output-dir ./har-data
 ```
 
 ## CDP Script Engine: Tagged HAR Recording
@@ -144,12 +146,12 @@ note Homepage loaded successfully
 # Tag login flow separately
 tag login
 goto https://example.com/login
-wait #login-form
+wait '#login-form'
 capture screenshot Login page
-fill #email test@example.com
-fill #password secret
+fill '#email' test@example.com
+fill '#password' secret
 click button[type="submit"]
-wait #dashboard
+wait '#dashboard'
 capture screenshot Dashboard loaded
 note Login flow complete
 
@@ -177,7 +179,7 @@ har output.har
 
 ### Annotations
 
-Annotations enrich the HAR file beyond standard network entries:
+Annotations add non-network records to the HAR file:
 
 ```
 # Text annotation with timestamp
@@ -190,7 +192,7 @@ capture screenshot After clicking login
 capture dom Form state before submission
 ```
 
-These are stored in HAR custom fields for debugging, documentation, or test evidence.
+These are stored in HAR custom fields.
 
 ### Complete Test Example with HAR
 
@@ -220,16 +222,16 @@ note Added first product to cart
 # Phase 3: Checkout
 tag checkout
 goto ${BASE_URL}/checkout
-wait #checkout-form
+wait '#checkout-form'
 capture screenshot Checkout form
 
-fill #name Test User
-fill #email test@example.com
-fill #card 4242424242424242
+fill '#name' Test User
+fill '#email' test@example.com
+fill '#card' 4242424242424242
 capture screenshot Form filled
 note Checkout form completed
 
-click #place-order
+click '#place-order'
 wait .order-confirmation
 capture screenshot Order confirmed
 capture dom Order confirmation page
@@ -272,17 +274,8 @@ chrome-to-har -url https://example.com \
 
 ## Recorder Internals
 
-The HAR recorder (`internal/recorder/recorder.go`) captures:
-
-- **Network.requestWillBeSent** - Request method, URL, headers, POST data
-- **Network.responseReceived** - Response status, headers, MIME type
-- **Network.loadingFinished** - Timing data, total bytes transferred
-- **Response bodies** - Async fetch of response content
-
-Features:
-- Thread-safe (mutex-protected entry list)
-- Tag ranges with start/end timestamps
-- Annotation support (notes, screenshots, DOM snapshots)
-- Streaming mode for real-time NDJSON output
-- Domain-separated writers for large captures
-- jq filter expressions and template-based output
+The HAR recorder (`internal/recorder/recorder.go`) builds entries from
+`Network.requestWillBeSent`, `Network.responseReceived`, and
+`Network.loadingFinished`, and fetches response bodies asynchronously. It also
+records tag ranges and annotations, streams NDJSON, writes per-domain files,
+and applies jq filters and Go templates to entries.

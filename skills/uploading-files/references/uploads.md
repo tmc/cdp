@@ -23,4 +23,4 @@ The MCP upload tool is:
 
 ## `cdpscript` note
 
-[The script format reference](../../writing-cdp-scripts/references/script-format.md) does not define an upload command. This is effectively MCP-only today; page-side `js` cannot set a real file input value in the browser security model.
+[The script format reference](../../writing-cdp-scripts/references/script-format.md) defines `upload <selector> <file>...`, which sets files on a file input the same way `upload_file` does. Relative paths resolve against the script working directory, then the current directory.

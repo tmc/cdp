@@ -9,7 +9,7 @@ Use this skill when the task is about browser-side JavaScript behavior rather th
 
 ## Quick start
 
-- Use `eval` or `js` for short page-side expressions
+- Use `eval` in the shell to print a value; in scripts `js` runs code and discards the result
 - Use `jsfile` for longer snippets or reusable helpers
 - Use collector scripts when the task needs structured console output over time
 

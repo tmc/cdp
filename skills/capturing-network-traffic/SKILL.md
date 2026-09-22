@@ -9,7 +9,7 @@ Use this skill when the task is about HAR output, streamed request logs, or reco
 
 ## Quick start
 
-- Use the main capture CLI for whole-session HAR capture
+- Use `chrome-to-har` or `cdp --har` for whole-session HAR capture
 - Use `cdp run` tags when network capture is part of a larger browser script
 - Prefer streamed output when the task needs incremental processing
 

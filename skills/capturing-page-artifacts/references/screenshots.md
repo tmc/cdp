@@ -15,7 +15,7 @@ wait h1
 screenshot page.png
 ```
 
-The `screenshot` command captures a full-page screenshot at 90% quality. Files are saved relative to the output directory (set with `cdp run -o <dir>`).
+The `screenshot` command captures a full-page screenshot: PNG, or JPEG at quality 90 when the name ends in `.jpg` or `.jpeg`. Files are saved relative to the output directory (set with `cdp run -o <dir>`).
 
 ### In Interactive Mode
 
@@ -43,7 +43,7 @@ All `screenshot` commands in the script save to the output dir.
 goto https://example.com
 wait h1
 
-# Mobile (iPhone-like: 375x812 @3x)
+viewport 375 812
 js window.scrollTo(0, 0)
 screenshot mobile.png
 ```
@@ -92,17 +92,17 @@ log Captured landing page
 
 # Step 2: Login form
 goto ${BASE_URL}/login
-wait #login-form
+wait '#login-form'
 screenshot 02-login-form.png
 
 # Step 3: Filled form
-fill #email test@example.com
-fill #password secret
+fill '#email' test@example.com
+fill '#password' secret
 screenshot 03-form-filled.png
 
 # Step 4: After submission
 click button[type="submit"]
-wait #dashboard
+wait '#dashboard'
 screenshot 04-dashboard.png
 log All screenshots captured
 ```
@@ -137,8 +137,8 @@ tag user-flow
 goto https://example.com
 wait body
 capture screenshot Homepage loaded
-click #login-link
-wait #login-form
+click '#login-link'
+wait '#login-form'
 capture screenshot Login form visible
 capture dom Login form DOM state
 har output.har
@@ -167,23 +167,17 @@ snap homepage.png
 
 ## Full-Page vs Viewport Screenshots
 
-The script engine's `screenshot` command uses `chromedp.FullScreenshot` which captures the entire scrollable page. In interactive mode, `screenshot` uses `chromedp.CaptureScreenshot` which captures only the visible viewport.
+The script engine's `screenshot` command always captures the entire scrollable
+page (`chromedp.FullScreenshot`). For a viewport-only capture, use the MCP
+`screenshot` tool, which captures the viewport unless `full_page` is set.
 
-To capture just the viewport in a script, use JavaScript:
+## Before Capturing
 
-```
-js document.documentElement.style.overflow = 'hidden'
-screenshot viewport-only.png
-js document.documentElement.style.overflow = ''
-```
-
-## Best Practices
-
-1. **Wait before capturing**: Always `wait` for content to load before screenshots.
-2. **Scroll to top**: Use `js window.scrollTo(0, 0)` before screenshots for consistency.
-3. **Use descriptive names**: Name screenshots by step (`01-login.png`, `02-dashboard.png`).
-4. **Use output directory**: Run with `-o` to keep artifacts organized.
-5. **Combine with assertions**: Verify page state before capturing.
+1. `wait` for the content you are capturing.
+2. Run `js window.scrollTo(0, 0)` so captures start from the same position.
+3. Name files by step (`01-login.png`, `02-dashboard.png`).
+4. Run with `-o` so artifacts land in one directory.
+5. Assert the page state before capturing it.
 
 ```
 goto https://example.com

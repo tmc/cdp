@@ -10,7 +10,7 @@ How to execute JavaScript, capture console output, and debug pages using the cdp
 # Single-line JavaScript
 js document.title
 js window.scrollTo(0, 500)
-js document.querySelector('#btn').click()
+js 'document.querySelector("#btn").click()'
 
 # Execute JS from embedded file
 jsfile helper.js
@@ -21,7 +21,7 @@ title                         # Gets title, sets $TITLE
 url                           # Gets URL, sets $URL
 ```
 
-The `js` command executes JavaScript in the page context. The `jsfile` command loads and executes a `.js` file from the txtar archive's embedded files.
+The `js` command executes JavaScript in the page context and discards the result. The `jsfile` command runs a `.js` file from the txtar archive and prints its result when it is not null. Both run in the current document only; a later `goto` discards anything they installed.
 
 ### In Interactive Mode
 
@@ -46,7 +46,7 @@ cdp> console
 
 This sends `Runtime.enable {}` which starts reporting console API calls.
 
-### Console Commands
+### Console Commands (Interactive)
 
 ```
 log Hello World                    # console.log('Hello World')
@@ -78,12 +78,13 @@ jsfile check-page.js
 
 ### Collecting Console Messages via JavaScript
 
-Inject a collector script to capture all console output during a session:
+Inject a collector after navigation to record console output from that page
+(a later `goto` discards it):
 
 ```
 -- main.cdp --
-jsfile console-collector.js
 goto https://example.com
+jsfile console-collector.js
 wait 2s
 jsfile console-dump.js
 
@@ -117,25 +118,13 @@ jsfile console-dump.js
 
 ## Debugging Techniques
 
-### Check for Page Errors
+### Page Errors and Requests
 
-```
--- main.cdp --
-js window.__errors = []; window.addEventListener('error', function(e) { window.__errors.push(e.message); });
-goto https://example.com
-wait 2s
-js window.__errors.length > 0 ? 'ERRORS: ' + window.__errors.join('; ') : 'No JS errors'
-```
-
-### Network Request Inspection via JS
-
-```
--- main.cdp --
-js window.__fetches = []; var _fetch = window.fetch; window.fetch = function(url, opts) { window.__fetches.push({url: String(url), method: (opts||{}).method || 'GET', time: Date.now()}); return _fetch.apply(this, arguments); };
-goto https://example.com
-wait 3s
-js JSON.stringify(window.__fetches.map(function(f) { return f.method + ' ' + f.url; }), null, 2)
-```
+Listeners installed with `js` or `jsfile` start after the page has loaded and
+are discarded by the next `goto`, so they miss load-time errors and requests.
+Use `cdp --console` or the MCP `get_console` and `get_errors` tools for errors,
+and `tag`/`har` (see capturing-network-traffic) or MCP `get_network_log` for
+requests.
 
 ### Performance Metrics
 
@@ -147,12 +136,15 @@ cdp> timing                    # Detailed timing JSON
 cdp> paint                     # Paint timing entries
 ```
 
-In scripts:
+In scripts, return the value from a `jsfile` section; `js` discards results:
 ```
+-- main.cdp --
 goto https://example.com
 wait 2s
-js JSON.stringify(performance.getEntriesByType('navigation')[0], null, 2)
-js JSON.stringify(performance.getEntriesByType('resource').map(function(r) { return {name: r.name.split('/').pop(), duration: Math.round(r.duration)}; }), null, 2)
+jsfile nav-timing.js
+
+-- nav-timing.js --
+JSON.stringify(performance.getEntriesByType('navigation')[0], null, 2)
 ```
 
 ### Storage Inspection
@@ -163,27 +155,39 @@ cdp> localStorage              # Dump all localStorage
 cdp> sessionStorage            # Dump all sessionStorage
 cdp> getLocal auth_token       # Get specific key
 
-# In scripts
-js JSON.stringify(localStorage)
+# In scripts: a jsfile section whose body is JSON.stringify(localStorage)
+jsfile dump-storage.js
 ```
 
 ## Common Patterns
 
-### Assert No Console Errors
+### Fail on Console Errors
+
+A `jsfile` that throws stops the script with exit status 1. With the
+`console-collector.js` section from above:
 
 ```
 -- main.cdp --
-jsfile console-collector.js
 goto https://example.com
+jsfile console-collector.js
 wait 2s
-js window.__console.error.length === 0 ? 'PASS: no console errors' : 'FAIL: ' + window.__console.error.length + ' errors'
+jsfile no-console-errors.js
+
+-- no-console-errors.js --
+if (window.__console.error.length > 0) {
+  throw new Error(window.__console.error.length + ' console errors');
+}
 ```
 
 ### Extract Structured Data
 
 ```
+-- main.cdp --
 goto https://example.com
-js JSON.stringify(Array.from(document.querySelectorAll('h2')).map(function(h) { return h.textContent; }))
+jsfile headings.js
+
+-- headings.js --
+JSON.stringify(Array.from(document.querySelectorAll('h2')).map(h => h.textContent))
 ```
 
 ### Debug with Accessibility Tree
