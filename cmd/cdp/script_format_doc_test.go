@@ -150,7 +150,6 @@ func TestReadmeDocumentsAutomationStack(t *testing.T) {
 		"cdp --remote-host localhost --remote-port 9222 --tab <target-id> --shell",
 		"cdpscript --tab <target-id> --port 9222 script.txtar",
 		"cdpscripttest.RunCDPScript",
-		"docs/planning/cdp-best-in-class-checklist.md",
 	}
 
 	for _, s := range want {

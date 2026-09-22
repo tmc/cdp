@@ -204,8 +204,6 @@ The main `cdp` command is the broader general-purpose entry point. It goes beyon
 
 `cdpscripttest` is the Go testing surface. It runs local browser fixtures, screenshot comparisons, network/WebRTC tests, and real `cdpscript` archives under `go test`. Fixtures should avoid third-party network dependencies; authenticated site workflows should live as explicitly live-only examples.
 
-See [docs/planning/cdp-best-in-class-checklist.md](docs/planning/cdp-best-in-class-checklist.md) for the current implementation checklist and verification gates.
-
 ## Stability and Compatibility
 
 The module is pre-v1, so nothing here carries a v1 compatibility promise yet. The three surfaces are not equally settled, and the script DSL is deliberately the most stable of them.
@@ -238,8 +236,6 @@ Full statement: `go doc github.com/tmc/cdp/cmd/cdp`, section "Trust model".
 - [docs/churl.md](docs/churl.md)
 - [docs/langmodel.md](docs/langmodel.md)
 - [docs/differential-capture.md](docs/differential-capture.md)
-- [docs/planning/cdp-best-in-class-checklist.md](docs/planning/cdp-best-in-class-checklist.md)
-- [docs/planning/cdp-feature-surface-roadmap.md](docs/planning/cdp-feature-surface-roadmap.md)
 
 For command-level help, use:
 

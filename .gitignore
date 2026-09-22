@@ -44,5 +44,7 @@ examples/scratch/
 # Local audit/review tool output
 notebooklm-improve-out*/
 bakeoff-*-findings.md
-docs/planning/reviews/
 *.err
+# Planning notes are kept local, not versioned
+docs/planning/
+docs/internal/

@@ -1,6 +1,6 @@
 # Documentation
 
-This directory mixes user guides, design notes, and planning documents.
+This directory holds user guides and design notes.
 
 ## User Guides
 
@@ -16,10 +16,3 @@ This directory mixes user guides, design notes, and planning documents.
 - [implementation.md](implementation.md)
 - [known-issues.md](known-issues.md)
 - [cdp-profile-har-workflow.md](cdp-profile-har-workflow.md)
-
-## Product and Planning Notes
-
-- [planning/next-steps.md](planning/next-steps.md)
-- [planning/roadmap.md](planning/roadmap.md)
-- [planning/visionary_roadmap.md](planning/visionary_roadmap.md)
-- the rest of `docs/planning/` contains exploratory design and roadmap material rather than stable command documentation
