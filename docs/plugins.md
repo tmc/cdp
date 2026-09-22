@@ -30,8 +30,7 @@ absolute path (a GUI app does not inherit your shell `PATH`), defaulting to
 
 ## Claude Code
 
-The repository is itself a Claude Code plugin and a single-plugin marketplace.
-Once the repository is published to its default branch on GitHub:
+The repository is itself a Claude Code plugin and a single-plugin marketplace:
 
 ```bash
 /plugin marketplace add tmc/cdp

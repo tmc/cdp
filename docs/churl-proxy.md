@@ -27,7 +27,7 @@ churl --socks5-proxy socks5://proxy.example.com:1080 https://example.com
 churl --socks5-proxy socks5://proxy.example.com:1080 --proxy-user username:password https://example.com
 ```
 
-## Advanced Options
+## Options
 
 ### Proxy Bypass List
 
@@ -156,7 +156,4 @@ churl --proxy http://proxy.example.com:8080 --proxy-bypass httpbin.org --verbose
 
 ## Exit Codes
 
-- `0`: Success
-- `1`: General error (invalid flags, network issues, etc.)
-- `2`: Authentication failure
-- `3`: Proxy connection failure
+`churl` exits 0 on success and 1 on any error.

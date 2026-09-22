@@ -1,6 +1,6 @@
 # Implementation Notes
 
-This repository now contains a small public Go module plus several command-line tools built on top of shared internal packages.
+This repository contains a small public Go module plus several command-line tools built on top of shared internal packages.
 
 ## Current Shape
 

@@ -1,12 +1,12 @@
 # Claude Code Debugging Tools
 
-This directory contains debugging utilities for diagnosing stuck Claude Code sessions. These tools are separate from the core chrome-to-har codebase.
+This directory contains debugging utilities for diagnosing stuck Claude Code sessions. They are not part of the `cdp` commands.
 
 ## Tools
 
-- **`nodejs-claude-debugger.js`** - Comprehensive Node.js debugging tool
-- **`claude-debug-attach.sh`** - Quick debug attachment script
-- **`debugging.md`** - Complete debugging guide
+- `nodejs-claude-debugger.js`: Node.js process diagnostics and reports
+- `claude-debug-attach.sh`: attach, trace, and monitor helper
+- `debugging.md`: debugging guide
 
 ## Quick Usage
 
@@ -17,7 +17,7 @@ This directory contains debugging utilities for diagnosing stuck Claude Code ses
 # Auto-detect and analyze stuck processes
 ./claude-debug-attach.sh auto
 
-# Generate comprehensive report for PID
+# Generate a report for PID
 node nodejs-claude-debugger.js report <PID>
 
 # Attach debugger to process
@@ -25,7 +25,3 @@ node nodejs-claude-debugger.js report <PID>
 ```
 
 See `debugging.md` for detailed documentation.
-
-## Note
-
-These are debugging utilities only - they do not affect the core chrome-to-har functionality.

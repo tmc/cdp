@@ -1,7 +1,7 @@
 # Claude Code Node.js Debugging Guide
 
 ## Overview
-This guide provides comprehensive techniques for diagnosing and debugging stuck Claude Code sessions using Node.js debugging capabilities.
+This guide covers diagnosing stuck Claude Code sessions with Node.js debugging tools.
 
 ## Quick Diagnosis
 
@@ -125,7 +125,7 @@ node nodejs-claude-debugger.js list
 node nodejs-claude-debugger.js diagnose <PID>
 ```
 
-#### Generate comprehensive report
+#### Generate a report
 ```bash
 node nodejs-claude-debugger.js report <PID> --output report.txt
 ```
@@ -315,19 +315,11 @@ node nodejs-claude-debugger.js report <PID> --output full-report.txt
 | Tool | Purpose | Usage |
 |------|---------|-------|
 | `claude-debug-attach.sh` | Quick debugging | `./claude-debug-attach.sh analyze <PID>` |
-| `nodejs-claude-debugger.js` | Comprehensive analysis | `node nodejs-claude-debugger.js report <PID>` |
+| `nodejs-claude-debugger.js` | Full report | `node nodejs-claude-debugger.js report <PID>` |
 | Chrome DevTools | Visual debugging | `chrome://inspect` |
 | `kill -USR1` | Enable inspector | `kill -USR1 <PID>` |
 | `sample` | Stack sampling (macOS) | `sample <PID> 1` |
 | `lsof` | File descriptor analysis | `lsof -p <PID>` |
-
-## Best Practices
-
-1. **Always capture diagnostic data before killing process**
-2. **Use soft interrupts before hard kills**
-3. **Monitor CPU/memory patterns to predict issues**
-4. **Enable debug logging for critical sessions**
-5. **Keep diagnostic reports for pattern analysis**
 
 ## References
 

@@ -1,10 +1,9 @@
 # cdpscript examples
 
 This directory contains runnable browser scripts and small supporting assets.
-Examples are not a second skill catalog; they are executable knowledge that can
-be inspected, run, and turned into tests when the workflow becomes stable.
-Exploratory drafts live under `scratch/` and are excluded from the reusable
-top-level example index.
+Examples can be inspected, run, and turned into tests when the workflow
+becomes stable.
+Exploratory drafts go under `scratch/`, which is git-ignored.
 
 ## Example types
 

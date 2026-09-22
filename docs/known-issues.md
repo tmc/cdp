@@ -9,7 +9,7 @@ values greater than 60 are treated as milliseconds. This preserves the
 documented seconds API while handling common agent inputs such as `5000` for
 5 seconds.
 
-**Observed**: 2026-04-05, A998 session. `click(selector: "a[href='/explore']", timeout: 5000)` hung for 6+ minutes on github.com.
+**Observed**: 2026-04-05. `click(selector: "a[href='/explore']", timeout: 5000)` hung for 6+ minutes on github.com.
 
 **Files**: `cmd/cdp/mcp_tools.go`, `cmd/cdp/mcp_click_test.go`
 
@@ -32,22 +32,22 @@ is unavailable over a remote-debugging port.
 
 **Workaround**: Use `evaluate` with `document.querySelector('a').click()` for navigation-triggering clicks, or use `navigate` directly if the URL is known.
 
-**Files**: `cmd/cdp/mcp_tools.go:248-270`
+**Files**: `cmd/cdp/mcp_tools.go`
 
 ### 2. Coverage snapshot on minimal-JS pages returns empty
 
 **Symptom**: `get_coverage` after `start_coverage` on server-rendered pages (e.g., Hacker News) returns 0 files because there's little/no JS to profile.
 
-**Not a bug**: Expected behavior — V8 coverage only tracks JavaScript execution. Document this in tool description.
+**Not a bug**: V8 coverage only tracks JavaScript execution.
 
-**Observed**: 2026-04-05, A998 session on news.ycombinator.com.
+**Observed**: 2026-04-05 on news.ycombinator.com.
 
 ### 3. extension_console/extension_evaluate fail for devtools-only extensions
 
-**Symptom**: "no target found for extension" when calling `extension_console` or `extension_evaluate` on a DevTools panel extension (like our coverage extension).
+**Symptom**: "no target found for extension" when calling `extension_console` or `extension_evaluate` on a DevTools panel extension (such as `extension/coverage`).
 
 **Root cause**: DevTools-only extensions (with `devtools_page` but no `background` service worker) don't create CDP-visible targets. There's no `chrome-extension://` target to attach to.
 
 **Workaround**: None currently. DevTools panel extensions run in the DevTools process, not as separate targets.
 
-**Observed**: 2026-04-05, A998 extension test. Extension ID agmhhbefggjmejggmflmppmacnbmhnne.
+**Observed**: 2026-04-05.

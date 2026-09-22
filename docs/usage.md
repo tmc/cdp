@@ -1,6 +1,6 @@
 # Usage Guide
 
-This repository currently has two browser entry points:
+This guide covers two browser entry points:
 
 - `chrome-to-har` in `cmd/chrome-to-har`, focused on HAR capture and differential capture.
 - `cdp` in `cmd/cdp`, focused on direct Chrome DevTools Protocol automation.
@@ -37,7 +37,7 @@ chrome-to-har --url https://example.com --output example.har
 # Stream only API traffic
 chrome-to-har --url https://example.com \
   --stream \
-  --urls='api\.example\.com'
+  --filter='select(.request.url | test("api\\.example\\.com"))'
 
 # Capture with a profile
 chrome-to-har --profile "Default" \
@@ -145,7 +145,7 @@ chrome-to-har --stream \
 
 # Focus on authentication traffic
 chrome-to-har --stream \
-  --urls='auth|login|token'
+  --filter='select(.request.url | test("auth|login|token"))'
 ```
 
 ## Differential Capture

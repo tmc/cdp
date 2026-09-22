@@ -168,7 +168,7 @@ cdpscript login.txtar
 cdpscripttest --url http://localhost:8090 testdata/login.txt
 ```
 
-## Command Summary
+## What `chrome-to-har` Does
 
 `chrome-to-har` is the focused capture entry point. It is useful when you want HAR output, streaming entry logs, profile-based browsing, or differential capture reports.
 

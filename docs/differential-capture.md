@@ -1,6 +1,6 @@
 # Differential Capture Mode
 
-The differential capture mode allows you to capture and compare different states of web pages, providing valuable insights into changes between captures.
+Differential capture mode records HAR captures of a page and compares them.
 
 ## Features
 
@@ -205,42 +205,13 @@ Tabular format for data analysis:
 
 ## Significance Levels
 
-### **High Significance**
-- Status code changes (4xx, 5xx errors)
-- Large size changes (>50% difference)
-- New or removed critical resources
+For a changed request:
 
-### **Medium Significance**
-- Moderate size changes (25-50% difference)
-- Significant timing changes (>100% difference)
-- New or removed non-critical resources
+- **High**: any status code change, or a size change over 50%.
+- **Medium**: a time change over +100% or under -50%.
+- **Low**: everything else.
 
-### **Low Significance**
-- Minor size changes (<25% difference)
-- Small timing changes (<100% difference)
-- Header modifications
-
-## Best Practices
-
-### 1. **Capture Management**
-- Use descriptive capture names
-- Apply consistent labeling schemes
-- Clean up old captures regularly
-
-### 2. **Comparison Strategy**
-- Ensure similar conditions for captures
-- Use appropriate significance levels
-- Focus on meaningful changes
-
-### 3. **Performance Monitoring**
-- Establish baseline metrics
-- Monitor trends over time
-- Set up automated comparisons
-
-### 4. **Report Analysis**
-- Review high-significance changes first
-- Investigate performance regressions
-- Document important findings
+For a changed resource, a size change over 25% is high and a load-time change over +50% or under -30% is medium.
 
 ## Integration Examples
 
@@ -250,20 +221,17 @@ Tabular format for data analysis:
 #!/bin/bash
 # Automated A/B testing script
 
-# Capture baseline
-BASELINE_ID=$(chrome-to-har --diff-mode --url "$BASE_URL" \
+# Capture baseline and comparison by name
+chrome-to-har --diff-mode --url "$BASE_URL" \
   --capture-name "baseline-$(date +%Y%m%d)" \
-  --capture-labels "env=$ENV,branch=$BRANCH" \
-  --output /dev/null | grep "ID:" | cut -d' ' -f2)
+  --capture-labels "env=$ENV,branch=$BRANCH"
 
-# Capture comparison
-COMPARE_ID=$(chrome-to-har --diff-mode --url "$COMPARE_URL" \
+chrome-to-har --diff-mode --url "$COMPARE_URL" \
   --capture-name "compare-$(date +%Y%m%d)" \
-  --capture-labels "env=$ENV,branch=$BRANCH" \
-  --output /dev/null | grep "ID:" | cut -d' ' -f2)
+  --capture-labels "env=$ENV,branch=$BRANCH"
 
 # Generate report
-chrome-to-har --baseline "$BASELINE_ID" --compare-with "$COMPARE_ID" \
+chrome-to-har --baseline "baseline-$(date +%Y%m%d)" --compare-with "compare-$(date +%Y%m%d)" \
   --diff-output "reports/comparison-$(date +%Y%m%d).html" \
   --min-significance medium
 
@@ -303,56 +271,10 @@ jobs:
             --min-significance medium
       
       - name: Upload report
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v4
         with:
           name: performance-report
           path: performance-report.html
-```
-
-## API Usage
-
-The differential capture system can also be used programmatically:
-
-```go
-package main
-
-import (
-    "context"
-    "github.com/tmc/cdp/internal/differential"
-)
-
-func main() {
-    // Create controller
-    options := &differential.DifferentialOptions{
-        WorkDir:          "/tmp/captures",
-        TrackResources:   true,
-        TrackPerformance: true,
-        Verbose:          true,
-    }
-    
-    controller, err := differential.NewDifferentialController(options)
-    if err != nil {
-        panic(err)
-    }
-    defer controller.Cleanup()
-    
-    // Create baseline capture
-    ctx := context.Background()
-    baseline, err := controller.CreateBaselineCapture(ctx, 
-        "baseline", "https://example.com", "Test baseline", nil)
-    if err != nil {
-        panic(err)
-    }
-    
-    // Complete capture (after HAR recording)
-    // controller.CompleteCapture(baseline.ID, harData)
-    
-    // Compare captures
-    // result, err := controller.CompareCapturesByID(baseline.ID, compare.ID)
-    
-    // Generate report
-    // controller.GenerateReport(result, reportOptions)
-}
 ```
 
 ## Troubleshooting
@@ -386,5 +308,3 @@ Enable verbose logging for troubleshooting:
 ```bash
 chrome-to-har --diff-mode --verbose --url https://example.com
 ```
-
-This comprehensive differential capture system provides powerful tools for analyzing web page changes, performance impacts, and content modifications, making it valuable for A/B testing, performance monitoring, and security auditing.

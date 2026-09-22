@@ -1,6 +1,6 @@
 # churl - Chrome-powered curl for Modern Web
 
-`churl` is a powerful command-line tool that combines the simplicity of curl with the full rendering capabilities of Chrome. Unlike traditional HTTP clients, churl executes JavaScript, handles SPAs (Single Page Applications), and captures fully rendered content, making it ideal for modern web scraping and testing.
+`churl` fetches a URL with Chrome and prints the rendered result. It executes JavaScript, so single-page applications return their rendered DOM rather than an empty shell.
 
 ## Table of Contents
 
@@ -96,7 +96,7 @@ churl [options] URL
 | Flag | Type | Description | Default |
 |------|------|-------------|---------|
 | `-o` | string | Output file (instead of stdout) | - |
-| `--output-format` | string | Output format: html, har, text, json | html |
+| `--output-format` | string | Output format: html, har, text, json, pdf | html |
 
 ### Chrome Browser Options
 
@@ -281,14 +281,10 @@ churl --script-after "
 # List available Chrome profiles
 cdp --list-profiles
 
-# Use specific profile (maintains cookies, localStorage, etc.)
+# Use a copy of a profile's cookies and storage (changes are not saved back)
 churl --profile "Default" https://example.com
 churl --profile "Profile 1" https://example.com
 
-# Create a temporary profile for isolation
-TMPDIR=$(mktemp -d)
-churl --profile "$TMPDIR" https://example.com
-rm -rf "$TMPDIR"
 ```
 
 ### Debug Mode
@@ -326,21 +322,6 @@ churl --wait-for-challenge=false https://example.com
 
 If even a headed browser can't clear the challenge, churl says so on stderr and
 returns whatever the page currently shows.
-
-### Custom Chrome Flags
-
-```bash
-# Disable images for faster loading
-churl --chrome-path="/usr/bin/google-chrome" \
-  --script-before "
-    const style = document.createElement('style');
-    style.textContent = 'img { display: none !important; }';
-    document.head.appendChild(style);
-  " https://image-heavy-site.com
-
-# Use specific window size
-churl --headless=false --verbose https://example.com
-```
 
 ## Remote Chrome Integration
 
@@ -410,14 +391,9 @@ churl --script-after "
 #!/bin/bash
 # Test API that requires browser environment
 
-# Login first
-churl -X POST \
-  -d '{"username":"test","password":"pass"}' \
-  --profile "TestProfile" \
-  https://app.example.com/api/login
-
-# Use saved session for subsequent requests
-churl --profile "TestProfile" \
+# Each run copies the profile, so a login made by one churl run does not
+# carry over to the next. Log in with the browser first, then:
+churl --profile "Default" \
   --output-format=json \
   https://app.example.com/api/user/data
 ```
@@ -466,7 +442,7 @@ fi
 churl --chrome-path="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" https://example.com
 
 # Or set environment variable
-export CHROME_PATH="/usr/bin/google-chrome"
+export CHROME_EXECUTABLE_PATH="/usr/bin/google-chrome"
 churl https://example.com
 ```
 
@@ -489,12 +465,6 @@ churl --script-after "
   const errors = window.__errors || [];
   console.log('JS Errors:', JSON.stringify(errors));
 " https://example.com
-```
-
-**SSL/Certificate issues**
-```bash
-# For development/testing only - ignore certificate errors
-churl --verbose https://self-signed.local
 ```
 
 ### Debug Output
@@ -595,7 +565,11 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
       
       - name: Setup Chrome
         uses: browser-actions/setup-chrome@latest
@@ -611,15 +585,6 @@ jobs:
         run: |
           churl -X POST -d '{"test": true}' https://myapp.example.com/api/health
 ```
-
-## Best Practices
-
-1. **Use appropriate timeouts**: Adjust timeouts based on site complexity
-2. **Profile management**: Use separate profiles for different authentication contexts  
-3. **Script validation**: Test scripts in browser console before using
-4. **Resource optimization**: Disable images/styles when only text is needed
-5. **Error handling**: Always check exit codes in scripts
-6. **Debugging**: Start with `--headless=false` when troubleshooting
 
 ## Comparison with Traditional Tools
 
@@ -639,15 +604,3 @@ jobs:
 - **Profile isolation**: Use separate profiles for different security contexts
 - **Remote connections**: Secure remote Chrome instances appropriately
 - **Credential handling**: Use environment variables for sensitive data
-
-## Performance Tips
-
-1. **Headless mode**: Always use unless debugging
-2. **Network idle**: Disable for sites with continuous polling
-3. **Selective waiting**: Use specific selectors instead of generic timeouts
-4. **Resource blocking**: Block unnecessary resources via scripts
-5. **Profile reuse**: Reuse profiles to avoid repeated logins
-
-## Conclusion
-
-churl bridges the gap between traditional command-line HTTP tools and modern web applications. By leveraging Chrome's rendering engine, it provides reliable access to JavaScript-heavy sites while maintaining the simplicity of command-line tools.

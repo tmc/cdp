@@ -4,7 +4,7 @@ This guide demonstrates how to use the CDP (Chrome DevTools Protocol) tool with 
 
 ## Overview
 
-The CDP tool provides a powerful combination of features for working with authenticated sessions:
+`cdp` combines these features for authenticated sessions:
 
 - **Profile Support**: Use existing Chrome profiles with cookies, session data, and credentials
 - **HAR Recording**: Capture complete network traffic in HTTP Archive format
@@ -47,53 +47,57 @@ This launches an interactive session where you can browse normally. All network 
 
 ## Use Case 1: Capturing Authenticated API Requests
 
-### Scenario: Downloading NotebookLM Audio Files
+### Scenario: Downloading Audio From a Signed-In Web App
 
-NotebookLM requires authentication. You can use CDP to capture the audio download URL and authentication headers.
+The app requires authentication. You can use CDP to capture the audio download URL and request headers.
 
 #### Step 1: Record Network Traffic
 
 ```bash
-# Launch CDP with your Google account profile
+# Launch CDP with a copy of your signed-in profile
 cdp --use-profile "Default" \
-    --har /tmp/notebooklm-traffic.har \
-    --url https://notebooklm.google.com
+    --har /tmp/app-traffic.har \
+    --url https://app.example.com
 ```
 
 #### Step 2: Perform Your Action
 
 In the browser:
-1. Navigate to your NotebookLM notebook
+1. Open the page that plays the audio
 2. Play the audio to generate the download request
 3. Exit CDP (Ctrl+C)
 
 #### Step 3: Analyze the HAR File
 
+HAR output is secret-redacted by default: the values of `Authorization`,
+`Cookie`, and similar headers are written as `[REDACTED]`. Add `--no-scrub` to
+Step 1 when you need the raw values, and treat the HAR file as a credential.
+
 Extract audio URLs from the HAR:
 
 ```bash
-# Find all requests to audio CDN
-cat /tmp/notebooklm-traffic.har | jq -r '.log.entries[] | select(.request.url | contains("googleusercontent.com")) | .request.url'
+# Find all requests to the media host
+cat /tmp/app-traffic.har | jq -r '.log.entries[] | select(.request.url | contains("media.example.com")) | .request.url'
 
 # Output:
-# https://lh3.googleusercontent.com/d/1ABC.../audio.mp3?auth_token=xyz...
+# https://media.example.com/d/1ABC.../audio.mp3
 ```
 
 Extract authentication headers:
 
 ```bash
 # View headers used for authenticated request
-cat /tmp/notebooklm-traffic.har | jq '.log.entries[] | select(.request.url | contains("lh3.googleusercontent.com")) | .request.headers'
+cat /tmp/app-traffic.har | jq '.log.entries[] | select(.request.url | contains("media.example.com")) | .request.headers'
 
-# Output:
+# Output (default scrubbing):
 # [
 #   {
 #     "name": "Authorization",
-#     "value": "Bearer gAA..."
+#     "value": "[REDACTED]"
 #   },
 #   {
 #     "name": "Cookie",
-#     "value": "session_id=..."
+#     "value": "[REDACTED]"
 #   }
 # ]
 ```
@@ -102,7 +106,7 @@ View response status and headers:
 
 ```bash
 # Check response details
-cat /tmp/notebooklm-traffic.har | jq '.log.entries[] | select(.request.url | contains("lh3.googleusercontent.com")) | {url: .request.url, status: .response.status, contentType: .response.headers[] | select(.name == "Content-Type")}'
+cat /tmp/app-traffic.har | jq '.log.entries[] | select(.request.url | contains("media.example.com")) | {url: .request.url, status: .response.status, contentType: .response.headers[] | select(.name == "Content-Type")}'
 ```
 
 ## Use Case 2: Monitoring Specific URL Patterns
@@ -189,11 +193,11 @@ cdp --use-profile "Default" \
 cdp --use-profile "Work Profile" \
     --url https://api.example.com/login \
     --js '
-      {
+      ({
         username: document.querySelector("input[name=username]")?.value,
         rememberMe: document.querySelector("input[name=remember]")?.checked,
         formAction: document.querySelector("form")?.action
-      }
+      })
     '
 ```
 
@@ -230,8 +234,8 @@ Here's a complete workflow for downloading authenticated audio files:
 # List your available profiles
 cdp --list-profiles
 
-# Note: Make sure you're already logged in to the service (NotebookLM, etc.)
-# in your browser using that profile
+# Note: Make sure you're already logged in to the service in your browser
+# using that profile
 ```
 
 ### Step 2: Discover Audio URL
@@ -239,10 +243,11 @@ cdp --list-profiles
 ```bash
 # Record network traffic while playing audio
 cdp --use-profile "Default" \
+    --no-scrub \
     --har /tmp/audio-discovery.har \
-    --url https://notebooklm.google.com
+    --url https://app.example.com
 
-# Navigate to notebook and play audio, then Ctrl+C
+# Open the page and play audio, then Ctrl+C
 ```
 
 ### Step 3: Extract URL and Headers
@@ -252,7 +257,7 @@ cdp --use-profile "Default" \
 cat /tmp/audio-discovery.har | jq '.log.entries[] | select(.request.url | contains("mp3") or contains("audio")) | {url: .request.url, status: .response.status}'
 
 # Extract headers (you'll need these for direct download)
-cat /tmp/audio-discovery.har | jq '.log.entries[] | select(.request.url | contains("lh3.googleusercontent")) | .request.headers'
+cat /tmp/audio-discovery.har | jq '.log.entries[] | select(.request.url | contains("media.example.com")) | .request.headers'
 ```
 
 ### Step 4: Verify Access with CDP
@@ -260,9 +265,9 @@ cat /tmp/audio-discovery.har | jq '.log.entries[] | select(.request.url | contai
 ```bash
 # Test that you can fetch the audio with the profile's cookies
 cdp --use-profile "Default" \
-    --url https://notebooklm.google.com \
+    --url https://app.example.com \
     --js '
-      fetch("https://lh3.googleusercontent.com/your-audio-id/audio.mp3")
+      fetch("https://media.example.com/your-audio-id/audio.mp3")
         .then(r => r.blob())
         .then(blob => console.log("Audio fetched:", blob.size, "bytes"))
         .catch(e => console.error("Error:", e.message))
@@ -311,16 +316,16 @@ Combine all features for maximum capability:
 cdp --use-profile "Default" \
     --har /tmp/session.har \
     --url "https://app.example.com" \
+    --await \
     --js '
-      // Wait for page to fully load
-      await new Promise(r => setTimeout(r, 2000));
-
-      // Extract data
-      {
-        title: document.title,
-        apiUrls: Array.from(document.querySelectorAll("[data-api]")).map(el => el.getAttribute("data-api")),
-        tokens: Array.from(document.querySelectorAll("meta[name*=token]")).map(el => ({name: el.name, value: el.content}))
-      }
+      (async () => {
+        await new Promise(r => setTimeout(r, 2000));
+        return {
+          title: document.title,
+          apiUrls: Array.from(document.querySelectorAll("[data-api]")).map(el => el.getAttribute("data-api")),
+          tokens: Array.from(document.querySelectorAll("meta[name*=token]")).map(el => ({name: el.name, value: el.content}))
+        };
+      })()
     '
 
 # 2. Analyze HAR separately
@@ -339,8 +344,8 @@ cat /tmp/session.har | jq '.log.entries[] | {url: .request.url, status: .respons
 cdp --use-profile "Default" --har /tmp/session.har --url https://example.com
 
 # Option 2: Connect to already-running Chrome
-chrome --remote-debugging-port=9222 --profile-directory="Default"
-cdp --debug-port 9222 --har /tmp/session.har
+cdp attach --port 9222
+cdp --remote-host localhost --remote-port 9222 --har /tmp/session.har
 ```
 
 ### Issue: HAR file is empty or missing requests
@@ -380,17 +385,15 @@ cdp --use-profile "Default" --har /tmp/session.har --url https://example.com --i
 
 ### Issue: Response body not captured in HAR
 
-**Note**: CDP HAR capture focuses on metadata. If response bodies matter, use
-the enhanced capture tools or extract the needed page/API state with JavaScript
-while recording.
-
-**Workaround**: Extract what you need using JavaScript while recording:
+**Note**: The default `--har-mode enhanced` records response bodies, POST data,
+and headers. `--max-body-bytes` truncates bodies (0, the default, keeps them in
+full), and `--har-mode simple` records less. If bodies are missing, check that
+neither is set.
 
 ```bash
 cdp --use-profile "Default" \
-    --har /tmp/metadata.har \
-    --url https://example.com/api \
-    --js 'Array.from(document.querySelectorAll("script[type=application/json]")).map(s => JSON.parse(s.textContent))'
+    --har /tmp/full.har \
+    --url https://example.com/api
 ```
 
 ## Real-World Examples
@@ -407,16 +410,18 @@ cdp --use-profile "Work Profile" \
 ### Example 2: Download Authenticated PDF
 
 ```bash
-# Step 1: Find the PDF URL
+# Step 1: Find the PDF URL (--no-scrub keeps the Cookie header readable)
 cdp --use-profile "Work Profile" \
+    --no-scrub \
     --har /tmp/pdf-flow.har \
     --url https://app.example.com/reports
 
-# Step 2: Extract PDF URL from HAR
+# Step 2: Extract the PDF URL and its Cookie header from the HAR
 PDF_URL=$(cat /tmp/pdf-flow.har | jq -r '.log.entries[] | select(.request.url | contains(".pdf")) | .request.url' | head -1)
+COOKIE=$(cat /tmp/pdf-flow.har | jq -r --arg u "$PDF_URL" '.log.entries[] | select(.request.url == $u) | .request.headers[] | select(.name | ascii_downcase == "cookie") | .value' | head -1)
 
-# Step 3: Download using curl with cookies from Chrome
-curl --cookie "$(cat /tmp/cookies.txt)" "$PDF_URL" -o report.pdf
+# Step 3: Download using curl with those cookies
+curl -H "Cookie: $COOKIE" "$PDF_URL" -o report.pdf
 ```
 
 ### Example 3: Monitor WebSocket Connections
@@ -441,7 +446,5 @@ cdp --use-profile "Default" \
 
 ## See Also
 
-- `skills/writing-cdp-scripts/references/script-format.md`: canonical
-  `cdpscript` format reference
-- `docs/usage.md`: current command usage examples
-- `docs/cdp.md`: broader `cdp` command documentation
+- `skills/writing-cdp-scripts/references/script-format.md`: `cdpscript` format reference
+- `docs/usage.md`: command usage examples
