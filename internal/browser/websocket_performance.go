@@ -3,6 +3,7 @@ package browser
 import (
 	"context"
 	"fmt"
+	"math"
 	"sort"
 	"sync"
 	"time"
@@ -437,13 +438,7 @@ func (wpm *WebSocketPerformanceMonitor) calculateLatencyMetrics(latencies []time
 		metrics.P99 = latencies[p99Index]
 	}
 
-	// Calculate standard deviation
-	var variance time.Duration
-	for _, latency := range latencies {
-		diff := latency - metrics.Mean
-		variance += diff * diff / time.Duration(len(latencies))
-	}
-	metrics.StdDev = time.Duration(float64(variance) * 0.5) // Simplified sqrt
+	metrics.StdDev = stdDev(latencies, metrics.Mean)
 
 	return metrics
 }
@@ -495,14 +490,21 @@ func (wpm *WebSocketPerformanceMonitor) calculateRTTMetrics(connections map[stri
 		}
 		wpm.metrics.AverageRTT = total / time.Duration(len(rtts))
 
-		// Calculate standard deviation
-		var variance time.Duration
-		for _, rtt := range rtts {
-			diff := rtt - wpm.metrics.AverageRTT
-			variance += diff * diff / time.Duration(len(rtts))
-		}
-		wpm.metrics.StdDevRTT = time.Duration(float64(variance) * 0.5) // Simplified sqrt
+		wpm.metrics.StdDevRTT = stdDev(rtts, wpm.metrics.AverageRTT)
 	}
+}
+
+// stdDev returns the population standard deviation of ds around mean.
+func stdDev(ds []time.Duration, mean time.Duration) time.Duration {
+	if len(ds) == 0 {
+		return 0
+	}
+	var sum float64
+	for _, d := range ds {
+		diff := float64(d - mean)
+		sum += diff * diff
+	}
+	return time.Duration(math.Sqrt(sum / float64(len(ds))))
 }
 
 // calculateJitter calculates jitter from RTT measurements
