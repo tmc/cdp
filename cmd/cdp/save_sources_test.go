@@ -58,6 +58,7 @@ func TestFullCaptureSaveSourcesNewTab(t *testing.T) {
 		"--save-sources",
 		"--output-dir", outDir,
 	)
+	cmd.Env = cdpEnv(t)
 	cmd.Stdin = strings.NewReader("newtab " + srv.URL + "\nexit\n")
 
 	var output bytes.Buffer

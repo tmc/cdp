@@ -62,6 +62,7 @@ func runWebRTCOfferCapture(t *testing.T, webrtcCapture string) (string, string) 
 		"--webrtc-capture", webrtcCapture,
 		"--output-dir", outDir,
 	)
+	cmd.Env = cdpEnv(t)
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		t.Fatal(err)

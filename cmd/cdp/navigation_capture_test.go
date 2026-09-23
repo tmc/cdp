@@ -141,6 +141,7 @@ func TestFullCaptureRecordsFailedRequest(t *testing.T) {
 		"--navigation-timeout", "10",
 		"--output-dir", outDir,
 	)
+	cmd.Env = cdpEnv(t)
 	cmd.Stdin = strings.NewReader("goto " + srv.URL + "/\ngoto " + srv.URL + "/\nexit\n")
 	var output bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &output, &output
@@ -206,6 +207,7 @@ func runFullCaptureNavigationWithWait(t *testing.T, url string, timeout int, wai
 		"--wait", wait,
 		"--output-dir", outDir,
 	)
+	cmd.Env = cdpEnv(t)
 	cmd.Stdin = strings.NewReader("goto " + url + "\nexit\n")
 	var output bytes.Buffer
 	cmd.Stdout = &output

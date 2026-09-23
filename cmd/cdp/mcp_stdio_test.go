@@ -26,6 +26,7 @@ func TestMCPStdioToolCallLaunchPath(t *testing.T) {
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, cdpPath, "--mcp", "--headless")
+	cmd.Env = cdpEnv(t)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	stdin, err := cmd.StdinPipe()

@@ -212,6 +212,36 @@ func skipIfNoBrowser(t testing.TB) {
 	}
 }
 
+// cdpEnv returns the environment for a cdp binary under test, with extra
+// appended. HOME is a new directory, so the binary's default profile,
+// extensions, and history under ~/.cdp neither touch the user's nor collide
+// across tests. The directory is not removed per test: a browser the binary
+// started may outlive it, and testutil.Main removes and kills everything
+// under TMPDIR when the tests finish.
+//
+// On macOS the Security framework finds the login keychain through HOME, and
+// a browser launched on a real profile stores its cookie key there. Without
+// Library/Keychains in the new HOME, each launch raises a modal "Keychain Not
+// Found" dialog, so link the user's keychains into it.
+func cdpEnv(t *testing.T, extra ...string) []string {
+	t.Helper()
+	home, err := os.MkdirTemp("", "home-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if runtime.GOOS == "darwin" {
+		if realHome, err := os.UserHomeDir(); err == nil {
+			if err := os.MkdirAll(filepath.Join(home, "Library"), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Symlink(filepath.Join(realHome, "Library", "Keychains"), filepath.Join(home, "Library", "Keychains")); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	return append(append(os.Environ(), "HOME="+home), extra...)
+}
+
 // buildCDP builds the cdp binary for testing.
 func buildCDP(t *testing.T) string {
 	t.Helper()
@@ -285,6 +315,7 @@ func TestCDP_ShowHelp(t *testing.T) {
 			defer cancel()
 
 			cmd := exec.CommandContext(ctx, cdpPath, tt.args...)
+			cmd.Env = cdpEnv(t)
 			output, _ := cmd.CombinedOutput()
 
 			outputStr := string(output)
@@ -481,7 +512,7 @@ func TestCDPBinaryExitCodes(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
 			cmd := exec.CommandContext(ctx, cdpPath, tt.args...)
-			cmd.Env = append(os.Environ(), "MACGO_NO_RELAUNCH=")
+			cmd.Env = cdpEnv(t, "MACGO_NO_RELAUNCH=")
 			_ = cmd.Run()
 			if cmd.ProcessState == nil {
 				t.Fatal("missing ProcessState")
@@ -711,6 +742,7 @@ func TestCDP_JavaScriptExecution(t *testing.T) {
 				"--js", tt.js,
 				"--url", tt.url,
 			)
+			cmd.Env = cdpEnv(t)
 
 			var stdout, stderr bytes.Buffer
 			cmd.Stdout = &stdout
@@ -746,6 +778,7 @@ func TestCDP_AutoDiscoverDisabledRunsAction(t *testing.T) {
 		"--url", "data:text/html,<title>auto discover disabled</title>",
 		"--js", "document.title",
 	)
+	cmd.Env = cdpEnv(t)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
@@ -870,6 +903,7 @@ func TestCDP_HARRecording(t *testing.T) {
 		"--har", harFile,
 		"--url", "about:blank",
 	)
+	cmd.Env = cdpEnv(t)
 
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
