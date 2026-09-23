@@ -159,113 +159,16 @@ func TestExamplesReadmeDocumentsLiveOnlyPolicy(t *testing.T) {
 	doc := string(data)
 	for _, want := range []string{
 		"Live-only examples depend on a real site",
-		"browser target or profile",
-		"secret redaction needs",
-		"repeat evidence",
 		"Purpose:",
 		"Usage:",
 		"Inputs:",
 		"Verification:",
 		"cdp attach --port 9222",
 		"cdpscript --tab <target-id> --port 9222 examples/gdoc-to-markdown.txtar",
-		"live-workflow-intake.md",
-		"live-workflow-template.md",
-		"live-workflows.md",
 		"example_contract_test.go",
 	} {
 		if !strings.Contains(doc, want) {
 			t.Errorf("README missing %q", want)
-		}
-	}
-}
-
-func TestLiveWorkflowIntakeDocumentsUserBoundary(t *testing.T) {
-	data, err := os.ReadFile("live-workflow-intake.md")
-	if err != nil {
-		t.Fatal(err)
-	}
-	doc := string(data)
-	for _, want := range []string{
-		"Browser target or profile:",
-		"Required login state:",
-		"Starting URL or tab:",
-		"Expected output artifact or stdout:",
-		"Verification boundary:",
-		"Secret handling and redaction:",
-		"Repeat evidence:",
-		"May the workflow change live data:",
-		"Must the workflow be read-only:",
-		"cdp attach --port 9222",
-		"cdpscript --tab <target-id> --port 9222 examples/<workflow>.txtar",
-		"Do not infer an authenticated account",
-		"`Verification` says `live-only;`",
-		"Secrets, cookies, bearer tokens, API keys",
-	} {
-		if !strings.Contains(doc, want) {
-			t.Errorf("live workflow intake missing %q", want)
-		}
-	}
-}
-
-func TestLiveWorkflowTemplateDocumentsPromotionContract(t *testing.T) {
-	data, err := os.ReadFile("live-workflow-template.md")
-	if err != nil {
-		t.Fatal(err)
-	}
-	doc := string(data)
-	for _, want := range []string{
-		"Required login state:",
-		"Browser target or profile:",
-		"Verification boundary:",
-		"Secret handling and redaction:",
-		"Repeat evidence:",
-		"Use the command printed by `cdp attach`; do not guess tab IDs.",
-		"Capture checklist",
-		"Redact:",
-		"Generalize:",
-		"Contract:",
-		"cdp attach --port 9222",
-		"cdpscript --tab <target-id> --port 9222 examples/<workflow>.txtar",
-		"# Purpose:",
-		"# Usage:",
-		"# Inputs:",
-		"# Verification: live-only;",
-		"screenshot 01-start.png",
-		"screenshot 02-result.png",
-		"Do not promote a one-off exploratory script",
-	} {
-		if !strings.Contains(doc, want) {
-			t.Errorf("live workflow template missing %q", want)
-		}
-	}
-}
-
-func TestProposedLiveWorkflowsDocumentFirstWorkflow(t *testing.T) {
-	data, err := os.ReadFile("live-workflows.md")
-	if err != nil {
-		t.Fatal(err)
-	}
-	doc := string(data)
-	for _, want := range []string{
-		"Google Docs to Markdown",
-		"Workflow name: `google-docs-to-markdown`",
-		"Status: curated live-only workflow.",
-		"Existing script: `examples/gdoc-to-markdown.txtar`",
-		"Required login state: signed in to a Google account",
-		"Expected output artifact or stdout: Markdown printed to stdout.",
-		"Verification boundary: live-only;",
-		"Secret handling and redaction:",
-		"Repeat evidence:",
-		"Current evidence: ran twice on 2026-05-16",
-		"It also ran once",
-		"against a second disposable document",
-		"May the workflow change live data: no.",
-		"Must the workflow be read-only: yes.",
-		"cdp attach --port 9222",
-		"cdpscript --tab <target-id> --port 9222 examples/gdoc-to-markdown.txtar",
-	} {
-		if !strings.Contains(doc, want) {
-			t.Errorf("live-workflows.md missing %q", want)
 		}
 	}
 }

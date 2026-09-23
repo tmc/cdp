@@ -26,22 +26,6 @@ The archive body should still be runnable: it must contain `main.cdp`, and any
 `jsfile` reference in `main.cdp` should point at a file embedded in the same
 txtar.
 
-Use [live-workflow-intake.md](live-workflow-intake.md) to collect the human
-boundary before capture. Use [live-workflow-template.md](live-workflow-template.md)
-when turning a repeated authenticated workflow into a curated live-only
-example.
-
-Use [live-workflows.md](live-workflows.md) to track proposed authenticated
-workflows before promotion. The first workflow, Google Docs to Markdown, is
-curated and builds on `gdoc-to-markdown.txtar` and keeps document URLs,
-account names, screenshots, and generated Markdown out of the repository.
-
-Before capture, collect the site/product, browser target or profile, required
-login state, user-owned input data, expected output, verification boundary,
-secret redaction needs, repeat evidence, and known UI fragility. If any of
-those are unknown, keep the workflow as an exploratory local script rather than
-a curated example.
-
 ## Running against an existing browser
 
 When the script depends on the user browser's current login state, attach
