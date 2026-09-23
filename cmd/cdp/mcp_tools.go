@@ -195,7 +195,13 @@ func registerObservationTools(server *mcp.Server, s *mcpSession) {
 
 		// Annotate interactive elements if requested.
 		if input.Annotate {
-			annotated, annotations, err := annotateScreenshot(actx, buf, s.refs)
+			var annotated []byte
+			var annotations []annotationEntry
+			err := chromedp.Run(actx, chromedp.ActionFunc(func(ctx context.Context) error {
+				var err error
+				annotated, annotations, err = annotateScreenshot(ctx, buf, s.refs)
+				return err
+			}))
 			if err != nil {
 				return nil, nil, fmt.Errorf("screenshot: annotate: %w", err)
 			}
@@ -283,7 +289,12 @@ func registerObservationTools(server *mcp.Server, s *mcpSession) {
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input struct{}) (*mcp.CallToolResult, any, error) {
 		actx, cancel := requestToolCtx(ctx, s.activeCtx(), 15*time.Second)
 		defer cancel()
-		result, err := buildAXSnapshot(actx, s.refs)
+		var result string
+		err := chromedp.Run(actx, chromedp.ActionFunc(func(ctx context.Context) error {
+			var err error
+			result, err = buildAXSnapshot(ctx, s.refs)
+			return err
+		}))
 		if err != nil {
 			return nil, nil, fmt.Errorf("page_snapshot: %w", err)
 		}
@@ -931,7 +942,12 @@ func registerCookieTools(server *mcp.Server, s *mcpSession) {
 		Name:        "get_cookies",
 		Description: "Get browser cookies, optionally filtered by domain",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input GetCookiesInput) (*mcp.CallToolResult, any, error) {
-		cookies, err := network.GetCookies().Do(s.activeCtx())
+		var cookies []*network.Cookie
+		err := chromedp.Run(s.activeCtx(), chromedp.ActionFunc(func(ctx context.Context) error {
+			var err error
+			cookies, err = network.GetCookies().Do(ctx)
+			return err
+		}))
 		if err != nil {
 			return nil, nil, fmt.Errorf("get_cookies: %w", err)
 		}
@@ -963,7 +979,7 @@ func registerCookieTools(server *mcp.Server, s *mcpSession) {
 		if input.Path != "" {
 			cmd = cmd.WithPath(input.Path)
 		}
-		if err := cmd.Do(s.activeCtx()); err != nil {
+		if err := chromedp.Run(s.activeCtx(), cmd); err != nil {
 			return nil, nil, fmt.Errorf("set_cookie: %w", err)
 		}
 		return &mcp.CallToolResult{

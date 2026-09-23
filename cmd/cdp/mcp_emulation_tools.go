@@ -164,7 +164,7 @@ func registerEmulationTools(server *mcp.Server, s *mcpSession) {
 			latency = input.CustomLatency
 		}
 
-		if err := network.OverrideNetworkState(offline, latency, download, upload).Do(actx); err != nil {
+		if err := chromedp.Run(actx, network.OverrideNetworkState(offline, latency, download, upload)); err != nil {
 			return nil, nil, fmt.Errorf("set_throttling: network: %w", err)
 		}
 
@@ -174,7 +174,7 @@ func registerEmulationTools(server *mcp.Server, s *mcpSession) {
 			if cpuRate > 20 {
 				cpuRate = 20
 			}
-			if err := emulation.SetCPUThrottlingRate(cpuRate).Do(actx); err != nil {
+			if err := chromedp.Run(actx, emulation.SetCPUThrottlingRate(cpuRate)); err != nil {
 				return nil, nil, fmt.Errorf("set_throttling: cpu: %w", err)
 			}
 		}
@@ -203,7 +203,7 @@ func registerEmulationTools(server *mcp.Server, s *mcpSession) {
 			scale = 1
 		}
 		actx := s.activeCtx()
-		if err := emulation.SetDeviceMetricsOverride(input.Width, input.Height, scale, input.Mobile).Do(actx); err != nil {
+		if err := chromedp.Run(actx, emulation.SetDeviceMetricsOverride(input.Width, input.Height, scale, input.Mobile)); err != nil {
 			return nil, nil, fmt.Errorf("set_viewport: %w", err)
 		}
 		return &mcp.CallToolResult{
@@ -223,7 +223,7 @@ func registerEmulationTools(server *mcp.Server, s *mcpSession) {
 		if input.Platform != "" {
 			cmd = cmd.WithPlatform(input.Platform)
 		}
-		if err := cmd.Do(actx); err != nil {
+		if err := chromedp.Run(actx, cmd); err != nil {
 			return nil, nil, fmt.Errorf("set_user_agent: %w", err)
 		}
 		return &mcp.CallToolResult{
@@ -236,7 +236,7 @@ func registerEmulationTools(server *mcp.Server, s *mcpSession) {
 		Description: "Enable or disable network offline emulation",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input SetOfflineInput) (*mcp.CallToolResult, any, error) {
 		actx := s.activeCtx()
-		if err := network.OverrideNetworkState(input.Offline, 0, -1, -1).Do(actx); err != nil {
+		if err := chromedp.Run(actx, network.OverrideNetworkState(input.Offline, 0, -1, -1)); err != nil {
 			return nil, nil, fmt.Errorf("set_offline: %w", err)
 		}
 		state := "online"
@@ -279,7 +279,7 @@ func registerEmulationTools(server *mcp.Server, s *mcpSession) {
 		for k, v := range input.Headers {
 			headers[k] = v
 		}
-		if err := network.SetExtraHTTPHeaders(headers).Do(actx); err != nil {
+		if err := chromedp.Run(actx, network.SetExtraHTTPHeaders(headers)); err != nil {
 			return nil, nil, fmt.Errorf("set_extra_headers: %w", err)
 		}
 		return &mcp.CallToolResult{

@@ -452,8 +452,12 @@ func ensureInterceptEnabled(s *mcpSession) error {
 	// Listen for paused requests.
 	chromedp.ListenTarget(actx, func(ev interface{}) {
 		if e, ok := ev.(*fetch.EventRequestPaused); ok {
-			// Handle in the event's context (which has CDP access).
-			go s.intercepts.handleRequestPaused(actx, e)
+			// Run the handler as a browser action so its Fetch commands
+			// have an executor; listeners must not block, so use a goroutine.
+			go chromedp.Run(actx, chromedp.ActionFunc(func(ctx context.Context) error {
+				s.intercepts.handleRequestPaused(ctx, e)
+				return nil
+			}))
 		}
 	})
 

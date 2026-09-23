@@ -43,7 +43,12 @@ func registerStateTools(server *mcp.Server, s *mcpSession) {
 		state := browserState{}
 
 		// Capture cookies.
-		cookies, err := network.GetCookies().Do(actx)
+		var cookies []*network.Cookie
+		err := chromedp.Run(actx, chromedp.ActionFunc(func(ctx context.Context) error {
+			var err error
+			cookies, err = network.GetCookies().Do(ctx)
+			return err
+		}))
 		if err == nil {
 			for _, c := range cookies {
 				state.Cookies = append(state.Cookies, cookieToCookieParam(c))
@@ -126,7 +131,7 @@ func registerStateTools(server *mcp.Server, s *mcpSession) {
 
 		// Restore cookies.
 		if len(state.Cookies) > 0 {
-			if err := network.SetCookies(state.Cookies).Do(actx); err != nil {
+			if err := chromedp.Run(actx, network.SetCookies(state.Cookies)); err != nil {
 				return nil, nil, fmt.Errorf("load_state: set cookies: %w", err)
 			}
 		}

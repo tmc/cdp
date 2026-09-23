@@ -141,7 +141,7 @@ func registerTraceTools(server *mcp.Server, s *mcpSession) {
 		}
 
 		actx := s.activeCtx()
-		if err := tracing.End().Do(actx); err != nil {
+		if err := chromedp.Run(actx, tracing.End()); err != nil {
 			return nil, nil, fmt.Errorf("stop_trace: %w", err)
 		}
 
