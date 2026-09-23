@@ -118,6 +118,8 @@ them, which is useful for spotting traffic a change introduced or removed.
 	    Enable differential HAR capture.
 	-diff-mode
 	    Enable differential capture mode.
+	    In either mode the HAR is stored with the capture under
+	    -diff-work-dir; -output and -stream are ignored.
 	-capture-name name
 	    Name for this capture.
 	-capture-labels labels

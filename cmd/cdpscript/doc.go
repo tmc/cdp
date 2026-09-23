@@ -9,6 +9,9 @@ bug can become the regression test for it.
 Usage:
 
 	cdpscript [options] <script.txtar>
+	cdpscript [options] -
+
+With - as the script path, cdpscript reads the archive from standard input.
 
 Options:
 
@@ -29,10 +32,11 @@ Options:
 
 # Exit status
 
-	0  success
-	1  script error
-	2  usage error
-	3  an assert command failed
+	0    success
+	1    script error
+	2    usage error
+	3    an assert command failed
+	130  interrupted by SIGINT or SIGTERM
 
 See the cdpscript package for the command set and the script syntax, and
 skills/writing-cdp-scripts/references/script-format.md for the format
