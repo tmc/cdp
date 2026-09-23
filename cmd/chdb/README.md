@@ -11,7 +11,7 @@ chdb is a command-line debugger for Chrome and Chromium built on the Chrome DevT
 - Screenshots
 - JavaScript breakpoints
 - Target listing, creation, and attach
-- CPU and heap profiling
+- Heap snapshots and performance traces
 
 ## Installation
 
@@ -159,27 +159,24 @@ chdb attach
 chdb attach 9223
 ```
 
-### Performance Profiling
+### Performance
 
-#### CPU Profiling
+#### Heap Snapshots
 ```bash
-# Profile CPU for 10 seconds (default)
-chdb profile cpu
-
-# Profile for custom duration
-chdb profile cpu --duration 30s
+# Write a heap snapshot to heap.heapsnapshot (default)
+chdb heap
 
 # Save to custom file
-chdb profile cpu --output cpu-profile.json
+chdb heap --output app.heapsnapshot
 ```
 
-#### Heap Profiling
+#### Performance Traces
 ```bash
-# Take heap snapshot
-chdb profile heap
+# Record a 5-second trace to trace.json (default)
+chdb trace
 
-# Save to custom file
-chdb profile heap --output heap-snapshot.json
+# Record for a custom duration to a custom file
+chdb trace --duration 30s --output perf.json
 ```
 
 ## Examples
@@ -219,11 +216,11 @@ chdb console
 # 1. Navigate to target page
 chdb navigate https://example.com
 
-# 2. Start CPU profiling
-chdb profile cpu --duration 30s --output perf.json
+# 2. Record a performance trace
+chdb trace --duration 30s --output perf.json
 
 # 3. Take heap snapshot
-chdb profile heap --output heap.json
+chdb heap --output app.heapsnapshot
 
 # 4. Monitor network during load
 chdb monitor --duration 10s
@@ -253,7 +250,8 @@ Run `chdb help` for the full command list. Common commands:
 | `debug` | Start debugging | `--tab` |
 | `new [url]` | Create new target | |
 | `attach [port]` | Attach to Chrome | |
-| `profile <type>` | CPU/heap profiling | `--duration`, `--output` |
+| `heap` | Heap snapshot | `--output`, `--tab` |
+| `trace` | Performance trace | `--duration`, `--output`, `--tab` |
 
 ## Troubleshooting
 

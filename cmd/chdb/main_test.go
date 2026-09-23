@@ -47,7 +47,6 @@ func TestRootCommandRegistration(t *testing.T) {
 		"break",
 		"debug",
 		"monitor",
-		"profile",
 		"devtools",
 		"dom",
 		"css",

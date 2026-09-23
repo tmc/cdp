@@ -59,7 +59,6 @@ Every command has its own flags and help text:
 
 # Performance
 
-	profile <type> Not implemented; prints a placeholder
 	heap           Capture a heap snapshot
 	trace          Record a performance trace
 	animation      Debug and control animations

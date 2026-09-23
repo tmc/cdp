@@ -13,15 +13,12 @@ import (
 	"github.com/tmc/cdp/internal/chromedp"
 )
 
-var (
-	unminifyOutDir string
-	unminifyApiKey string
-)
+var unminifyOutDir string
 
 var unminifyCmd = &cobra.Command{
 	Use:   "unminify <url>",
 	Short: "Download a minified script and reformat it",
-	Long:  `Downloads a minified script and writes a reformatted copy. AI-assisted renaming (--api-key) is not implemented.`,
+	Long:  `Downloads a minified script and writes a copy reformatted with line breaks and indentation.`,
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		ctx := createContext()
@@ -36,7 +33,6 @@ var unminifyCmd = &cobra.Command{
 func init() {
 	unminifyCmd.Flags().String("tab", "", "Target tab ID")
 	unminifyCmd.Flags().StringVarP(&unminifyOutDir, "out-dir", "o", "unminified", "Output directory")
-	unminifyCmd.Flags().StringVar(&unminifyApiKey, "api-key", os.Getenv("GEMINI_API_KEY"), "Gemini API Key")
 }
 
 func runUnminify(ctx context.Context, tabID, url string) error {

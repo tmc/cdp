@@ -28,8 +28,8 @@ Features:
 - Interactive debugging with breakpoints
 - DOM inspection and manipulation
 - Network monitoring and interception
-- JavaScript execution and profiling
-- Performance analysis
+- JavaScript execution
+- Heap snapshots and performance traces
 - Screenshots`,
 	Version: "1.0.0",
 }
@@ -54,7 +54,6 @@ func init() {
 	rootCmd.AddCommand(outCmd)
 	rootCmd.AddCommand(debugCmd)
 	rootCmd.AddCommand(monitorCmd)
-	rootCmd.AddCommand(profileCmd)
 	rootCmd.AddCommand(devtoolsCmd)
 	rootCmd.AddCommand(domCmd)
 	rootCmd.AddCommand(cssCmd)
