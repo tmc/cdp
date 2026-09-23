@@ -138,7 +138,7 @@ func registerInputTools(server *mcp.Server, s *mcpSession) {
 		}
 
 		if backendID != 0 {
-			if err := dom.Focus().WithBackendNodeID(backendID).Do(actx); err != nil {
+			if err := chromedp.Run(actx, dom.Focus().WithBackendNodeID(backendID)); err != nil {
 				return nil, nil, fmt.Errorf("focus: %w", err)
 			}
 		} else {
@@ -279,7 +279,7 @@ func elementCenter(ctx context.Context, refs *refRegistry, selector string) (flo
 		return 0, 0, err
 	}
 	if backendID != 0 {
-		if err := dom.ScrollIntoViewIfNeeded().WithBackendNodeID(backendID).Do(ctx); err != nil {
+		if err := chromedp.Run(ctx, dom.ScrollIntoViewIfNeeded().WithBackendNodeID(backendID)); err != nil {
 			return 0, 0, fmt.Errorf("scroll: %w", err)
 		}
 		var quads []dom.Quad
@@ -331,6 +331,11 @@ func pressKey(ctx context.Context, key, modifiers string) error {
 			WithWindowsVirtualKeyCode(kd.KeyCode).
 			WithNativeVirtualKeyCode(kd.KeyCode).
 			WithModifiers(mod)
+		if kd.Key == "Enter" {
+			// Chrome runs default actions such as implicit form
+			// submission only for key events that carry text.
+			down = down.WithText("\r")
+		}
 		if err := down.Do(ctx); err != nil {
 			return fmt.Errorf("key down: %w", err)
 		}
@@ -420,5 +425,5 @@ func hoverBySelector(ctx context.Context, selector string) error {
 	}
 	x, _ := result["x"].(float64)
 	y, _ := result["y"].(float64)
-	return input.DispatchMouseEvent(input.MouseMoved, x, y).Do(ctx)
+	return chromedp.Run(ctx, input.DispatchMouseEvent(input.MouseMoved, x, y))
 }
