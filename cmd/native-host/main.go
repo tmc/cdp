@@ -1,6 +1,7 @@
 package main
 
 import (
+	cryptorand "crypto/rand"
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
@@ -159,14 +160,9 @@ func main() {
 
 	// Initialize security configuration
 	securityConfig := DefaultSecurityConfig()
-	// Use environment variable for HMAC secret (set by extension during install)
-	if secret := os.Getenv("NATIVE_HOST_HMAC_SECRET"); secret != "" {
-		securityConfig.HMACSecret = secret
-	} else {
-		// No secret configured: use a fixed test secret.
-		securityConfig.HMACSecret = "default-test-secret-change-in-production"
-		log.Println("WARNING: Using default HMAC secret - set NATIVE_HOST_HMAC_SECRET environment variable in production")
-	}
+	// Incoming messages are not signed, so no signature is ever checked.
+	// The security manager still requires a key; give it a random one.
+	securityConfig.HMACSecret = cryptorand.Text()
 
 	// Initialize security manager
 	securityManager, err := NewSecurityManager(securityConfig)

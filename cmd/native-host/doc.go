@@ -21,10 +21,9 @@ request is checked against a per-principal capability set, rate limited with
 a token bucket to bound the damage a runaway or hostile caller can do, and
 recorded in an audit log.
 
-HMAC verification of requests is implemented in security.go but not applied
-to incoming messages. The secret comes from NATIVE_HOST_HMAC_SECRET; if that
-variable is unset the host falls back to a fixed development secret and logs
-a warning.
+Messages are not authenticated. HMAC signing and verification are
+implemented in security.go but not applied to incoming messages, so the host
+takes no secret.
 
 # Installation
 
