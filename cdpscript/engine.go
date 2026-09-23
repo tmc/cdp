@@ -23,6 +23,7 @@ import (
 	"github.com/tmc/cdp/internal/discovery"
 	"github.com/tmc/cdp/internal/htmltomd"
 	"github.com/tmc/cdp/internal/recorder"
+	"github.com/tmc/cdp/internal/scriptbrowser"
 	"github.com/tmc/cdp/internal/termmd"
 	"golang.org/x/tools/txtar"
 	"rsc.io/script"
@@ -37,6 +38,8 @@ type archiveData struct {
 }
 
 // Engine executes CDP scripts using the rsc.io/script framework.
+// An Engine may run several scripts in turn, each with its own browser,
+// but it must not run them concurrently.
 type Engine struct {
 	engine    *script.Engine
 	browser   *browser.Browser
@@ -131,20 +134,6 @@ func WithRemoteTab(tabID string, port int) Option {
 	return func(e *Engine) {
 		e.remoteTabID = tabID
 		e.remotePort = port
-	}
-}
-
-// WithBrowserFromContext executes against the browser already attached to ctx,
-// rather than launching one. The engine does not close a browser supplied this
-// way. If ctx carries no browser, the engine launches its own as usual.
-func WithBrowserFromContext(ctx context.Context) Option {
-	return func(e *Engine) {
-		br := browser.FromContext(ctx)
-		if br == nil {
-			return
-		}
-		e.browser = br
-		e.externalBrowser = true
 	}
 }
 
@@ -301,6 +290,7 @@ func (e *Engine) ExecuteScript(ctx context.Context, name, body string, argv []st
 }
 
 func (e *Engine) executeArchive(ctx context.Context, name string, archive *archiveData, argv []string) error {
+	e.reset(ctx)
 	defer e.cleanup()
 	// Build initial environment
 	env := []string{}
@@ -442,19 +432,43 @@ func (e *Engine) scriptTimeout() time.Duration {
 	return defaultScriptTimeout
 }
 
+// reset clears the state a previous Execute left behind, so an Engine can
+// run several scripts in turn. If ctx was marked by scriptbrowser.Borrow and
+// carries a browser, the run uses that browser instead of launching one.
+func (e *Engine) reset(ctx context.Context) {
+	e.browser = nil
+	e.externalBrowser = false
+	if scriptbrowser.Borrowed(ctx) && chromedp.FromContext(ctx) != nil {
+		e.browser = browser.FromContext(ctx)
+		e.externalBrowser = true
+	}
+	e.mousePos, e.mouseDown, e.mouseTracked = cdpinput.ViewportPoint{}, false, false
+	e.refMap = nil
+	e.recorder = nil
+	if len(e.sourcedCmds) > 0 {
+		clear(e.sourcedCmds)
+		e.engine.Cmds = e.commands()
+	}
+	e.dialogMu.Lock()
+	e.dialogListening = false
+	e.dialogAction = nil
+	e.dialogMu.Unlock()
+	e.downloadMu.Lock()
+	e.downloadDir = ""
+	e.downloadMu.Unlock()
+}
+
 func (e *Engine) cleanup() {
 	// Dialog handlers run off the chromedp listener goroutine; wait for any in
 	// flight before tearing the browser down under them.
 	e.dialogWG.Wait()
-	if e.externalBrowser {
-		return
-	}
-	if e.browser != nil {
+	if e.browser != nil && !e.externalBrowser {
 		e.browser.Close()
-		e.browser = nil
 	}
+	e.browser = nil
 	if e.recorder != nil {
 		e.recorder.Close()
+		e.recorder = nil
 	}
 }
 
@@ -543,7 +557,8 @@ func (e *Engine) conditions() map[string]script.Cond {
 	}
 }
 
-// CommandNames returns the canonical cdpscript command names.
+// CommandNames returns the sorted names of every registered cdpscript
+// command, aliases such as "type" included.
 func CommandNames() []string {
 	cmds := New().commands()
 	names := make([]string, 0, len(cmds))

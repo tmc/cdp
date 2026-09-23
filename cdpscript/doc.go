@@ -9,9 +9,9 @@
 // keeps loops and retries in the calling shell or Go test harness instead of
 // adding a second control-flow language.
 //
-// Use WithOutputDir for artifacts, WithEnv for environment, WithRemoteTab to
-// attach to an existing DevTools tab, and WithBrowserFromContext when the
-// caller already owns a browser. ErrUsage and ErrAssertionFailed let
+// Use WithOutputDir for artifacts, WithEnv for environment, and WithRemoteTab
+// to attach to an existing DevTools tab, including one the caller already
+// drives. ErrUsage and ErrAssertionFailed let
 // command-line wrappers return stable Unix exit codes.
 //
 // # Command Reference

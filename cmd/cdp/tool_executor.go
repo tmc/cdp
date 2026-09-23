@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/tmc/cdp/cdpscript"
+	"github.com/tmc/cdp/internal/scriptbrowser"
 )
 
 func runCDPScriptBody(ctx context.Context, scriptBody string, env map[string]string, outputDir string) (stdout, stderr string, err error) {
@@ -18,7 +19,6 @@ func runCDPScriptBody(ctx context.Context, scriptBody string, env map[string]str
 	var out bytes.Buffer
 	var errout bytes.Buffer
 	opts := []cdpscript.Option{
-		cdpscript.WithBrowserFromContext(ctx),
 		cdpscript.WithEnv(os.Environ()...),
 		cdpscript.WithEnv(toolEnv(env)...),
 		cdpscript.WithStdout(&out),
@@ -28,7 +28,7 @@ func runCDPScriptBody(ctx context.Context, scriptBody string, env map[string]str
 		opts = append(opts, cdpscript.WithOutputDir(outputDir))
 	}
 	engine := cdpscript.New(opts...)
-	err = engine.ExecuteScript(ctx, "tool.cdp", scriptBody, nil)
+	err = engine.ExecuteScript(scriptbrowser.Borrow(ctx), "tool.cdp", scriptBody, nil)
 	return strings.TrimSpace(out.String()), errout.String(), err
 }
 

@@ -10,6 +10,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/tmc/cdp/internal/chromedp"
+	"github.com/tmc/cdp/internal/scriptbrowser"
 	"rsc.io/script"
 )
 
@@ -487,5 +489,56 @@ func TestWaitForFileCancel(t *testing.T) {
 	}
 	if elapsed := time.Since(start); elapsed > 10*time.Second {
 		t.Fatalf("waitForFile waited %v after cancellation; want a prompt return", elapsed)
+	}
+}
+
+func TestEngineReuseDropsSourcedCommands(t *testing.T) {
+	greet := filepath.Join(t.TempDir(), "greet.cdp")
+	if err := os.WriteFile(greet, []byte("log hi\n"), 0o666); err != nil {
+		t.Fatal(err)
+	}
+	var stdout bytes.Buffer
+	engine := New(WithStdout(&stdout))
+	first := "source -as greet " + greet + "\ngreet\n"
+	if err := engine.ExecuteScript(context.Background(), "first", first, nil); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := stdout.String(), "hi\n"; got != want {
+		t.Fatalf("first run stdout = %q, want %q", got, want)
+	}
+	if err := engine.ExecuteScript(context.Background(), "second", "greet\n", nil); err == nil {
+		t.Fatal("second run: greet still registered from first run")
+	}
+}
+
+func TestEngineReset(t *testing.T) {
+	bctx, cancel := chromedp.NewContext(context.Background())
+	defer cancel()
+	tests := []struct {
+		name         string
+		ctx          context.Context
+		wantExternal bool
+	}{
+		{"plain", context.Background(), false},
+		{"borrowed without browser", scriptbrowser.Borrow(context.Background()), false},
+		{"browser not borrowed", bctx, false},
+		{"borrowed browser", scriptbrowser.Borrow(bctx), true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			e := New()
+			e.mouseDown, e.mouseTracked = true, true
+			e.dialogListening = true
+			e.dialogAction = &dialogAction{accept: true}
+			e.downloadDir = "/tmp/downloads"
+			e.reset(tt.ctx)
+			if e.externalBrowser != tt.wantExternal || (e.browser != nil) != tt.wantExternal {
+				t.Errorf("externalBrowser = %v, browser = %v, want external %v", e.externalBrowser, e.browser, tt.wantExternal)
+			}
+			if e.mouseDown || e.mouseTracked || e.dialogListening || e.dialogAction != nil || e.downloadDir != "" {
+				t.Errorf("per-run state not reset: mouseDown=%v mouseTracked=%v dialogListening=%v dialogAction=%v downloadDir=%q",
+					e.mouseDown, e.mouseTracked, e.dialogListening, e.dialogAction, e.downloadDir)
+			}
+		})
 	}
 }

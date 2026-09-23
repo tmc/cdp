@@ -10,17 +10,35 @@ import (
 	"time"
 )
 
-// CLIConfig configures RunCLI.
+// CLIConfig configures RunCLI. Zero fields take the defaults noted below.
 type CLIConfig struct {
+	// Command names the program in flag errors and usage.
+	// Empty means "cdpscript".
 	Command string
-	Usage   string
-	Env     []string
-	Stdin   io.Reader
-	Stdout  io.Writer
-	Stderr  io.Writer
+
+	// Usage is the synopsis printed when no script is given.
+	// Empty means Command + " [options] <script.txtar>".
+	Usage string
+
+	// Env is the script's initial environment. Nil means os.Environ().
+	Env []string
+
+	// Stdin supplies the script when the script path is "-".
+	// Nil means os.Stdin.
+	Stdin io.Reader
+
+	// Stdout and Stderr receive command output and diagnostics.
+	// Nil means os.Stdout and os.Stderr.
+	Stdout io.Writer
+	Stderr io.Writer
 }
 
-// RunCLI runs the shared cdpscript command-line interface.
+// RunCLI runs the shared cdpscript command-line interface with the
+// command-line arguments args (not including the program name).
+//
+// When -h is given, or the script arguments include -h or --help, RunCLI
+// prints help and returns flag.ErrHelp. Callers should pass every result,
+// including flag.ErrHelp, to ExitCode to get the process exit status.
 func RunCLI(ctx context.Context, args []string, cfg CLIConfig) error {
 	if cfg.Command == "" {
 		cfg.Command = "cdpscript"
@@ -115,7 +133,14 @@ func helpWanted(args []string) bool {
 	return false
 }
 
-// ExitCode maps cdpscript errors to process exit codes.
+// ExitCode maps an error from RunCLI or Engine execution to a process exit
+// code. The mapping is part of the script contract:
+//
+//	0    err is nil or flag.ErrHelp
+//	2    err wraps ErrUsage
+//	3    err wraps ErrAssertionFailed
+//	130  err wraps context.Canceled
+//	1    any other error
 func ExitCode(err error) int {
 	switch {
 	case err == nil:
