@@ -5,11 +5,27 @@ chromedp v0.16.0 (commit `7963c203ed5458147d27dc39a5c06d2b12e81664`). The upstre
 license is retained in LICENSE. The upstream module checksum is
 `h1:rOO4deOm4CbZgBCa8mD9g2rDyIoNs0BkgvNrlbp5ouk=`.
 
-The local change adds `WithExistingTarget`: canceling a borrowed attachment
-releases its session without closing the browser's target. `WithTargetID` and
-newly allocated targets retain their existing close-on-cancel behavior. Invalid
-borrowed-target options fail during `Run`, before allocation. Browser-context
-option validation runs after option collection to handle both option orders.
+Local changes, all to be re-applied when updating the copy:
+
+- Import paths are rewritten from `github.com/chromedp/chromedp` to
+  `github.com/tmc/cdp/internal/chromedp`.
+- chromedp.go adds `WithExistingTarget`: canceling a borrowed attachment
+  releases its session without closing the browser's target. `WithTargetID`
+  and newly allocated targets retain their existing close-on-cancel behavior.
+  Invalid borrowed-target options, including conflicting target options and a
+  browser-context option on a borrowed target, fail during `Run`, before
+  allocation.
+- chromedp.go moves the "can not be used before Browser is initialized"
+  panics of `WithNewBrowserContext` and `WithExistingBrowserContext` from the
+  options into `NewContext`, after option collection, so they apply in either
+  option order.
+- chromedp.go makes a failed browser allocation sticky: `Run` records the
+  error and returns it on later calls instead of allocating again, which
+  would close the allocator's one-shot channel twice and panic.
+- The `//go:generate go run gen.go` directives are removed from kb/kb.go,
+  device/device.go, and the templates in kb/gen.go and device/gen.go, so
+  `go generate ./...` does not regenerate those files from live sources and
+  drift from the pinned version. Run gen.go by hand only as part of an update.
 
 The MCP/browser implementation imports this package. The public `cdpscripttest`
 package and its CLI still use upstream chromedp, preserving their exported
