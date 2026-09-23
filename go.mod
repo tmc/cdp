@@ -10,6 +10,7 @@ require (
 	github.com/fsnotify/fsnotify v1.9.0
 	github.com/go-json-experiment/json v0.0.0-20260623181947-01eb4420fa68
 	github.com/go-sourcemap/sourcemap v2.1.4+incompatible
+	github.com/gobwas/ws v1.4.0
 	github.com/gorilla/websocket v1.5.3
 	github.com/itchyny/gojq v0.12.17
 	github.com/modelcontextprotocol/go-sdk v1.4.1
@@ -17,7 +18,6 @@ require (
 	github.com/tmc/macgo v0.1.1
 	github.com/yuin/goldmark v1.7.1
 	golang.org/x/image v0.38.0
-	golang.org/x/net v0.50.0
 	golang.org/x/term v0.40.0
 	golang.org/x/tools v0.42.0
 	rsc.io/script v0.0.2
@@ -30,7 +30,6 @@ require (
 	github.com/ebitengine/purego v0.9.1 // indirect
 	github.com/gobwas/httphead v0.1.0 // indirect
 	github.com/gobwas/pool v0.2.1 // indirect
-	github.com/gobwas/ws v1.4.0 // indirect
 	github.com/google/jsonschema-go v0.4.2 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/itchyny/timefmt-go v0.1.6 // indirect
@@ -38,6 +37,7 @@ require (
 	github.com/segmentio/encoding v0.5.4 // indirect
 	github.com/spf13/pflag v1.0.9 // indirect
 	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect
+	golang.org/x/net v0.50.0 // indirect
 	golang.org/x/oauth2 v0.34.0 // indirect
 	golang.org/x/sys v0.47.0 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect

@@ -4,29 +4,10 @@ package sitegroup
 import (
 	"net"
 	"strings"
-
-	"golang.org/x/net/publicsuffix"
 )
 
-// RegistrableDomain returns the public-suffix-plus-one grouping key for host.
-// IP literals, single-label hosts, and empty hosts fall back to the normalized
-// host itself. An empty host is represented as unknown_domain.
-func RegistrableDomain(host string) string {
-	host = normalizeHost(host)
-	if host == "" {
-		return "unknown_domain"
-	}
-	if net.ParseIP(host) != nil {
-		return host
-	}
-	if domain, err := publicsuffix.EffectiveTLDPlusOne(host); err == nil {
-		return domain
-	}
-	return host
-}
-
 // Host returns the full hostname grouping key for host: the visited subdomain
-// (e.g. notebooklm.google.com) rather than its registrable domain. The host is
+// (e.g. notebooklm.google.com), not a parent domain. The host is
 // lowercased and any port is stripped. An empty host is represented as
 // unknown_domain.
 func Host(host string) string {

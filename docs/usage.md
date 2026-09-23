@@ -67,10 +67,10 @@ Common flags:
 - `-harl`: stream HAR entries as JSONL to a temporary capture directory by default
 - `-harl-file`: set the HARL JSONL output path; use `-harl-file -` only when
   stdout streaming is intended
-- `-output-dir`: write per-host HARL files under the registrable domain of the
+- `-output-dir`: write per-host HARL files under the hostname of the
   navigated page, and place saved sources under that page domain's `sources/`
   directory
-- `-group-by-page`: group output by the navigated page's registrable domain
+- `-group-by-page`: group output by the navigated page's hostname
   (enabled by default; use `-group-by-page=false` for request-domain layout)
 - `-navigation-timeout`: bound interactive `goto`/navigation commands (30
   seconds by default; use `0` to disable the bound)
