@@ -16,7 +16,6 @@ import (
 
 	"github.com/tmc/cdp/internal/browser"
 	"github.com/tmc/cdp/internal/browserprofile"
-	"github.com/tmc/cdp/internal/testutil"
 )
 
 func TestCheckPDFOutput(t *testing.T) {
@@ -50,7 +49,6 @@ func TestCheckPDFOutput(t *testing.T) {
 // Cloudflare-style title on the first request and the real page afterwards.
 func TestRunChallengeRetryRecordsHAR(t *testing.T) {
 	skipIfNoBrowser(t)
-	defer testutil.CleanupOrphanedBrowsers(t)
 
 	// Keep the retry headless; the test is about what it records.
 	saved := challengeRetryOptions

@@ -8,9 +8,13 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"regexp"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 
@@ -377,65 +381,59 @@ func GetChromeVersion() (string, error) {
 	return strings.TrimSpace(string(output)), nil
 }
 
-// CleanupOrphanedBrowsers kills any leftover browser processes from tests
-func CleanupOrphanedBrowsers(t testing.TB) {
-	t.Helper()
-
-	if runtime.GOOS != "darwin" && runtime.GOOS != "linux" {
-		return // Only cleanup on Unix-like systems
+// Main runs the tests in m and returns the exit code for os.Exit.
+//
+// Main points TMPDIR at a new directory named cdp-test-<pid>-*, so browser
+// profiles that the tests create, directly or through subprocesses such as
+// a built churl binary, live under it. When the tests finish, Main kills
+// every process whose command line names a path under that directory and
+// removes the directory. It also sweeps directories left by earlier test
+// processes that no longer exist, such as ones interrupted mid-run.
+// Browsers started by other processes are never touched.
+func Main(m *testing.M) int {
+	if runtime.GOOS == "windows" {
+		return m.Run()
 	}
-
-	// Kill any headless browser instances
-	browsers := []string{
-		"Brave Browser.*headless",
-		"Google Chrome.*headless",
-		"Chromium.*headless",
-		"chromedp-runner",
+	base := os.TempDir()
+	sweepStale(base)
+	root, err := os.MkdirTemp(base, fmt.Sprintf("cdp-test-%d-", os.Getpid()))
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "testutil: %v\n", err)
+		return 1
 	}
-
-	for _, browser := range browsers {
-		cmd := exec.Command("pkill", "-f", browser)
-		cmd.Run() // Ignore errors - process might not exist
-	}
-
-	// Give processes time to exit
-	time.Sleep(100 * time.Millisecond)
+	os.Setenv("TMPDIR", root)
+	code := m.Run()
+	killUnder(root)
+	os.RemoveAll(root)
+	return code
 }
 
-// WithBrowserCleanup runs a function and ensures browser cleanup
-func WithBrowserCleanup(t testing.TB, fn func()) {
-	t.Helper()
-	defer CleanupOrphanedBrowsers(t)
-	fn()
-}
-
-// EnsureNoBrowsersRunning checks that no test browsers are running
-func EnsureNoBrowsersRunning(t testing.TB) {
-	t.Helper()
-
-	if runtime.GOOS != "darwin" && runtime.GOOS != "linux" {
-		return
-	}
-
-	cmd := exec.Command("sh", "-c", "ps aux | grep -E '(Brave|Chrome|Chromium).*headless' | grep -v grep")
-	output, _ := cmd.Output()
-
-	if len(output) > 0 {
-		lines := strings.Split(string(output), "\n")
-		if len(lines) > 1 || (len(lines) == 1 && lines[0] != "") {
-			t.Logf("Warning: Found %d running browser process(es) from tests", len(lines))
-			CleanupOrphanedBrowsers(t)
+// sweepStale kills processes under and removes each cdp-test-<pid>-*
+// directory in base whose pid is no longer running.
+func sweepStale(base string) {
+	dirs, _ := filepath.Glob(filepath.Join(base, "cdp-test-*-*"))
+	for _, dir := range dirs {
+		f := strings.Split(filepath.Base(dir), "-")
+		if len(f) != 4 {
+			continue
 		}
+		pid, err := strconv.Atoi(f[2])
+		if err != nil || pid <= 0 {
+			continue
+		}
+		if p, err := os.FindProcess(pid); err == nil && p.Signal(syscall.Signal(0)) == nil {
+			continue
+		}
+		killUnder(dir)
+		os.RemoveAll(dir)
 	}
 }
 
-// RunWithTimeout runs a test with a context that has a timeout and cleanup
-func RunWithTimeout(t testing.TB, timeout time.Duration, fn func(context.Context)) {
-	t.Helper()
-
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
-	defer CleanupOrphanedBrowsers(t)
-
-	fn(ctx)
+// killUnder kills every process whose command line contains a path under
+// dir, then waits briefly for them to exit.
+func killUnder(dir string) {
+	pattern := regexp.QuoteMeta(dir + string(filepath.Separator))
+	if exec.Command("pkill", "-KILL", "-f", pattern).Run() == nil {
+		time.Sleep(100 * time.Millisecond)
+	}
 }

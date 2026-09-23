@@ -19,18 +19,8 @@ import (
 	"github.com/tmc/cdp/internal/testutil"
 )
 
-// TestMain adds global test setup and teardown for browser cleanup.
 func TestMain(m *testing.M) {
-	// Clean up before tests
-	testutil.CleanupOrphanedBrowsers(&testing.T{})
-
-	// Run tests
-	code := m.Run()
-
-	// Clean up after tests
-	testutil.CleanupOrphanedBrowsers(&testing.T{})
-
-	os.Exit(code)
+	os.Exit(testutil.Main(m))
 }
 
 func TestPrepareCaptureDirs(t *testing.T) {

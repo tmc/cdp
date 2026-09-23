@@ -15,18 +15,8 @@ import (
 	"github.com/tmc/cdp/internal/testutil"
 )
 
-// TestMain adds global test setup and teardown for browser cleanup
 func TestMain(m *testing.M) {
-	// Clean up before tests
-	testutil.CleanupOrphanedBrowsers(&testing.T{})
-
-	// Run tests
-	code := m.Run()
-
-	// Clean up after tests
-	testutil.CleanupOrphanedBrowsers(&testing.T{})
-
-	os.Exit(code)
+	os.Exit(testutil.Main(m))
 }
 
 // skipIfNoBrowser skips the test if Chrome is not available or if running in short mode
@@ -210,7 +200,6 @@ func TestChurl_MirrorFlagsRejected(t *testing.T) {
 func TestChurl_BasicFetch(t *testing.T) {
 	// not parallel — Chrome profile contention
 	skipIfNoBrowser(t)
-	defer testutil.CleanupOrphanedBrowsers(t)
 
 	churlPath := buildChurl(t)
 	ts := createTestServer()
@@ -302,7 +291,6 @@ func TestChurl_BasicFetch(t *testing.T) {
 func TestChurl_Headers(t *testing.T) {
 	// not parallel — Chrome profile contention
 	skipIfNoBrowser(t)
-	defer testutil.CleanupOrphanedBrowsers(t)
 
 	churlPath := buildChurl(t)
 	ts := createTestServer()
@@ -338,7 +326,6 @@ func TestChurl_Headers(t *testing.T) {
 func TestChurl_Authentication(t *testing.T) {
 	// not parallel — Chrome profile contention
 	skipIfNoBrowser(t)
-	defer testutil.CleanupOrphanedBrowsers(t)
 
 	churlPath := buildChurl(t)
 	ts := createTestServer()
@@ -399,7 +386,6 @@ func TestChurl_Authentication(t *testing.T) {
 func TestChurl_OutputFile(t *testing.T) {
 	// not parallel — Chrome profile contention
 	skipIfNoBrowser(t)
-	defer testutil.CleanupOrphanedBrowsers(t)
 
 	churlPath := buildChurl(t)
 	ts := createTestServer()
@@ -449,7 +435,6 @@ func TestChurl_OutputFile(t *testing.T) {
 func TestChurl_DynamicContent(t *testing.T) {
 	// not parallel — Chrome profile contention
 	skipIfNoBrowser(t)
-	defer testutil.CleanupOrphanedBrowsers(t)
 
 	churlPath := buildChurl(t)
 	ts := createTestServer()
@@ -480,7 +465,6 @@ func TestChurl_DynamicContent(t *testing.T) {
 func TestChurl_WaitSelector(t *testing.T) {
 	// not parallel — Chrome profile contention
 	skipIfNoBrowser(t)
-	defer testutil.CleanupOrphanedBrowsers(t)
 
 	churlPath := buildChurl(t)
 	ts := createTestServer()
@@ -511,7 +495,6 @@ func TestChurl_WaitSelector(t *testing.T) {
 func TestChurl_APIEndpoint(t *testing.T) {
 	// not parallel — Chrome profile contention
 	skipIfNoBrowser(t)
-	defer testutil.CleanupOrphanedBrowsers(t)
 
 	churlPath := buildChurl(t)
 	ts := createTestServer()
@@ -557,7 +540,6 @@ func TestChurl_APIEndpoint(t *testing.T) {
 func TestChurl_Timeout(t *testing.T) {
 	// not parallel — Chrome profile contention
 	skipIfNoBrowser(t)
-	defer testutil.CleanupOrphanedBrowsers(t)
 
 	churlPath := buildChurl(t)
 	ts := createTestServer()
@@ -588,7 +570,6 @@ func TestChurl_Timeout(t *testing.T) {
 func TestChurl_HAR_Output(t *testing.T) {
 	// not parallel — Chrome profile contention
 	skipIfNoBrowser(t)
-	defer testutil.CleanupOrphanedBrowsers(t)
 
 	churlPath := buildChurl(t)
 	ts := createTestServer()
@@ -639,7 +620,6 @@ func TestChurl_HAR_Output(t *testing.T) {
 func TestChurl_VerboseMode(t *testing.T) {
 	// not parallel — Chrome profile contention
 	skipIfNoBrowser(t)
-	defer testutil.CleanupOrphanedBrowsers(t)
 
 	churlPath := buildChurl(t)
 	ts := createTestServer()
