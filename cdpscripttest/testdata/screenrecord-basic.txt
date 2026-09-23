@@ -4,7 +4,10 @@ set-base-url ${BASE_URL}
 navigate /screenrecord-basic.html
 wait-visible '#box'
 screenrecord start recording.gif
-sleep 500ms
+sleep 1s
 screenrecord stop
 stdout 'recording.gif'
-stdout 'frames:'
+# The page animates continuously, so a second of recording yields well over
+# ten frames. Chrome stops sending frames that are not acked, which caps a
+# broken recorder at about three.
+stdout 'frames: [1-9][0-9]+'

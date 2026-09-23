@@ -150,7 +150,7 @@ func Screenrecord() script.Cmd {
 					return nil, script.ErrUsage
 				}
 				return func(s *script.State) (stdout, stderr string, err error) {
-					path, err := cs.StartScreenRecordingWithOptions(opts)
+					path, err := cs.StartScreenRecording(opts)
 					if err != nil {
 						return "", "", err
 					}
@@ -161,7 +161,7 @@ func Screenrecord() script.Cmd {
 					return nil, script.ErrUsage
 				}
 				return func(s *script.State) (stdout, stderr string, err error) {
-					result, err := cs.StopScreenRecordingResult()
+					result, err := cs.StopScreenRecording()
 					if err != nil {
 						return "", "", err
 					}

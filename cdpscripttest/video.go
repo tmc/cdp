@@ -20,7 +20,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/chromedp/cdproto/cdp"
 	"github.com/chromedp/cdproto/page"
 	"github.com/chromedp/chromedp"
 )
@@ -28,34 +27,56 @@ import (
 // ScreenRecordFormat identifies a screen recording artifact format.
 type ScreenRecordFormat string
 
+// Screen recording formats.
 const (
-	ScreenRecordGIF    ScreenRecordFormat = "gif"
-	ScreenRecordFrames ScreenRecordFormat = "frames"
-	ScreenRecordPNG    ScreenRecordFormat = "png"
-	ScreenRecordWebM   ScreenRecordFormat = "webm"
+	ScreenRecordGIF    ScreenRecordFormat = "gif"    // animated GIF
+	ScreenRecordFrames ScreenRecordFormat = "frames" // directory of numbered PNG frames plus manifest.json
+	ScreenRecordPNG    ScreenRecordFormat = "png"    // PNG of the last captured frame
+	ScreenRecordWebM   ScreenRecordFormat = "webm"   // VP9 WebM; requires ffmpeg in PATH
 )
 
-// DefaultScreenRecordMaxFrames bounds retained recording frames.
+// DefaultScreenRecordMaxFrames is the default and the largest allowed value
+// of ScreenRecordOptions.MaxFrames.
 const DefaultScreenRecordMaxFrames = 300
 
 // ScreenRecordOptions configures a screen recording.
+// The zero value records a GIF named screenrecord.gif.
 type ScreenRecordOptions struct {
-	Filename      string
-	Format        ScreenRecordFormat
-	Selector      string
-	Quality       int
+	// Filename is the artifact path relative to the artifact directory.
+	// If empty, it is "screenrecord" plus the format's extension
+	// ("screenrecord" alone for ScreenRecordFrames). If it has no
+	// extension, the format's extension is added. An extension must agree
+	// with Format; ScreenRecordFrames takes a directory name with none.
+	Filename string
+
+	// Format is the artifact format. If empty, it is inferred from the
+	// Filename extension, defaulting to ScreenRecordGIF.
+	Format ScreenRecordFormat
+
+	// Selector, if set, crops every frame to the border box the matching
+	// element has when the recording starts. The element must be visible.
+	Selector string
+
+	// Quality is the screencast JPEG quality, 1 to 100. Zero means 80.
+	Quality int
+
+	// EveryNthFrame keeps one of every n received frames. Zero means 1.
 	EveryNthFrame int
-	MaxFrames     int
+
+	// MaxFrames caps the kept frames, 1 to DefaultScreenRecordMaxFrames.
+	// Zero means DefaultScreenRecordMaxFrames. Frames past the cap are
+	// dropped and the result is marked Truncated.
+	MaxFrames int
 }
 
 // ScreenRecordResult describes a completed screen recording.
 type ScreenRecordResult struct {
-	Path      string
-	Format    ScreenRecordFormat
-	Frames    int
-	Duration  time.Duration
-	Selector  string
-	Truncated bool
+	Path      string             // artifact path
+	Format    ScreenRecordFormat // artifact format
+	Frames    int                // number of frames kept
+	Duration  time.Duration      // time from start to stop
+	Selector  string             // crop selector, if any
+	Truncated bool               // frames were dropped at MaxFrames or a frame write failed
 }
 
 type screenCrop struct{ X, Y, Width, Height float64 }
@@ -82,13 +103,9 @@ type screenFrame struct {
 	t   time.Time
 }
 
-// StartScreenRecording starts a GIF recording for compatibility.
-func (s *State) StartScreenRecording(filename string) (string, error) {
-	return s.StartScreenRecordingWithOptions(ScreenRecordOptions{Filename: filename, Format: ScreenRecordGIF})
-}
-
-// StartScreenRecordingWithOptions starts a recording with opts.
-func (s *State) StartScreenRecordingWithOptions(opts ScreenRecordOptions) (string, error) {
+// StartScreenRecording starts recording the current tab with opts and
+// returns the artifact path. The artifact is written by StopScreenRecording.
+func (s *State) StartScreenRecording(opts ScreenRecordOptions) (string, error) {
 	if s.recorder != nil {
 		return "", fmt.Errorf("screenrecord: already recording")
 	}
@@ -126,8 +143,13 @@ func (s *State) StartScreenRecordingWithOptions(opts ScreenRecordOptions) (strin
 	r := &screenRecorder{ctx: s.cdpCtx, path: path, opts: opts, crop: crop, ffmpeg: ffmpeg, started: time.Now()}
 	chromedp.ListenTarget(s.cdpCtx, func(ev any) {
 		if f, ok := ev.(*page.EventScreencastFrame); ok {
-			r.addFrame(f)
-			_ = page.ScreencastFrameAck(f.SessionID).Do(s.cdpCtx)
+			if !r.addFrame(f) {
+				return
+			}
+			// Chrome sends more frames only after an ack. The ack must run
+			// off the listener goroutine: chromedp dispatches events
+			// synchronously, so calling Run here would deadlock.
+			go chromedp.Run(s.cdpCtx, page.ScreencastFrameAck(f.SessionID))
 		}
 	})
 	if err := chromedp.Run(s.cdpCtx, page.StartScreencast().WithFormat(page.ScreencastFormatJpeg).WithQuality(int64(opts.Quality)).WithEveryNthFrame(1)); err != nil {
@@ -213,14 +235,9 @@ func formatFromFilename(name string) ScreenRecordFormat {
 	return ""
 }
 
-// StopScreenRecording stops the active recording and writes its artifact.
-func (s *State) StopScreenRecording() (string, int, error) {
-	r, err := s.StopScreenRecordingResult()
-	return r.Path, r.Frames, err
-}
-
-// StopScreenRecordingResult stops the active recording and returns its result.
-func (s *State) StopScreenRecordingResult() (ScreenRecordResult, error) {
+// StopScreenRecording stops the active recording, writes its artifact,
+// and returns the result.
+func (s *State) StopScreenRecording() (ScreenRecordResult, error) {
 	if s.recorder == nil {
 		return ScreenRecordResult{}, fmt.Errorf("screenrecord: not recording")
 	}
@@ -233,22 +250,25 @@ func (s *State) stopScreenRecordingIfActive() (string, int, error) {
 	if s.recorder == nil {
 		return "", 0, nil
 	}
-	return s.StopScreenRecording()
+	r, err := s.StopScreenRecording()
+	return r.Path, r.Frames, err
 }
 
-func (r *screenRecorder) addFrame(ev *page.EventScreencastFrame) {
+// addFrame records ev and reports whether the recording is still active,
+// in which case the frame should be acked.
+func (r *screenRecorder) addFrame(ev *page.EventScreencastFrame) bool {
 	data, err := base64.StdEncoding.DecodeString(ev.Data)
 	if err != nil {
-		return
+		return !r.isStopped()
 	}
 	img, err := jpeg.Decode(bytes.NewReader(data))
 	if err != nil {
-		return
+		return !r.isStopped()
 	}
 	if r.crop != nil {
 		img, err = cropScreencast(img, r.crop, ev.Metadata)
 		if err != nil {
-			return
+			return !r.isStopped()
 		}
 	}
 	t := time.Now()
@@ -257,27 +277,37 @@ func (r *screenRecorder) addFrame(ev *page.EventScreencastFrame) {
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if r.stopped || r.truncated {
-		return
+	if r.stopped {
+		return false
+	}
+	if r.truncated {
+		return true
 	}
 	r.seen++
 	if r.seen%r.opts.EveryNthFrame != 0 {
-		return
+		return true
 	}
 	if r.count >= r.opts.MaxFrames {
 		r.truncated = true
-		return
+		return true
 	}
 	if r.opts.Format == ScreenRecordFrames {
 		if err := writePNG(filepath.Join(r.path, fmt.Sprintf("frame-%06d.png", r.count+1)), img); err != nil {
 			r.truncated = true
-			return
+			return true
 		}
 		r.count++
-		return
+		return true
 	}
 	r.count++
 	r.frames = append(r.frames, screenFrame{img: img, t: t})
+	return true
+}
+
+func (r *screenRecorder) isStopped() bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.stopped
 }
 
 func cropScreencast(img image.Image, crop *screenCrop, meta *page.ScreencastFrameMetadata) (image.Image, error) {
@@ -370,12 +400,6 @@ func writeWebM(ctx context.Context, encoder, path string, frames []screenFrame) 
 		return fmt.Errorf("screenrecord: encode webm: %w", err)
 	}
 	return nil
-}
-
-func runCDP(ctx context.Context, method string, params, result any) error {
-	return chromedp.Run(ctx, chromedp.ActionFunc(func(ctx context.Context) error {
-		return cdp.Execute(ctx, method, params, result)
-	}))
 }
 
 func (r *screenRecorder) resultLocked() ScreenRecordResult {

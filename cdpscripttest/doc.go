@@ -25,9 +25,9 @@
 // option this package does not mirror, without this struct having to grow for
 // each one.
 //
-// Everything reached only under the cdp build tag — the screen recorder, the
-// WebRTC shim, screenshot-comparison thresholds — is harness machinery and may
-// change with the browser behavior it wraps. Baseline images and pixel
+// The screen recorder, the WebRTC shim, and screenshot-comparison thresholds
+// are harness machinery and may change with the browser behavior they wrap,
+// even where their Go API is exported. Baseline images and pixel
 // thresholds are not a compatibility contract.
 //
 // # Script Syntax

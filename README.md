@@ -214,7 +214,7 @@ The module is pre-v1, so nothing here carries a v1 compatibility promise yet. Th
 
 **MCP tool set** (`cdp --mcp`). The least stable surface. Tool names, input schemas, and result shapes follow what the hosts need and may change without notice. Pin a commit if you depend on a specific schema.
 
-Anything reached only under the `cdp` build tag — the screen recorder, the WebRTC shim, screenshot-comparison thresholds — is test-harness machinery and tracks the browser behavior it wraps. Baseline images and pixel thresholds are not a compatibility contract.
+The screen recorder, the WebRTC shim, and screenshot-comparison thresholds are test-harness machinery and track the browser behavior they wrap, even where their Go API is exported. Baseline images and pixel thresholds are not a compatibility contract.
 
 ## Trust Model
 
