@@ -10,7 +10,7 @@ The same server backs three packaging targets:
 
 | Target | Format | Files |
 |---|---|---|
-| Claude Code | repo-as-plugin / marketplace | [`.claude-plugin/plugin.json`](../.claude-plugin/plugin.json), [`.mcp.json`](../.mcp.json), [`.claude-plugin/marketplace.json`](../.claude-plugin/marketplace.json) |
+| Claude Code | repo-as-plugin / marketplace | [`.claude-plugin/plugin.json`](../.claude-plugin/plugin.json), [`.claude-plugin/marketplace.json`](../.claude-plugin/marketplace.json) |
 | Claude Desktop | MCP bundle (`.mcpb`) | [`plugins/mcpb/`](../plugins/mcpb/) |
 | Codex | `config.toml` | [`plugins/codex/`](../plugins/codex/) |
 
@@ -44,7 +44,8 @@ branch. For local development, load the plugin directly from a checkout:
 claude --plugin-dir .
 ```
 
-Either way you get the `cdp` MCP server (see [`.mcp.json`](../.mcp.json)) and
+Either way you get the `cdp` MCP server (declared under `mcpServers` in
+[`plugin.json`](../.claude-plugin/plugin.json)) and
 the browser-automation skills under [`skills/`](../skills). The plugin prompts
 for a "Run Chrome headless" toggle at enable time (default on); turn it off to
 watch the browser.

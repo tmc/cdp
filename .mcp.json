@@ -1,8 +1,0 @@
-{
-  "mcpServers": {
-    "cdp": {
-      "command": "cdp",
-      "args": ["-mcp", "-headless=${user_config.headless}"]
-    }
-  }
-}

@@ -19,6 +19,12 @@
     "screenshot",
     "mcp"
   ],
+  "mcpServers": {
+    "cdp": {
+      "command": "cdp",
+      "args": ["-mcp", "-headless=${user_config.headless}"]
+    }
+  },
   "userConfig": {
     "headless": {
       "type": "boolean",
