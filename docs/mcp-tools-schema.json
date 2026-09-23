@@ -451,7 +451,7 @@
       "annotations": {
         "readOnlyHint": true
       },
-      "description": "Get console output and errors from an extension's service worker. Attaches to the service worker target on first call.",
+      "description": "Get console output and errors from an extension's service worker. Attaches to the service worker target on first call. DevTools-only extensions (devtools_page, no background service worker) have no target unless a DevTools window is open, which requires a headed browser.",
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -470,7 +470,7 @@
       "name": "extension_console"
     },
     {
-      "description": "Evaluate JavaScript in the context of an extension's service worker. Finds the service worker target and runs Runtime.evaluate there.",
+      "description": "Evaluate JavaScript in the context of an extension's service worker. Finds the service worker target and runs Runtime.evaluate there. DevTools-only extensions (devtools_page, no background service worker) have no target unless a DevTools window is open, which requires a headed browser; then the devtools_page is used.",
       "inputSchema": {
         "additionalProperties": false,
         "properties": {

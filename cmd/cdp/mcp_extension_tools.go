@@ -377,7 +377,7 @@ func registerExtensionTools(server *mcp.Server, s *mcpSession) {
 
 	addMCPTool(server, &mcp.Tool{
 		Name:        "extension_console",
-		Description: "Get console output and errors from an extension's service worker. Attaches to the service worker target on first call.",
+		Description: "Get console output and errors from an extension's service worker. Attaches to the service worker target on first call. DevTools-only extensions (devtools_page, no background service worker) have no target unless a DevTools window is open, which requires a headed browser.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input ExtensionConsoleInput) (*mcp.CallToolResult, any, error) {
 		bctx, err := s.browserContext(ctx)
@@ -472,7 +472,7 @@ func registerExtensionTools(server *mcp.Server, s *mcpSession) {
 
 	addMCPTool(server, &mcp.Tool{
 		Name:        "extension_evaluate",
-		Description: "Evaluate JavaScript in the context of an extension's service worker. Finds the service worker target and runs Runtime.evaluate there.",
+		Description: "Evaluate JavaScript in the context of an extension's service worker. Finds the service worker target and runs Runtime.evaluate there. DevTools-only extensions (devtools_page, no background service worker) have no target unless a DevTools window is open, which requires a headed browser; then the devtools_page is used.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input ExtensionEvaluateInput) (*mcp.CallToolResult, any, error) {
 		bctx, err := s.browserContext(ctx)
 		if err != nil {
@@ -610,24 +610,109 @@ func strFromMap(m map[string]any, key string) string {
 }
 
 // findExtensionSW finds the service worker target ID for a given extension ID.
+// If the extension is installed but has no target, the error says why.
 func findExtensionSW(browserCtx context.Context, extID string) (target.ID, error) {
 	targets, err := chromedp.Targets(browserCtx)
 	if err != nil {
 		return "", fmt.Errorf("enumerate targets: %w", err)
 	}
+	if tid, ok := extensionTarget(targets, extID); ok {
+		return tid, nil
+	}
+	path, installed := installedExtensionPath(browserCtx, extID)
+	devtoolsOnly := false
+	if path != "" {
+		if data, err := os.ReadFile(filepath.Join(path, "manifest.json")); err == nil {
+			devtoolsOnly = manifestDevToolsOnly(data)
+		}
+	}
+	return "", noExtensionTargetError(extID, installed, devtoolsOnly)
+}
+
+// extensionTarget picks the target to use for extID: its service worker if
+// running, otherwise any target whose URL belongs to the extension (a
+// background page, an open extension page, or the devtools_page iframe of
+// an open DevTools window).
+func extensionTarget(targets []*target.Info, extID string) (target.ID, bool) {
 	prefix := "chrome-extension://" + extID + "/"
 	for _, t := range targets {
 		if t.Type == "service_worker" && strings.HasPrefix(t.URL, prefix) {
-			return t.TargetID, nil
+			return t.TargetID, true
 		}
 	}
-	// Fall back to any target with this extension ID (background page, etc.)
 	for _, t := range targets {
 		if strings.HasPrefix(t.URL, prefix) {
-			return t.TargetID, nil
+			return t.TargetID, true
 		}
 	}
-	return "", fmt.Errorf("no target found for extension %s", extID)
+	return "", false
+}
+
+// noExtensionTargetError explains why extID has no target.
+func noExtensionTargetError(extID string, installed, devtoolsOnly bool) error {
+	switch {
+	case devtoolsOnly:
+		return fmt.Errorf("extension %s has no inspectable target: DevTools-only extensions (devtools_page, no background service worker) run inside DevTools; open DevTools on a page in a headed browser to create one", extID)
+	case installed:
+		return fmt.Errorf("extension %s is installed but has no inspectable target: its service worker may be stopped, or it runs only inside DevTools (devtools_page)", extID)
+	}
+	return fmt.Errorf("no target found for extension %s", extID)
+}
+
+// installedExtensionPath reports whether extID is installed and, if known,
+// the directory it was loaded from. It tries the CDP Extensions domain,
+// then chrome.developerPrivate on chrome://extensions.
+func installedExtensionPath(browserCtx context.Context, extID string) (path string, installed bool) {
+	var exts []*extensions.ExtensionInfo
+	err := chromedp.Run(browserCtx, chromedp.ActionFunc(func(ctx context.Context) error {
+		var err error
+		exts, err = extensions.GetExtensions().Do(ctx)
+		return err
+	}))
+	if err == nil {
+		for _, e := range exts {
+			if e.ID == extID {
+				return e.Path, true
+			}
+		}
+		return "", false
+	}
+	res, err := runOnExtensionsPage(browserCtx, `chrome.developerPrivate.getExtensionsInfo()`)
+	if err != nil {
+		return "", false
+	}
+	return developerPrivateExtensionPath(res, extID)
+}
+
+// developerPrivateExtensionPath finds extID in the JSON result of
+// chrome.developerPrivate.getExtensionsInfo.
+func developerPrivateExtensionPath(infoJSON, extID string) (path string, installed bool) {
+	var infos []struct {
+		ID   string `json:"id"`
+		Path string `json:"path"`
+	}
+	if err := json.Unmarshal([]byte(infoJSON), &infos); err != nil {
+		return "", false
+	}
+	for _, info := range infos {
+		if info.ID == extID {
+			return info.Path, true
+		}
+	}
+	return "", false
+}
+
+// manifestDevToolsOnly reports whether a manifest.json declares a
+// devtools_page and no background service worker, scripts, or page.
+func manifestDevToolsOnly(data []byte) bool {
+	var m struct {
+		DevToolsPage string          `json:"devtools_page"`
+		Background   json.RawMessage `json:"background"`
+	}
+	if err := json.Unmarshal(data, &m); err != nil {
+		return false
+	}
+	return m.DevToolsPage != "" && len(m.Background) == 0
 }
 
 // evalInExtensionSW evaluates JS in an extension's service worker context.
