@@ -15,8 +15,9 @@ type StoredMap struct {
 	MapPath   string
 }
 
-// LoadMapsFromDisk scans sourcesDir for .js.map files and loads valid
-// sourcemap v3 files. Invalid files are skipped.
+// LoadMapsFromDisk scans sourcesDir for .js.map files under an
+// origin/_compiled directory and loads valid sourcemap v3 files.
+// Invalid files are skipped.
 func LoadMapsFromDisk(sourcesDir string) []StoredMap {
 	if sourcesDir == "" {
 		return nil
@@ -58,17 +59,20 @@ func isMapV3(data []byte) bool {
 	return json.Unmarshal(data, &sm) == nil && sm.Version == 3
 }
 
+// bundleURLFromMapPath recovers the bundle URL from a map path of the form
+// [page-host/][_sources/]origin/_compiled/path.js.map under sourcesDir.
 func bundleURLFromMapPath(sourcesDir, mapPath string) (string, bool) {
 	rel, err := filepath.Rel(sourcesDir, mapPath)
 	if err != nil {
 		return "", false
 	}
-	parts := strings.SplitN(rel, string(filepath.Separator), 2)
-	if len(parts) < 2 {
-		return "", false
+	parts := strings.Split(filepath.ToSlash(rel), "/")
+	for i := 1; i < len(parts)-1; i++ {
+		if parts[i] != "_compiled" {
+			continue
+		}
+		rest := strings.TrimSuffix(strings.Join(parts[i+1:], "/"), ".map")
+		return "https://" + parts[i-1] + "/" + rest, true
 	}
-	origin := parts[0]
-	rest := strings.TrimPrefix(parts[1], "_compiled"+string(filepath.Separator))
-	rest = strings.TrimSuffix(rest, ".map")
-	return "https://" + origin + "/" + filepath.ToSlash(rest), true
+	return "", false
 }

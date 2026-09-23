@@ -11,9 +11,14 @@ import (
 
 // DiskPath returns the on-disk .map path for bundleURL under sourcesDir.
 //
-// The layout matches saved sources:
+// When the bundle itself was saved by the sources collector, the map goes
+// next to it, in either of that collector's layouts:
 //
-//	sourcesDir/origin/_compiled/path.js.map
+//	sourcesDir/page-host/_sources/origin/_compiled/path.js.map
+//	sourcesDir/_sources/origin/_compiled/path.js.map
+//
+// Otherwise it goes to sourcesDir/origin/_compiled/path.js.map.
+// LoadMapsFromDisk reads all three layouts.
 func DiskPath(sourcesDir, bundleURL string) string {
 	u, err := url.Parse(bundleURL)
 	if err != nil || u.Host == "" {
@@ -23,7 +28,21 @@ func DiskPath(sourcesDir, bundleURL string) string {
 	if relPath == "" {
 		relPath = "index.js"
 	}
-	return filepath.Join(sourcesDir, u.Host, "_compiled", relPath+".map")
+	tail := filepath.Join(u.Host, "_compiled", relPath)
+	candidates := []string{filepath.Join(sourcesDir, "_sources", tail)}
+	if entries, err := os.ReadDir(sourcesDir); err == nil {
+		for _, e := range entries {
+			if e.IsDir() {
+				candidates = append(candidates, filepath.Join(sourcesDir, e.Name(), "_sources", tail))
+			}
+		}
+	}
+	for _, c := range candidates {
+		if fi, err := os.Stat(c); err == nil && !fi.IsDir() {
+			return c + ".map"
+		}
+	}
+	return filepath.Join(sourcesDir, tail+".map")
 }
 
 // WriteMap writes mapJSON to the bundleURL .map path under sourcesDir.

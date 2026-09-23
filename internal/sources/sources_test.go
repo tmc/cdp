@@ -2,17 +2,22 @@ package sources
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/chromedp/cdproto/cdp"
 	"github.com/chromedp/cdproto/debugger"
 	"github.com/chromedp/cdproto/page"
+	"github.com/tmc/cdp/internal/sourcemap"
 )
 
 func TestSourcePathUsesSiteGroup(t *testing.T) {
@@ -53,6 +58,7 @@ func TestCapPathSegments(t *testing.T) {
 		{"short unchanged", "am=1/d=1/app.js"},
 		{"single long segment", long},
 		{"long segment among short", "a/" + long + "/b"},
+		{"multibyte rune at cut", strings.Repeat("a", maxPathSegment-1) + strings.Repeat("é", 10)},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -64,6 +70,9 @@ func TestCapPathSegments(t *testing.T) {
 			}
 			if !strings.ContainsRune(tt.in, '/') && len(tt.in) <= maxPathSegment && got != tt.in {
 				t.Fatalf("short input mangled: %q -> %q", tt.in, got)
+			}
+			if !utf8.ValidString(got) {
+				t.Fatalf("capped path is not valid UTF-8: %q", got)
 			}
 		})
 	}
@@ -271,5 +280,71 @@ func TestListenerTagsCtx(t *testing.T) {
 	}
 	if second.url != "https://b/x.js" {
 		t.Errorf("second item url = %q, want https://b/x.js", second.url)
+	}
+}
+
+// TestSourceMapRoundTrip writes a bundle and its external sourcemap through
+// the collector and loads the map back through internal/sourcemap, which must
+// agree on the page-host/_sources/origin/_compiled layout.
+func TestSourceMapRoundTrip(t *testing.T) {
+	const mapJSON = `{"version":3,"sources":["src/a.js"],"sourcesContent":["a"],"mappings":""}`
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, mapJSON)
+	}))
+	defer srv.Close()
+
+	for _, groupByPage := range []bool{true, false} {
+		t.Run(fmt.Sprintf("groupByPage=%v", groupByPage), func(t *testing.T) {
+			dir := t.TempDir()
+			c := New(dir, false)
+			c.SetGroupByPage(groupByPage)
+			l := c.Listener(context.Background())
+			l(&page.EventFrameNavigated{Frame: &cdp.Frame{URL: "https://www.example.com/"}})
+			const bundleURL = "https://cdn.example.com/static/app.js"
+			l(&debugger.EventScriptParsed{ScriptID: "1", URL: bundleURL, SourceMapURL: srv.URL + "/static/app.js.map"})
+			c.scripts["1"].Source = "var a;"
+			if err := c.WriteToDisk(); err != nil {
+				t.Fatal(err)
+			}
+
+			maps := sourcemap.LoadMapsFromDisk(dir)
+			if len(maps) != 1 {
+				t.Fatalf("loaded %d maps, want 1", len(maps))
+			}
+			if maps[0].BundleURL != bundleURL {
+				t.Errorf("BundleURL = %q, want %q", maps[0].BundleURL, bundleURL)
+			}
+			if got, want := sourcemap.DiskPath(dir, bundleURL), c.sourcePath("cdn.example.com", "_compiled", "static/app.js.map"); got != want {
+				t.Errorf("DiskPath = %q, want %q", got, want)
+			}
+		})
+	}
+}
+
+// TestFetchSourceMapHonorsCancel checks that canceling the fetcher context,
+// as Close does on timeout, aborts an in-flight sourcemap fetch.
+func TestFetchSourceMapHonorsCancel(t *testing.T) {
+	release := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		select {
+		case <-release:
+		case <-r.Context().Done():
+		}
+	}))
+	defer srv.Close()
+	defer close(release)
+
+	c := New(t.TempDir(), false)
+	ctx, cancel := context.WithCancel(context.Background())
+	c.fetchContext = ctx
+	time.AfterFunc(50*time.Millisecond, cancel)
+
+	start := time.Now()
+	_, _, err := c.fetchSourceMap("https://example.com/app.js", srv.URL+"/app.js.map")
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("fetchSourceMap error = %v, want context.Canceled", err)
+	}
+	if d := time.Since(start); d > 5*time.Second {
+		t.Fatalf("fetchSourceMap took %v after cancel", d)
 	}
 }

@@ -18,6 +18,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/chromedp/cdproto/cdp"
 	"github.com/chromedp/cdproto/css"
@@ -106,7 +107,7 @@ func New(outputDir string, verbose bool) *Collector {
 }
 
 // SetGroupByPage selects whether source paths use the navigated page's
-// registrable domain. The default is enabled.
+// hostname. The default is enabled.
 func (c *Collector) SetGroupByPage(enabled bool) {
 	c.pageMu.Lock()
 	c.groupByPage = enabled
@@ -343,6 +344,9 @@ func (c *Collector) writeSourceEntry(sourceURL, source, sourceMapURL string) {
 
 	src := source
 	if c.scrubber != nil && c.scrubber.Enabled() {
+		if c.verbose && c.scrubber.SkipsText(src) {
+			log.Printf("sources: scrub skipped %s (%d bytes): over size cap", sourceURL, len(src))
+		}
 		src, _ = c.scrubber.ScrubText(src)
 	}
 	if err := writeFile(c.sourcePath(origin, "_compiled", relPath), src); err != nil {
@@ -523,19 +527,18 @@ func (c *Collector) CaptureAll(ctx context.Context) error {
 // files, and outputDir/page-host/_sources/origin/... for sourcemapped
 // originals.
 func (c *Collector) WriteToDisk() error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
 	type entry struct {
 		url, source, sourceMapURL string
 	}
 	var entries []entry
+	c.mu.Lock()
 	for _, s := range c.scripts {
 		entries = append(entries, entry{s.URL, s.Source, s.SourceMapURL})
 	}
 	for _, s := range c.styles {
 		entries = append(entries, entry{s.URL, s.Source, s.SourceMapURL})
 	}
+	c.mu.Unlock()
 
 	var wrote int
 	var firstErr error
@@ -549,21 +552,28 @@ func (c *Collector) WriteToDisk() error {
 		if skipURL(e.url) || e.source == "" {
 			continue
 		}
-		if c.written[e.url] {
-			continue // already written incrementally
-		}
 		origin, relPath := splitURL(e.url)
 		if origin == "" {
 			continue
 		}
+		// c.mu is not held while writing: fetchSourceMap takes it.
+		c.mu.Lock()
+		if c.written[e.url] {
+			c.mu.Unlock()
+			continue // already written incrementally
+		}
+		c.written[e.url] = true
+		c.mu.Unlock()
 		src := e.source
 		if c.scrubber != nil && c.scrubber.Enabled() {
+			if c.verbose && c.scrubber.SkipsText(src) {
+				log.Printf("sources: scrub skipped %s (%d bytes): over size cap", e.url, len(src))
+			}
 			var n int
 			src, n = c.scrubber.ScrubText(src)
 			totalRedactions += n
 		}
 		record(writeFile(c.sourcePath(origin, "_compiled", relPath), src))
-		c.written[e.url] = true
 		wrote++
 		if e.sourceMapURL != "" {
 			n, err := c.writeSourceMap(origin, e.url, e.sourceMapURL, src)
@@ -712,7 +722,13 @@ func capPathSegments(p string) string {
 	for i, seg := range segs {
 		if len(seg) > maxPathSegment {
 			sum := sha256.Sum256([]byte(seg))
-			segs[i] = seg[:maxPathSegment] + "-" + hex.EncodeToString(sum[:4])
+			// Cut on a rune boundary: a split UTF-8 sequence is an
+			// illegal file name on APFS.
+			n := maxPathSegment
+			for n > 0 && !utf8.RuneStart(seg[n]) {
+				n--
+			}
+			segs[i] = seg[:n] + "-" + hex.EncodeToString(sum[:4])
 		}
 	}
 	return strings.Join(segs, "/")
@@ -737,10 +753,19 @@ func (c *Collector) fetchSourceMap(sourceURL, sourceMapURL string) (content, rel
 		c.mu.Unlock()
 		return cached, relPath, nil
 	}
+	// Tie the fetch to the fetcher's context so Close can abort it.
+	ctx := c.fetchContext
 	c.mu.Unlock()
+	if ctx == nil {
+		ctx = context.Background()
+	}
 
 	// Fetch via HTTP.
-	resp, err := c.httpClient.Get(absURL)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, absURL, nil)
+	if err != nil {
+		return "", relPath, fmt.Errorf("fetch sourcemap %s: %w", absURL, err)
+	}
+	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return "", relPath, fmt.Errorf("fetch sourcemap %s: %w", absURL, err)
 	}
