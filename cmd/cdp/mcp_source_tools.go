@@ -256,7 +256,7 @@ func registerCoverageTools(server *mcp.Server, s *mcpSession) {
 	// start_coverage
 	addMCPTool(server, &mcp.Tool{
 		Name:        "start_coverage",
-		Description: "Start collecting JavaScript code coverage for the current page",
+		Description: "Start collecting JavaScript code coverage for the current page. Coverage covers only JavaScript that V8 executes after this call, so a server-rendered page with little script can report no files.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input StartCoverageInput) (*mcp.CallToolResult, any, error) {
 		// Stop any previous collector for clean restart (survives page reloads).
 		if s.coverageCollector != nil && s.coverageCollector.Running() {
@@ -292,7 +292,7 @@ func registerCoverageTools(server *mcp.Server, s *mcpSession) {
 	// get_coverage
 	addMCPTool(server, &mcp.Tool{
 		Name:        "get_coverage",
-		Description: "Take a coverage snapshot and return per-file summary sorted by coverage (least covered first)",
+		Description: "Take a coverage snapshot and return per-file summary sorted by coverage (least covered first). Only JavaScript that V8 executed after start_coverage is included, so a server-rendered page with little script can return no files.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input GetCoverageInput) (*mcp.CallToolResult, any, error) {
 		if s.coverageCollector == nil {
 			return nil, nil, fmt.Errorf("get_coverage: not running")
@@ -301,27 +301,8 @@ func registerCoverageTools(server *mcp.Server, s *mcpSession) {
 		if err != nil {
 			return nil, nil, fmt.Errorf("get_coverage: %w", err)
 		}
-		summary := snap.Summary()
-		type entry struct {
-			url     string
-			summary coverage.FileSummary
-		}
-		entries := make([]entry, 0, len(summary))
-		for url, fs := range summary {
-			entries = append(entries, entry{url, fs})
-		}
-		sort.Slice(entries, func(i, j int) bool {
-			return entries[i].summary.CoveragePercent < entries[j].summary.CoveragePercent
-		})
-		var b strings.Builder
-		fmt.Fprintf(&b, "Coverage snapshot: %s\n", snap.Name)
-		fmt.Fprintf(&b, "Files: %d\n\n", len(entries))
-		for _, e := range entries {
-			fmt.Fprintf(&b, "  %5.1f%%  %4d/%4d lines  %s\n",
-				e.summary.CoveragePercent, e.summary.CoveredLines, e.summary.TotalLines, e.url)
-		}
 		return &mcp.CallToolResult{
-			Content: []mcp.Content{&mcp.TextContent{Text: b.String()}},
+			Content: []mcp.Content{&mcp.TextContent{Text: formatCoverageSummary(snap.Name, snap.Summary())}},
 		}, nil, nil
 	})
 
@@ -448,6 +429,37 @@ func registerCoverageTools(server *mcp.Server, s *mcpSession) {
 			Content: []mcp.Content{&mcp.TextContent{Text: b.String()}},
 		}, nil, nil
 	})
+}
+
+// noCoverageNote explains an empty coverage snapshot.
+const noCoverageNote = "No JavaScript coverage recorded. V8 coverage covers only JavaScript executed after start_coverage; " +
+	"server-rendered pages with little or no script report no files. Interact with the page or reload it, then take another snapshot."
+
+// formatCoverageSummary formats a snapshot summary, least covered file first.
+func formatCoverageSummary(name string, summary map[string]coverage.FileSummary) string {
+	urls := make([]string, 0, len(summary))
+	for url := range summary {
+		urls = append(urls, url)
+	}
+	sort.Slice(urls, func(i, j int) bool {
+		a, b := summary[urls[i]], summary[urls[j]]
+		if a.CoveragePercent != b.CoveragePercent {
+			return a.CoveragePercent < b.CoveragePercent
+		}
+		return urls[i] < urls[j]
+	})
+	var b strings.Builder
+	fmt.Fprintf(&b, "Coverage snapshot: %s\n", name)
+	fmt.Fprintf(&b, "Files: %d\n\n", len(urls))
+	if len(urls) == 0 {
+		b.WriteString(noCoverageNote + "\n")
+	}
+	for _, url := range urls {
+		fs := summary[url]
+		fmt.Fprintf(&b, "  %5.1f%%  %4d/%4d lines  %s\n",
+			fs.CoveragePercent, fs.CoveredLines, fs.TotalLines, url)
+	}
+	return b.String()
 }
 
 // formatDetailedComparison produces a detailed per-file, per-function comparison.

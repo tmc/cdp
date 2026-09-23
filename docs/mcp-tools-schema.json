@@ -648,7 +648,7 @@
       "name": "get_cookies"
     },
     {
-      "description": "Take a coverage snapshot and return per-file summary sorted by coverage (least covered first)",
+      "description": "Take a coverage snapshot and return per-file summary sorted by coverage (least covered first). Only JavaScript that V8 executed after start_coverage is included, so a server-rendered page with little script can return no files.",
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -2016,7 +2016,7 @@
       "name": "snapshot_dom"
     },
     {
-      "description": "Start collecting JavaScript code coverage for the current page",
+      "description": "Start collecting JavaScript code coverage for the current page. Coverage covers only JavaScript that V8 executes after this call, so a server-rendered page with little script can report no files.",
       "inputSchema": {
         "additionalProperties": false,
         "type": "object"
