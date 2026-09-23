@@ -41,8 +41,6 @@ Use the command printed by `cdp attach`; do not guess tab IDs.
 
 ## Curated live examples
 
-- `extract-gemini-apikey.txtar`: opens Google AI Studio and prints a Gemini API
-  key if one is visible to the signed-in profile.
 - `gdoc-to-markdown.txtar`: opens the Google Doc named by `GDOC_URL` and prints
   visible content as Markdown.
 - `simple.txtar`: demonstrates positional script arguments with `${ARG1}`.
