@@ -39,8 +39,8 @@ var flagUpdateGolden = flag.Bool("update-golden", false, "update golden baseline
 var flagArtifacts = flag.String("cdp-artifacts", "", "artifact root directory (bypasses t.ArtifactDir)")
 
 // flagEmitArtifacts places screenshots alongside the script files.
-// When set, testdata/interaction/viewport.txtar produces screenshots in
-// testdata/interaction/artifacts/viewport/. No path argument needed.
+// When set, Test run on testdata/login.txt saves screenshots in
+// testdata/artifacts/login/. No path argument needed.
 //
 // Usage: go test -emit-artifacts -tags cdp ./...
 var flagEmitArtifacts = flag.Bool("emit-artifacts", false, "save screenshots to <script-dir>/artifacts/<script-name>/")
@@ -68,9 +68,10 @@ var flagReportDir = flag.String("cdp-report-dir", "", "write reports to this dir
 
 var flagEmitReportHTML = flag.Bool("emit-cdp-report-html", false, "write HTML alongside Markdown reports")
 
-// flagCombinedReport writes all script reports into one combined report.md
-// at the artifact root. Each script gets a top-level heading. The file builds
-// up incrementally as scripts complete. Implies -emit-cdp-report.
+// flagCombinedReport writes a combined index.md (and index.html with
+// -emit-cdp-report-html) at the artifact root, linking every script not
+// marked "# report:detail". The index is rewritten as scripts complete.
+// Implies -emit-cdp-report.
 //
 // Usage: go test -emit-cdp-report-combined -tags cdp ./...
 var flagCombinedReport = flag.Bool("emit-cdp-report-combined", false, "write all reports into one combined file")
@@ -263,7 +264,7 @@ func Test(t *testing.T, e *Engine, allocCtx context.Context, baseURL, pattern st
 	}
 	if emitArtifacts && artRoot == "" {
 		// Derive artRoot from the script directory so the combined report
-		// has a location (e.g. testdata/interaction/artifacts/).
+		// has a location (e.g. testdata/artifacts/).
 		artRoot = filepath.Join(filepath.Dir(files[0]), "artifacts")
 	}
 
@@ -277,19 +278,9 @@ func Test(t *testing.T, e *Engine, allocCtx context.Context, baseURL, pattern st
 	// produce the same report tree.
 	var reportWriter *reportpkg.Writer
 	if emitReport {
-		scripts := make([]reportpkg.Script, 0, len(files))
-		for _, file := range files {
-			a, err := txtar.ParseFile(file)
-			if err != nil {
-				t.Fatal(err)
-			}
-			name := strings.TrimSuffix(filepath.Base(file), ".txt")
-			scripts = append(scripts, reportpkg.Script{
-				Name:        name,
-				Source:      a.Comment,
-				ArtifactDir: filepath.Join(artRoot, name),
-				Detail:      ExtractReportLevel(a.Comment) == ReportDetail,
-			})
+		scripts, err := ReportManifest(files)
+		if err != nil {
+			t.Fatal(err)
 		}
 		w, err := reportpkg.NewWriter(reportpkg.Options{
 			Dir:      artRoot,
@@ -311,7 +302,7 @@ func Test(t *testing.T, e *Engine, allocCtx context.Context, baseURL, pattern st
 	var combinedMu sync.Mutex
 
 	for _, file := range files {
-		name := strings.TrimSuffix(filepath.Base(file), ".txt")
+		name := ScriptName(file)
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
@@ -322,7 +313,7 @@ func Test(t *testing.T, e *Engine, allocCtx context.Context, baseURL, pattern st
 			workdir := t.TempDir()
 			var artDir string
 			if emitArtifacts {
-				// Derive from script location: testdata/interaction/x.txtar -> testdata/interaction/artifacts/x/
+				// Derive from script location: testdata/x.txt -> testdata/artifacts/x/
 				artDir = filepath.Join(filepath.Dir(file), "artifacts", name)
 			} else {
 				artDir = filepath.Join(artRoot, name)

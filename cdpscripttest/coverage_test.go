@@ -94,6 +94,54 @@ func TestRunFilesWritesReport(t *testing.T) {
 	}
 }
 
+func TestRunFilesCombinedReportOmitsDetail(t *testing.T) {
+	opts := append(chromedp.DefaultExecAllocatorOptions[:],
+		chromedp.Flag("headless", true),
+		chromedp.Flag("no-proxy-server", true),
+	)
+	if p := findChromePath(); p != "" {
+		opts = append(opts, chromedp.ExecPath(p))
+	}
+	src := t.TempDir()
+	files := []string{filepath.Join(src, "overview.txt"), filepath.Join(src, "internals.txtar")}
+	scripts := []string{
+		"# Overview fixture.\nset-base-url ${BASE_URL}\nnavigate /screenrecord-basic.html\n",
+		"# report:detail\n# Internals fixture.\nset-base-url ${BASE_URL}\nnavigate /screenrecord-basic.html\n",
+	}
+	for i, file := range files {
+		if err := os.WriteFile(file, []byte(scripts[i]), 0o666); err != nil {
+			t.Fatal(err)
+		}
+	}
+	dir := t.TempDir()
+	res, err := cdpscripttest.RunFiles(t.Context(), cdpscripttest.NewEngine(), files, cdpscripttest.RunOptions{
+		BaseURL:       startTestServer(t),
+		AllocatorOpts: opts,
+		Report:        &report.Options{Dir: dir, Combined: true},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Failed() != 0 {
+		t.Fatalf("RunFiles failed: %+v", res.Results)
+	}
+	for _, name := range []string{"overview", "internals"} {
+		if _, err := os.Stat(filepath.Join(dir, name, "report.md")); err != nil {
+			t.Errorf("per-script report: %v", err)
+		}
+	}
+	index, err := os.ReadFile(filepath.Join(dir, "index.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(index, []byte("[overview]")) {
+		t.Errorf("index.md does not list overview:\n%s", index)
+	}
+	if bytes.Contains(index, []byte("internals")) {
+		t.Errorf("index.md lists the report:detail script:\n%s", index)
+	}
+}
+
 func TestRunFilesWritesScreenrecordFormats(t *testing.T) {
 	opts := append(chromedp.DefaultExecAllocatorOptions[:],
 		chromedp.Flag("headless", true),

@@ -241,18 +241,12 @@ func runOnce(ctx context.Context, allocCtx context.Context, e *cdpscripttest.Eng
 	if reportOpts != nil {
 		scripts := make([]report.Script, 0, len(files))
 		for _, file := range files {
-			a, err := txtar.ParseFile(file)
+			manifest, err := cdpscripttest.ReportManifest([]string{file})
 			if err != nil {
-				out.info(fmt.Sprintf("report: parse %s: %v", file, err))
+				out.info(fmt.Sprintf("report: %v", err))
 				continue
 			}
-			name := strings.TrimSuffix(filepath.Base(file), ".txt")
-			scripts = append(scripts, report.Script{
-				Name:        name,
-				Source:      a.Comment,
-				ArtifactDir: filepath.Join(reportOpts.Dir, name),
-				Detail:      cdpscripttest.ExtractReportLevel(a.Comment) == cdpscripttest.ReportDetail,
-			})
+			scripts = append(scripts, manifest...)
 		}
 		var err error
 		reporter, err = report.NewWriter(*reportOpts, scripts)
@@ -272,12 +266,12 @@ func runOnce(ctx context.Context, allocCtx context.Context, e *cdpscripttest.Eng
 		// Default artifact dir: screenshots/ next to the script file.
 		artDir := artifactDir
 		if reporter != nil {
-			artDir = filepath.Join(reportOpts.Dir, strings.TrimSuffix(filepath.Base(file), ".txt"))
+			artDir = filepath.Join(reportOpts.Dir, cdpscripttest.ScriptName(file))
 		} else if artDir == "" {
 			artDir = filepath.Join(filepath.Dir(file), "screenshots")
 		}
 
-		name := strings.TrimSuffix(filepath.Base(file), ".txt")
+		name := cdpscripttest.ScriptName(file)
 
 		s, err := cdpscripttest.NewStateWithArtifactDir(tabCtx, workdir, baseURL, artDir, nil)
 		if err == nil {

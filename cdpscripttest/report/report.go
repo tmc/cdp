@@ -1,4 +1,10 @@
 // Package report renders cdpscripttest execution reports.
+//
+// A Writer receives the manifest of scripts up front, then one Update per
+// finished script. Each Update writes <ArtifactDir>/report.md (and
+// report.html with Options.HTML). With Options.Combined, the Writer also
+// keeps index.md (and index.html) in Options.Dir current, listing every
+// script not marked Detail, pending ones included.
 package report
 
 import (
@@ -13,11 +19,22 @@ import (
 
 // Script contains the input for one script report.
 type Script struct {
-	Name        string
-	Source      []byte
-	Log         string
+	// Name identifies the script. It must be unique within a Writer.
+	Name string
+
+	// Source is the script text. Its leading # comment block becomes
+	// the report's summary.
+	Source []byte
+
+	// Log is the rsc.io/script execution log.
+	Log string
+
+	// ArtifactDir holds the script's artifacts and receives its report.
+	// If empty, Update uses Options.Dir/Name.
 	ArtifactDir string
-	Failed      bool
+
+	// Failed reports whether the script failed.
+	Failed bool
 
 	// Detail excludes the script from the combined report. It still gets a
 	// report of its own.
@@ -26,19 +43,28 @@ type Script struct {
 
 // Options configures a Writer.
 type Options struct {
-	Dir      string
-	HTML     bool
+	// Dir is the report root. It is required; NewWriter creates it.
+	Dir string
+
+	// HTML writes report.html (and index.html) alongside the Markdown.
+	HTML bool
+
+	// Combined writes index.md, and index.html with HTML, in Dir.
 	Combined bool
 }
 
 // Writer writes detailed and combined reports.
+// A Writer is not safe for concurrent use; callers that update it from
+// parallel tests must serialize the calls.
 type Writer struct {
 	opts    Options
 	scripts map[string]Script
 	results map[string]Script
 }
 
-// NewWriter creates a report writer. scripts is the complete fixture manifest.
+// NewWriter creates a report writer. scripts is the complete fixture
+// manifest; only Name, Source, and Detail are used from it. With
+// opts.Combined, NewWriter writes an index listing every script as pending.
 func NewWriter(opts Options, scripts []Script) (*Writer, error) {
 	if opts.Dir == "" {
 		return nil, fmt.Errorf("report directory is required")
@@ -59,6 +85,8 @@ func NewWriter(opts Options, scripts []Script) (*Writer, error) {
 }
 
 // Update writes a completed script report and refreshes combined output.
+// If script is in the manifest and marked Detail there, it stays out of the
+// combined report.
 func (w *Writer) Update(script Script) error {
 	if script.Name == "" {
 		return fmt.Errorf("script name is required")
@@ -69,11 +97,11 @@ func (w *Writer) Update(script Script) error {
 	if manifest, ok := w.scripts[script.Name]; ok && manifest.Detail {
 		script.Detail = true
 	}
-	if err := WriteMarkdown(filepath.Join(script.ArtifactDir, "report.md"), script); err != nil {
+	if err := writeMarkdown(filepath.Join(script.ArtifactDir, "report.md"), script); err != nil {
 		return fmt.Errorf("write markdown report: %w", err)
 	}
 	if w.opts.HTML {
-		if err := WriteHTML(filepath.Join(script.ArtifactDir, "report.html"), script); err != nil {
+		if err := writeHTML(filepath.Join(script.ArtifactDir, "report.html"), script); err != nil {
 			return fmt.Errorf("write html report: %w", err)
 		}
 	}
@@ -87,7 +115,7 @@ func (w *Writer) Update(script Script) error {
 	return nil
 }
 
-// Close flushes remaining output.
+// Close writes the final combined report, if any.
 func (w *Writer) Close() error {
 	if w.opts.Combined {
 		return w.writeCombined()
@@ -95,8 +123,8 @@ func (w *Writer) Close() error {
 	return nil
 }
 
-// WriteMarkdown writes a detailed Markdown report.
-func WriteMarkdown(path string, script Script) error {
+// writeMarkdown writes a detailed Markdown report.
+func writeMarkdown(path string, script Script) error {
 	var b bytes.Buffer
 	renderMarkdown(&b, script, filepath.Dir(path))
 	if err := writeFile(path, b.Bytes()); err != nil {
@@ -105,8 +133,8 @@ func WriteMarkdown(path string, script Script) error {
 	return nil
 }
 
-// WriteHTML writes a detailed HTML report.
-func WriteHTML(path string, script Script) error {
+// writeHTML writes a detailed HTML report.
+func writeHTML(path string, script Script) error {
 	var b bytes.Buffer
 	if err := renderHTML(&b, script, filepath.Dir(path)); err != nil {
 		return fmt.Errorf("render html: %w", err)

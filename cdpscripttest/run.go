@@ -63,10 +63,18 @@ type RunOptions struct {
 	// OnResult is called after each script completes.
 	OnResult func(ScriptResult)
 
-	// EmitReport generates a report.md in the artifact directory.
+	// EmitReport writes each script's report.md into ArtifactDir. Every
+	// script writes the same file, so only the last report survives.
+	//
+	// Deprecated: Set Report instead, which gives each script its own
+	// directory and can add HTML and combined reports.
 	EmitReport bool
 
-	// Report enables detailed and optional combined reports.
+	// Report, if non-nil, writes a report for each script under
+	// Report.Dir/<name>/ (see ScriptName), and optionally combined
+	// index.md and index.html reports in Report.Dir. It overrides
+	// EmitReport, and each script's artifacts go to its report directory
+	// instead of ArtifactDir.
 	Report *report.Options
 }
 
@@ -76,26 +84,15 @@ type RunOptions struct {
 // RunFiles manages the allocator lifecycle internally.
 func RunFiles(ctx context.Context, e *Engine, files []string, opts RunOptions) (RunResult, error) {
 	var reporter *report.Writer
-	sources := make(map[string][]byte)
+	var manifest []report.Script
 	reportOpts := runReportOptions(opts)
 	if reportOpts != nil {
-		scripts := make([]report.Script, 0, len(files))
-		for _, file := range files {
-			source, err := scriptSource(file)
-			if err != nil {
-				return RunResult{}, err
-			}
-			name := strings.TrimSuffix(filepath.Base(file), ".txt")
-			sources[file] = source
-			artifactDir := runReportArtifactDir(opts, reportOpts, name)
-			scripts = append(scripts, report.Script{
-				Name:        name,
-				Source:      source,
-				ArtifactDir: artifactDir,
-			})
-		}
 		var err error
-		reporter, err = report.NewWriter(*reportOpts, scripts)
+		manifest, err = ReportManifest(files)
+		if err != nil {
+			return RunResult{}, err
+		}
+		reporter, err = report.NewWriter(*reportOpts, manifest)
 		if err != nil {
 			return RunResult{}, fmt.Errorf("create report writer: %w", err)
 		}
@@ -114,19 +111,15 @@ func RunFiles(ctx context.Context, e *Engine, files []string, opts RunOptions) (
 	var result RunResult
 	var reportErr error
 
-	for _, file := range files {
+	for i, file := range files {
 		sr := runFile(allocCtx, e, file, opts)
 		result.Results = append(result.Results, sr)
 		if reporter != nil {
-			name := strings.TrimSuffix(filepath.Base(file), ".txt")
-			artifactDir := runReportArtifactDir(opts, reportOpts, name)
-			if err := reporter.Update(report.Script{
-				Name:        name,
-				Source:      sources[file],
-				Log:         sr.Log,
-				ArtifactDir: artifactDir,
-				Failed:      sr.Err != nil,
-			}); err != nil {
+			script := manifest[i]
+			script.Log = sr.Log
+			script.ArtifactDir = runReportArtifactDir(opts, reportOpts, script.Name)
+			script.Failed = sr.Err != nil
+			if err := reporter.Update(script); err != nil {
 				if reportErr == nil {
 					reportErr = fmt.Errorf("update report for %q: %w", file, err)
 				}
@@ -177,7 +170,7 @@ func runFile(allocCtx context.Context, e *Engine, file string, opts RunOptions) 
 
 	artifactDir := opts.ArtifactDir
 	if opts.Report != nil {
-		artifactDir = filepath.Join(opts.Report.Dir, strings.TrimSuffix(filepath.Base(file), ".txt"))
+		artifactDir = filepath.Join(opts.Report.Dir, ScriptName(file))
 	}
 	s, err := NewStateWithArtifactDir(tabCtx, workdir, opts.BaseURL, artifactDir, opts.Env)
 	if err != nil {
@@ -227,14 +220,6 @@ func runFile(allocCtx context.Context, e *Engine, file string, opts RunOptions) 
 		Err:  runErr,
 		Log:  log,
 	}
-}
-
-func scriptSource(file string) ([]byte, error) {
-	a, err := txtar.ParseFile(file)
-	if err != nil {
-		return nil, fmt.Errorf("parse txtar %q: %w", file, err)
-	}
-	return a.Comment, nil
 }
 
 // ExpandGlobs expands patterns into script file paths. Supports:

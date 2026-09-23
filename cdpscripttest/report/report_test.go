@@ -144,7 +144,7 @@ func TestWriterDetailExcludedFromCombined(t *testing.T) {
 
 func TestWriteHTMLEscapesOutput(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "report.html")
-	if err := WriteHTML(path, Script{Name: "<script>", Log: "# <section>\n> echo '<output>'\n"}); err != nil {
+	if err := writeHTML(path, Script{Name: "<script>", Log: "# <section>\n> echo '<output>'\n"}); err != nil {
 		t.Fatal(err)
 	}
 	b, err := os.ReadFile(path)

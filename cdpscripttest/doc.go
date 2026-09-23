@@ -323,8 +323,8 @@
 //	-update-golden          update golden baselines instead of comparing
 //
 // -emit-artifacts derives the output path from the script file location. For
-// example, testdata/interaction/viewport.txtar produces
-// testdata/interaction/artifacts/viewport/*.png.
+// example, running Test on testdata/login.txt produces
+// testdata/artifacts/login/*.png.
 // No path argument needed.
 //
 // All screenshot commands (screenshot, screenshot-sel, screenshot-compare)
