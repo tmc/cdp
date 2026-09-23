@@ -100,7 +100,9 @@ func (b *Browser) AttachToTarget(targetID string) (*Page, error) {
 	return p, nil
 }
 
-// Pages returns all pages in the browser
+// Pages attaches to and returns all pages in the browser. Each page holds
+// a CDP session and network monitor; call Detach on pages the caller does
+// not keep.
 func (b *Browser) Pages() ([]*Page, error) {
 	if b.ctx == nil {
 		return nil, errors.New("browser not launched")
@@ -163,6 +165,16 @@ func (p *Page) Close() error {
 		return fmt.Errorf("close page: %w", err)
 	}
 	return nil
+}
+
+// Detach releases the CDP session of a page obtained from AttachToTarget
+// or Pages without closing its tab. It does nothing for a page created by
+// NewPage; use Close for those.
+func (p *Page) Detach() {
+	if p.owned || p.cancel == nil {
+		return
+	}
+	p.cancel()
 }
 
 // Navigate navigates to a URL

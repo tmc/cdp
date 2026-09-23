@@ -57,12 +57,33 @@ type NetworkManager struct {
 	monitor bool
 	mu      sync.RWMutex
 
-	// Request tracking
-	requests  map[network.RequestID]*Request
-	responses map[network.RequestID]*Response
+	// Request tracking, bounded by maxTrackedRequests. The order slices
+	// record insertion order for eviction.
+	requests      map[network.RequestID]*Request
+	responses     map[network.RequestID]*Response
+	requestOrder  []network.RequestID
+	responseOrder []network.RequestID
 
 	// Blocking engine
 	blockingEngine *blocking.BlockingEngine
+}
+
+// maxTrackedRequests bounds how many requests and responses a
+// NetworkManager remembers for WaitForRequest and WaitForResponse.
+// The oldest entries are evicted first.
+const maxTrackedRequests = 1000
+
+// track stores v under id in m, evicting the oldest entry once m holds
+// more than maxTrackedRequests. The caller must hold nm.mu.
+func track[V any](m map[network.RequestID]V, order *[]network.RequestID, id network.RequestID, v V) {
+	if _, ok := m[id]; !ok {
+		*order = append(*order, id)
+	}
+	m[id] = v
+	for len(*order) > maxTrackedRequests {
+		delete(m, (*order)[0])
+		*order = (*order)[1:]
+	}
 }
 
 // NewNetworkManager creates a new network manager
@@ -191,7 +212,7 @@ func (nm *NetworkManager) handleRequestWillBeSent(ev *network.EventRequestWillBe
 		page:    nm.page,
 	}
 	nm.mu.Lock()
-	nm.requests[ev.RequestID] = req
+	track(nm.requests, &nm.requestOrder, ev.RequestID, req)
 	nm.mu.Unlock()
 }
 
@@ -204,7 +225,7 @@ func (nm *NetworkManager) handleResponseReceived(ev *network.EventResponseReceiv
 	}
 
 	nm.mu.Lock()
-	nm.responses[ev.RequestID] = resp
+	track(nm.responses, &nm.responseOrder, ev.RequestID, resp)
 	nm.mu.Unlock()
 }
 
@@ -237,7 +258,7 @@ func (nm *NetworkManager) handleRequestPaused(ev *fetch.EventRequestPaused) {
 
 	// Store request
 	nm.mu.Lock()
-	nm.requests[pausedRequestKey(ev)] = req
+	track(nm.requests, &nm.requestOrder, pausedRequestKey(ev), req)
 	nm.mu.Unlock()
 
 	// Check if the request should be blocked

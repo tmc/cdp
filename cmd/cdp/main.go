@@ -2634,6 +2634,9 @@ func main() {
 						}
 					} else {
 						enhancedPage = pages[0]
+						for _, p := range pages[1:] {
+							p.Detach()
+						}
 					}
 				}
 

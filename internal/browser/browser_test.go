@@ -760,6 +760,26 @@ func TestBrowserHTTPRequestPOST(t *testing.T) {
 	if !strings.Contains(html, jsonData) {
 		t.Errorf("Expected body data in response, got: %s", html)
 	}
+
+	// A later DOM change must invalidate the cached response body.
+	if _, err := b.ExecuteScript(`document.body.innerHTML = "<p>changed</p>"`); err != nil {
+		t.Fatalf("ExecuteScript: %v", err)
+	}
+	html, err = b.GetHTML()
+	if err != nil {
+		t.Fatalf("Failed to get HTML: %v", err)
+	}
+	if !strings.Contains(html, "changed") || strings.Contains(html, jsonData) {
+		t.Errorf("GetHTML after DOM change returned stale response: %s", html)
+	}
+
+	// Closing the current-page wrapper must not close the browser's tab.
+	if err := b.GetCurrentPage().Close(); err != nil {
+		t.Fatalf("GetCurrentPage().Close: %v", err)
+	}
+	if _, err := b.GetURL(); err != nil {
+		t.Errorf("GetURL after closing current-page wrapper: %v", err)
+	}
 }
 
 func TestBrowserHTTPRequestPUT(t *testing.T) {

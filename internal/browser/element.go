@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"errors"
 
@@ -17,6 +18,7 @@ type ElementHandle struct {
 	page     *Page
 	selector string
 	index    int
+	parent   *ElementHandle // scope for selector; nil means the document
 }
 
 // QuerySelector finds the first element matching the selector
@@ -70,6 +72,10 @@ func jsString(s string) string {
 }
 
 func (e *ElementHandle) elementExpr() string {
+	if e.parent != nil {
+		return fmt.Sprintf(`(() => { const p = %s; return p ? p.querySelectorAll(%s)[%d] : undefined; })()`,
+			e.parent.elementExpr(), jsString(e.selector), e.index)
+	}
 	return fmt.Sprintf(`document.querySelectorAll(%s)[%d]`, jsString(e.selector), e.index)
 }
 
@@ -264,8 +270,8 @@ func (e *ElementHandle) Screenshot(opts ...ScreenshotOption) ([]byte, error) {
 	}
 
 	var buf []byte
-	if e.index != 0 {
-		return nil, errors.New("element screenshot supports first matching element only")
+	if e.index != 0 || e.parent != nil {
+		return nil, errors.New("element screenshot supports first matching document element only")
 	}
 	if err := chromedp.Run(e.ctx, chromedp.Screenshot(e.selector, &buf, chromedp.ByQuery)); err != nil {
 		return nil, fmt.Errorf("taking element screenshot: %w", err)
@@ -274,22 +280,65 @@ func (e *ElementHandle) Screenshot(opts ...ScreenshotOption) ([]byte, error) {
 	return buf, nil
 }
 
-// WaitForSelector waits for a child selector within this element
+// WaitForSelector waits for a descendant of this element matching selector
+// to reach the requested state. For the "attached" and "visible" states it
+// returns a handle to the first match; for "hidden" and "detached" it
+// returns nil.
 func (e *ElementHandle) WaitForSelector(selector string, opts ...WaitOption) (*ElementHandle, error) {
+	if e == nil {
+		return nil, errors.New("element is nil")
+	}
 	options := &WaitOptions{
 		State:   "visible",
-		Timeout: 30000,
+		Timeout: 30 * time.Second,
 	}
 
 	for _, opt := range opts {
 		opt(options)
 	}
 
-	if err := e.page.WaitForSelector(selector, opts...); err != nil {
-		return nil, err
+	var cond string
+	switch options.State {
+	case "attached":
+		cond = `!!c`
+	case "visible":
+		cond = `!!c && c.getClientRects().length > 0 && getComputedStyle(c).visibility !== "hidden"`
+	case "hidden":
+		cond = `!c || c.getClientRects().length === 0 || getComputedStyle(c).visibility === "hidden"`
+	case "detached":
+		cond = `!c`
+	default:
+		return nil, fmt.Errorf("unknown state: %s", options.State)
 	}
+	expr := fmt.Sprintf(`(() => {
+		const el = %s;
+		if (!el) throw new Error("element not found: " + %s);
+		const c = el.querySelector(%s);
+		return %s;
+	})()`, e.elementExpr(), jsString(e.selector), jsString(selector), cond)
 
-	return e.page.QuerySelector(selector)
+	ctx, cancel := context.WithTimeout(e.ctx, options.Timeout)
+	defer cancel()
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		var ok bool
+		if err := chromedp.Run(ctx, chromedp.Evaluate(expr, &ok)); err != nil {
+			return nil, fmt.Errorf("waiting for %s: %w", selector, err)
+		}
+		if ok {
+			break
+		}
+		select {
+		case <-ctx.Done():
+			return nil, fmt.Errorf("waiting for %s: %w", selector, ctx.Err())
+		case <-ticker.C:
+		}
+	}
+	if options.State == "hidden" || options.State == "detached" {
+		return nil, nil
+	}
+	return &ElementHandle{ctx: e.ctx, page: e.page, selector: selector, parent: e}, nil
 }
 
 // Evaluate evaluates JavaScript in the context of this element

@@ -40,8 +40,9 @@ type Browser struct {
 	opts           *Options
 	profileMgr     browserprofile.ProfileManager
 	blockingEngine *blocking.BlockingEngine
-	attachedToTab  bool // True if connected to existing tab (don't close on cleanup)
-	lastHTML       string
+	attachedToTab  bool   // True if connected to existing tab (don't close on cleanup)
+	lastHTML       string // raw body of the last HTTPRequest response
+	lastHTMLDOM    string // document outerHTML when lastHTML was recorded
 }
 
 // FromContext returns a Browser wrapper around an existing chromedp context.
@@ -366,57 +367,26 @@ func (b *Browser) Navigate(url string) error {
 
 	// If waiting for full page stability
 	if b.opts.WaitForStability {
-		// Wait for page stability (see stability.go).
-		pages, err := b.Pages()
-		if err != nil || len(pages) == 0 {
-			// If we can't get pages, fall back to creating a page context
-			if b.opts.Verbose {
-				log.Println("Creating page context for stability detection")
-			}
+		// Wait for stability of the navigated tab (see stability.go).
+		// The detector's listeners are bound to waitCtx, so they are
+		// removed when the wait ends instead of accumulating per call.
+		waitTimeout := time.Duration(b.opts.StableTimeout) * time.Second
+		waitCtx, waitCancel := context.WithTimeout(b.ctx, waitTimeout)
+		defer waitCancel()
+		page := &Page{ctx: waitCtx, browser: b}
 
-			// Create a temporary page wrapper
-			page := &Page{ctx: b.ctx, browser: b}
-
-			// Configure stability detection
-			if b.opts.StabilityConfig != nil {
-				page.stabilityDetector = NewStabilityDetector(page, b.opts.StabilityConfig)
-			} else {
-				page.ConfigureStability(WithVerboseLogging(b.opts.Verbose))
-			}
-
-			// Wait for stability
-			waitTimeout := time.Duration(b.opts.StableTimeout) * time.Second
-			waitCtx, waitCancel := context.WithTimeout(b.ctx, waitTimeout)
-			defer waitCancel()
-
-			if err := page.WaitForStability(waitCtx, b.opts.StabilityConfig); err != nil {
-				if b.opts.Verbose {
-					log.Printf("Stability detection failed: %v", err)
-				}
-				// Don't fail navigation on stability timeout, just log it
-			}
+		// Configure stability detection
+		if b.opts.StabilityConfig != nil {
+			page.stabilityDetector = NewStabilityDetector(page, b.opts.StabilityConfig)
 		} else {
-			// Use the first page (main tab)
-			page := pages[0]
+			page.ConfigureStability(WithVerboseLogging(b.opts.Verbose))
+		}
 
-			// Configure stability detection
-			if b.opts.StabilityConfig != nil {
-				page.stabilityDetector = NewStabilityDetector(page, b.opts.StabilityConfig)
-			} else {
-				page.ConfigureStability(WithVerboseLogging(b.opts.Verbose))
+		if err := page.WaitForStability(waitCtx, b.opts.StabilityConfig); err != nil {
+			if b.opts.Verbose {
+				log.Printf("Stability detection failed: %v", err)
 			}
-
-			// Wait for stability
-			waitTimeout := time.Duration(b.opts.StableTimeout) * time.Second
-			waitCtx, waitCancel := context.WithTimeout(b.ctx, waitTimeout)
-			defer waitCancel()
-
-			if err := page.WaitForStability(waitCtx, b.opts.StabilityConfig); err != nil {
-				if b.opts.Verbose {
-					log.Printf("Stability detection failed: %v", err)
-				}
-				// Don't fail navigation on stability timeout, just log it
-			}
+			// Don't fail navigation on stability timeout, just log it
 		}
 	}
 
@@ -598,14 +568,17 @@ func (b *Browser) GetHTML() (string, error) {
 	if b.ctx == nil {
 		return "", notLaunchedError()
 	}
-	if b.lastHTML != "" {
-		return b.lastHTML, nil
-	}
-
 	var html string
 	if err := chromedp.Run(b.ctx, chromedp.OuterHTML("html", &html)); err != nil {
 		return "", scriptError("get page HTML", err)
 	}
+	// Return the raw HTTPRequest response only while the document is
+	// unchanged since that request; any later script, click, or
+	// navigation invalidates it.
+	if b.lastHTML != "" && html == b.lastHTMLDOM {
+		return b.lastHTML, nil
+	}
+	b.lastHTML, b.lastHTMLDOM = "", ""
 
 	return html, nil
 }
@@ -617,9 +590,10 @@ func (b *Browser) GetCurrentPage() *Page {
 		return nil
 	}
 
+	// No cancel: the Browser owns the context, so Close is a no-op
+	// and never closes the borrowed tab.
 	return &Page{
 		ctx:     b.ctx,
-		cancel:  func() {}, // Browser owns the context
 		browser: b,
 	}
 }
@@ -1187,7 +1161,6 @@ func (b *Browser) HTTPRequest(method, url, data string, headers map[string]strin
 	})); err != nil {
 		return withField(networkError("failed to execute browser request", err), "method", method)
 	}
-	b.lastHTML = responseHTML
 
 	// Execute post-navigation scripts
 	if err := b.executeScriptsAfter(); err != nil {
@@ -1195,6 +1168,11 @@ func (b *Browser) HTTPRequest(method, url, data string, headers map[string]strin
 			log.Printf("Post-navigation script error: %v", err)
 		}
 		return fmt.Errorf("executing post-navigation scripts: %w", err)
+	}
+
+	var dom string
+	if err := chromedp.Run(b.ctx, chromedp.OuterHTML("html", &dom)); err == nil {
+		b.lastHTML, b.lastHTMLDOM = responseHTML, dom
 	}
 
 	return nil

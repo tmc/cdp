@@ -363,6 +363,39 @@ func TestElementWaitForChild(t *testing.T) {
 	}
 }
 
+// TestElementWaitForChildIsScoped checks that ElementHandle.WaitForSelector
+// ignores matches outside the element.
+func TestElementWaitForChildIsScoped(t *testing.T) {
+	b, cleanup := createTestBrowser(t)
+	defer cleanup()
+
+	page, err := b.NewPage()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer page.Close()
+
+	err = page.Navigate(`data:text/html,<div id="a"><span class="c">A</span></div><div id="b"></div><script>setTimeout(() => { document.getElementById("b").innerHTML = '<span class="c">B</span>'; }, 300);</script>`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	parent, err := page.QuerySelector("#b")
+	if err != nil || parent == nil {
+		t.Fatalf("QuerySelector(#b) = %v, %v", parent, err)
+	}
+	child, err := parent.WaitForSelector(".c", browser.WaitWithTimeout(5*time.Second))
+	if err != nil {
+		t.Fatalf("WaitForSelector: %v", err)
+	}
+	text, err := child.GetText()
+	if err != nil {
+		t.Fatalf("GetText: %v", err)
+	}
+	if text != "B" {
+		t.Errorf("child text = %q, want %q", text, "B")
+	}
+}
+
 // TestElementHover tests element hover
 func TestElementHover(t *testing.T) {
 	b, cleanup := createTestBrowser(t)
