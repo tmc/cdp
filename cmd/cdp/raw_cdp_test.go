@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/gorilla/websocket"
 )
@@ -130,5 +131,76 @@ func TestRunRawCDPWebSocket(t *testing.T) {
 	}
 	if got := remoteObject["value"]; got != "browser title" {
 		t.Fatalf("value = %#v, want browser title", got)
+	}
+}
+
+// fakeTarget serves a target WebSocket whose handler receives each
+// connection after the upgrade, and returns its ws URL.
+func fakeTarget(t *testing.T, handle func(*websocket.Conn)) string {
+	t.Helper()
+	upgrader := websocket.Upgrader{}
+	srv := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, err := upgrader.Upgrade(w, r, nil)
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+		handle(conn)
+	})}
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	go srv.Serve(ln)
+	t.Cleanup(func() { srv.Close() })
+	return "ws://" + ln.Addr().String() + "/devtools/page/x"
+}
+
+func TestRunRawCDPWebSocketFailures(t *testing.T) {
+	tests := []struct {
+		name    string
+		timeout time.Duration
+		handle  func(*websocket.Conn, chan struct{})
+		wantCtx bool
+	}{
+		{
+			name:    "no reply",
+			timeout: 200 * time.Millisecond,
+			handle: func(c *websocket.Conn, done chan struct{}) {
+				var req map[string]any
+				c.ReadJSON(&req)
+				<-done
+			},
+			wantCtx: true,
+		},
+		{
+			name:    "abrupt close",
+			timeout: 5 * time.Second,
+			handle: func(c *websocket.Conn, done chan struct{}) {
+				var req map[string]any
+				c.ReadJSON(&req)
+				c.UnderlyingConn().Close()
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			done := make(chan struct{})
+			defer close(done)
+			u := fakeTarget(t, func(c *websocket.Conn) { tt.handle(c, done) })
+			ctx, cancel := context.WithTimeout(context.Background(), tt.timeout)
+			defer cancel()
+			start := time.Now()
+			result, err := runRawCDPWebSocket(ctx, u, "Runtime.evaluate", nil)
+			if err == nil {
+				t.Fatalf("runRawCDPWebSocket = %v, nil; want error", result)
+			}
+			if got := errors.Is(err, context.DeadlineExceeded); got != tt.wantCtx {
+				t.Fatalf("err = %v; deadline exceeded = %v, want %v", err, got, tt.wantCtx)
+			}
+			if d := time.Since(start); d > tt.timeout+2*time.Second {
+				t.Fatalf("returned after %v, want within %v", d, tt.timeout)
+			}
+		})
 	}
 }

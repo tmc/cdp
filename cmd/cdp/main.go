@@ -1786,6 +1786,7 @@ func main() {
 			HarlFile:          harlFile,
 			MaxBodyBytes:      maxBodyBytes,
 			NavigationTimeout: navigationTimeout,
+			Timeout:           timeout,
 			AutoDiscover:      autoDiscover,
 			Progress:          newStartupProgress(os.Stderr, fullCapture && !quiet && stderrIsTerminal()),
 			GroupByPage:       groupByPage,
@@ -4635,7 +4636,12 @@ func handleEnhancedMode(command string, interactive bool, cfg fullCaptureConfig)
 			log.Printf("Executing raw CDP command against %s", wsURL)
 		}
 		fmt.Fprintf(os.Stderr, "Attached to running browser at %s:%d (target: %s)\n", cfg.RemoteHost, cfg.RemotePort, cfg.TabID)
-		result, err := runRawCDPWebSocket(context.Background(), wsURL, method, params)
+		ctx, cancel := context.Background(), context.CancelFunc(func() {})
+		if cfg.Timeout > 0 {
+			ctx, cancel = context.WithTimeout(ctx, time.Duration(cfg.Timeout)*time.Second)
+		}
+		result, err := runRawCDPWebSocket(ctx, wsURL, method, params)
+		cancel()
 		if err != nil {
 			exitWithError(ExitGeneralError, ErrorTypeGeneral, "Command failed: %v", err)
 		}
@@ -4748,6 +4754,7 @@ type fullCaptureConfig struct {
 	HarlFile          string // file to stream NDJSON to (use "-" for stdout)
 	MaxBodyBytes      int64
 	NavigationTimeout int
+	Timeout           int // seconds for a raw -command over a target websocket; 0 means none
 	Progress          *startupProgress
 	GroupByPage       bool
 	WaitMode          string

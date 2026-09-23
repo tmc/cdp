@@ -101,10 +101,12 @@ func validateRawCDPMethod(method string) (string, error) {
 // the other tools still point at. Both directions are refused, so lifecycle
 // runs through new_tab and close_tab, which are tracked.
 var rawCDPDeniedMethods = map[string]bool{
-	"Browser.close":               true,
-	"Target.closeTarget":          true,
-	"Target.createTarget":         true,
-	"Target.createBrowserContext": true,
+	"Browser.close":                true,
+	"Page.close":                   true,
+	"Target.closeTarget":           true,
+	"Target.createTarget":          true,
+	"Target.createBrowserContext":  true,
+	"Target.disposeBrowserContext": true,
 }
 
 func isRawCDPCommandName(name string) bool {
@@ -187,6 +189,8 @@ func runRawCDPWebSocket(ctx context.Context, wsURL, method string, params map[st
 		return nil, fmt.Errorf("dial target websocket: %w", err)
 	}
 	defer conn.Close()
+	stop := context.AfterFunc(ctx, func() { conn.Close() })
+	defer stop()
 
 	id := atomic.AddInt64(&rawCDPWebSocketID, 1)
 	req := map[string]any{
@@ -195,14 +199,17 @@ func runRawCDPWebSocket(ctx context.Context, wsURL, method string, params map[st
 		"params": params,
 	}
 	if err := conn.WriteJSON(req); err != nil {
+		if ctx.Err() != nil {
+			return nil, fmt.Errorf("write raw CDP command: %w", ctx.Err())
+		}
 		return nil, fmt.Errorf("write raw CDP command: %w", err)
 	}
 
 	for {
 		var resp rawCDPWebSocketResponse
 		if err := conn.ReadJSON(&resp); err != nil {
-			if isEmptyRawCDPResultError(err) {
-				return map[string]any{}, nil
+			if ctx.Err() != nil {
+				return nil, fmt.Errorf("read raw CDP response: %w", ctx.Err())
 			}
 			return nil, fmt.Errorf("read raw CDP response: %w", err)
 		}
