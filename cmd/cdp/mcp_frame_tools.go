@@ -55,10 +55,14 @@ func registerFrameTools(server *mcp.Server, s *mcpSession) {
 		Description: `Switch execution context to a frame. Use "main" for the top frame, a frame name, a numeric index (from list_frames), or a CSS selector for the iframe element.`,
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input SwitchFrameInput) (*mcp.CallToolResult, any, error) {
 		actx := s.activeCtx()
+		bctx, err := s.browserContext(ctx)
+		if err != nil {
+			return nil, nil, fmt.Errorf("switch_frame: %w", err)
+		}
 
 		// "main" returns to the top frame / browser context.
 		if input.Frame == "main" || input.Frame == "top" || input.Frame == "" {
-			s.setActiveCtx(s.browserCtx, nil)
+			s.setActiveCtx(bctx, nil)
 			return &mcp.CallToolResult{
 				Content: []mcp.Content{&mcp.TextContent{Text: "switched to main frame"}},
 			}, nil, nil
@@ -83,14 +87,14 @@ func registerFrameTools(server *mcp.Server, s *mcpSession) {
 		}
 
 		// An out-of-process iframe has its own target; attach to it directly.
-		targets, err := chromedp.Targets(s.browserCtx)
+		targets, err := chromedp.Targets(bctx)
 		if err != nil {
 			return nil, nil, fmt.Errorf("switch_frame: list targets: %w", err)
 		}
 
 		for _, t := range targets {
 			if t.Type == "iframe" && string(t.TargetID) == frameID {
-				frameCtx, frameCancel := chromedp.NewContext(s.browserCtx, chromedp.WithExistingTarget(target.ID(frameID)))
+				frameCtx, frameCancel := chromedp.NewContext(bctx, chromedp.WithExistingTarget(target.ID(frameID)))
 				if err := chromedp.Run(frameCtx); err != nil {
 					frameCancel()
 					return nil, nil, fmt.Errorf("switch_frame: attach to frame: %w", err)

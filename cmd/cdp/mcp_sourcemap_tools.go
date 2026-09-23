@@ -17,7 +17,7 @@ type inferredFile = sourcemap.File
 type inferredFunc = sourcemap.Function
 
 // sourcemapDiskPath returns the on-disk path for a bundle URL's .map file.
-// Follows the same layout as sources: outputDir/origin/_compiled/path.map.
+// The map is saved next to its bundle when sources saved one there.
 func sourcemapDiskPath(sourcesDir, bundleURL string) string {
 	return sourcemap.DiskPath(sourcesDir, bundleURL)
 }
@@ -283,10 +283,11 @@ functions (optional), framework (optional), module (optional).`,
 		Name:        "generate_sourcemap",
 		Description: "Generate a sourcemap v3 JSON from previously analyzed bundle structure. Returns the raw sourcemap JSON.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input GenerateSourcemapInput) (*mcp.CallToolResult, any, error) {
-		if s.syntheticMaps == nil {
+		synth := s.sourcemaps()
+		if synth == nil {
 			return nil, nil, fmt.Errorf("generate_sourcemap: no bundles analyzed — use analyze_bundle first")
 		}
-		sm := s.syntheticMaps.get(input.BundleURL)
+		sm := synth.get(input.BundleURL)
 		if sm == nil || sm.MapJSON == nil {
 			return nil, nil, fmt.Errorf("generate_sourcemap: no analysis for %s — use analyze_bundle first", input.BundleURL)
 		}
@@ -299,10 +300,11 @@ functions (optional), framework (optional), module (optional).`,
 		Name:        "serve_sourcemap",
 		Description: "Install a Fetch intercept to serve the synthetic sourcemap for a bundle URL. When Chrome requests the .map file, it gets our generated map instead.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input ServeSourcemapInput) (*mcp.CallToolResult, any, error) {
-		if s.syntheticMaps == nil {
+		synth := s.sourcemaps()
+		if synth == nil {
 			return nil, nil, fmt.Errorf("serve_sourcemap: no bundles analyzed")
 		}
-		sm := s.syntheticMaps.get(input.BundleURL)
+		sm := synth.get(input.BundleURL)
 		if sm == nil || sm.MapJSON == nil {
 			return nil, nil, fmt.Errorf("serve_sourcemap: no sourcemap for %s", input.BundleURL)
 		}
@@ -331,7 +333,7 @@ functions (optional), framework (optional), module (optional).`,
 			},
 		}
 		id := s.intercepts.addRule(rule)
-		sm = s.syntheticMaps.update(input.BundleURL, func(sm *syntheticMap) {
+		sm = synth.update(input.BundleURL, func(sm *syntheticMap) {
 			sm.Serving = true
 			sm.InterceptID = id
 		})
@@ -349,12 +351,13 @@ functions (optional), framework (optional), module (optional).`,
 		Description: "List all synthetic sourcemaps and their serving status.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input struct{}) (*mcp.CallToolResult, any, error) {
-		if s.syntheticMaps == nil {
+		synth := s.sourcemaps()
+		if synth == nil {
 			return &mcp.CallToolResult{
 				Content: []mcp.Content{&mcp.TextContent{Text: "no sourcemaps"}},
 			}, nil, nil
 		}
-		maps := s.syntheticMaps.list()
+		maps := synth.list()
 		if len(maps) == 0 {
 			return &mcp.CallToolResult{
 				Content: []mcp.Content{&mcp.TextContent{Text: "no sourcemaps"}},
@@ -457,8 +460,8 @@ Otherwise, returns new chunks for you to re-analyze, then call set_bundle_struct
 		var b strings.Builder
 		fmt.Fprintf(&b, "Refined coverage for %s: %d chunks\n", input.BundleURL, len(chunks))
 		fmt.Fprintf(&b, "(MCP sampling unavailable: %v)\n", samplingErr)
-		if s.syntheticMaps != nil {
-			if existing := s.syntheticMaps.get(input.BundleURL); existing != nil && existing.Sources != nil {
+		if synth := s.sourcemaps(); synth != nil {
+			if existing := synth.get(input.BundleURL); existing != nil && existing.Sources != nil {
 				fmt.Fprintf(&b, "Previous analysis had %d files. ", len(existing.Sources.Files))
 				if existing.Serving {
 					fmt.Fprintf(&b, "Currently serving (rule %s). ", existing.InterceptID)
@@ -499,10 +502,11 @@ Otherwise, returns new chunks for you to re-analyze, then call set_bundle_struct
 		Description: "Read the analysis log for a bundle — shows prior reasoning behind sourcemap naming decisions across sessions.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input GetAnalysisLogInput) (*mcp.CallToolResult, any, error) {
-		if s.syntheticMaps == nil {
+		synth := s.sourcemaps()
+		if synth == nil {
 			return nil, nil, fmt.Errorf("get_analysis_log: no sourcemaps")
 		}
-		sm := s.syntheticMaps.get(input.BundleURL)
+		sm := synth.get(input.BundleURL)
 		if sm == nil || sm.MapPath == "" {
 			return nil, nil, fmt.Errorf("get_analysis_log: no on-disk sourcemap for %s", input.BundleURL)
 		}

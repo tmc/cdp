@@ -109,9 +109,13 @@ func registerExtensionTools(server *mcp.Server, s *mcpSession) {
 		Description: "List installed Chrome extensions. Uses CDP Extensions domain when available, falls back to chrome.developerPrivate.getExtensionsInfo() on chrome://extensions, then target enumeration.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input ListExtensionsInput) (*mcp.CallToolResult, any, error) {
+		bctx, err := s.browserContext(ctx)
+		if err != nil {
+			return nil, nil, fmt.Errorf("list_extensions: %w", err)
+		}
 		// Try CDP Extensions.getExtensions first.
 		var exts []*extensions.ExtensionInfo
-		cdpErr := chromedp.Run(s.browserCtx, chromedp.ActionFunc(func(ctx context.Context) error {
+		cdpErr := chromedp.Run(bctx, chromedp.ActionFunc(func(ctx context.Context) error {
 			var err error
 			exts, err = extensions.GetExtensions().Do(ctx)
 			return err
@@ -127,7 +131,7 @@ func registerExtensionTools(server *mcp.Server, s *mcpSession) {
 		}
 
 		// Fallback: chrome.developerPrivate.getExtensionsInfo() via chrome://extensions.
-		jsResult, jsErr := runOnExtensionsPage(s, `chrome.developerPrivate.getExtensionsInfo()`)
+		jsResult, jsErr := runOnExtensionsPage(bctx, `chrome.developerPrivate.getExtensionsInfo()`)
 		if jsErr == nil && jsResult != "" && jsResult != "null" {
 			// Parse and map to our extensionInfo format.
 			var raw []json.RawMessage
@@ -178,7 +182,7 @@ func registerExtensionTools(server *mcp.Server, s *mcpSession) {
 		}
 
 		// Final fallback: enumerate CDP targets for chrome-extension:// URLs.
-		targets, err := chromedp.Targets(s.browserCtx)
+		targets, err := chromedp.Targets(bctx)
 		if err != nil {
 			return nil, nil, fmt.Errorf("list_extensions: %w", err)
 		}
@@ -219,7 +223,11 @@ func registerExtensionTools(server *mcp.Server, s *mcpSession) {
 		Name:        "reload_extension",
 		Description: "Reload an unpacked Chrome extension by ID. Uses chrome.developerPrivate.reload() on a temporary chrome://extensions tab.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input ReloadExtensionInput) (*mcp.CallToolResult, any, error) {
-		result, err := runOnExtensionsPage(s, fmt.Sprintf(
+		bctx, err := s.browserContext(ctx)
+		if err != nil {
+			return nil, nil, fmt.Errorf("reload_extension: %w", err)
+		}
+		result, err := runOnExtensionsPage(bctx, fmt.Sprintf(
 			`chrome.developerPrivate.reload(%q, {failQuietly: true})`, input.ID,
 		))
 		if err != nil {
@@ -239,9 +247,13 @@ func registerExtensionTools(server *mcp.Server, s *mcpSession) {
 		Description: `Load an unpacked Chrome extension from a local directory path. Tries CDP Extensions.loadUnpacked first, falls back to chrome.developerPrivate.loadUnpacked() on chrome://extensions. ` +
 			`Note: JS fallback may trigger a file picker if --enable-unsafe-extension-debugging is not set. Use --load-extension flag at launch for reliable headless loading.`,
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input InstallExtensionInput) (*mcp.CallToolResult, any, error) {
+		bctx, err := s.browserContext(ctx)
+		if err != nil {
+			return nil, nil, fmt.Errorf("install_extension: %w", err)
+		}
 		// Try CDP Extensions.loadUnpacked first (requires pipe transport).
 		var extID string
-		cdpErr := chromedp.Run(s.browserCtx, chromedp.ActionFunc(func(ctx context.Context) error {
+		cdpErr := chromedp.Run(bctx, chromedp.ActionFunc(func(ctx context.Context) error {
 			id, err := extensions.LoadUnpacked(input.Path).Do(ctx)
 			if err != nil {
 				return err
@@ -256,7 +268,7 @@ func registerExtensionTools(server *mcp.Server, s *mcpSession) {
 		}
 
 		// Fallback: chrome.developerPrivate.loadUnpacked() via chrome://extensions.
-		result, err := runOnExtensionsPage(s, fmt.Sprintf(
+		result, err := runOnExtensionsPage(bctx, fmt.Sprintf(
 			`chrome.developerPrivate.loadUnpacked(%q)`, input.Path,
 		))
 		if err != nil {
@@ -275,6 +287,10 @@ func registerExtensionTools(server *mcp.Server, s *mcpSession) {
 		Name:        "install_bundled_extensions",
 		Description: "Install the bundled coverage DevTools extension at runtime via developerPrivate. Useful when --load-extension was not set at browser launch.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input struct{}) (*mcp.CallToolResult, any, error) {
+		bctx, err := s.browserContext(ctx)
+		if err != nil {
+			return nil, nil, fmt.Errorf("install_bundled_extensions: %w", err)
+		}
 		extBase, err := extractBundledExtensions()
 		if err != nil {
 			return nil, nil, fmt.Errorf("install_bundled_extensions: extract: %w", err)
@@ -286,7 +302,7 @@ func registerExtensionTools(server *mcp.Server, s *mcpSession) {
 
 		// Try CDP Extensions.loadUnpacked first.
 		var extID string
-		cdpErr := chromedp.Run(s.browserCtx, chromedp.ActionFunc(func(ctx context.Context) error {
+		cdpErr := chromedp.Run(bctx, chromedp.ActionFunc(func(ctx context.Context) error {
 			id, err := extensions.LoadUnpacked(coveragePath).Do(ctx)
 			if err != nil {
 				return err
@@ -301,7 +317,7 @@ func registerExtensionTools(server *mcp.Server, s *mcpSession) {
 		}
 
 		// Fallback: chrome.developerPrivate.loadUnpacked.
-		result, err := runOnExtensionsPage(s, fmt.Sprintf(
+		result, err := runOnExtensionsPage(bctx, fmt.Sprintf(
 			`chrome.developerPrivate.loadUnpacked(%q)`, coveragePath,
 		))
 		if err != nil {
@@ -320,8 +336,12 @@ func registerExtensionTools(server *mcp.Server, s *mcpSession) {
 		Name:        "uninstall_extension",
 		Description: "Uninstall a Chrome extension by ID. Tries CDP Extensions.uninstall, then chrome.management.uninstall() in the service worker, then disables via chrome.developerPrivate.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input UninstallExtensionInput) (*mcp.CallToolResult, any, error) {
+		bctx, err := s.browserContext(ctx)
+		if err != nil {
+			return nil, nil, fmt.Errorf("uninstall_extension: %w", err)
+		}
 		// Try CDP Extensions.uninstall first.
-		cdpErr := chromedp.Run(s.browserCtx, chromedp.ActionFunc(func(ctx context.Context) error {
+		cdpErr := chromedp.Run(bctx, chromedp.ActionFunc(func(ctx context.Context) error {
 			return extensions.Uninstall(input.ID).Do(ctx)
 		}))
 		if cdpErr == nil {
@@ -331,9 +351,9 @@ func registerExtensionTools(server *mcp.Server, s *mcpSession) {
 		}
 
 		// Fallback: chrome.management.uninstall via SW context if possible.
-		tid, swErr := findExtensionSW(s.browserCtx, input.ID)
+		tid, swErr := findExtensionSW(bctx, input.ID)
 		if swErr == nil {
-			result, err := evalInExtensionSW(s.browserCtx, tid,
+			result, err := evalInExtensionSW(bctx, tid,
 				fmt.Sprintf(`await chrome.management.uninstall(%q)`, input.ID))
 			if err == nil {
 				_ = result
@@ -344,7 +364,7 @@ func registerExtensionTools(server *mcp.Server, s *mcpSession) {
 		}
 
 		// Final fallback: developerPrivate on chrome://extensions.
-		_, err := runOnExtensionsPage(s, fmt.Sprintf(
+		_, err = runOnExtensionsPage(bctx, fmt.Sprintf(
 			`chrome.developerPrivate.updateExtensionConfiguration({extensionId: %q, enable: false})`, input.ID,
 		))
 		if err != nil {
@@ -360,16 +380,20 @@ func registerExtensionTools(server *mcp.Server, s *mcpSession) {
 		Description: "Get console output and errors from an extension's service worker. Attaches to the service worker target on first call.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input ExtensionConsoleInput) (*mcp.CallToolResult, any, error) {
+		bctx, err := s.browserContext(ctx)
+		if err != nil {
+			return nil, nil, fmt.Errorf("extension_console: %w", err)
+		}
 		extConsoles.mu.Lock()
 		cc, ok := extConsoles.m[input.ID]
 		extConsoles.mu.Unlock()
 
 		if !ok {
-			tid, err := findExtensionSW(s.browserCtx, input.ID)
+			tid, err := findExtensionSW(bctx, input.ID)
 			if err != nil {
 				return nil, nil, fmt.Errorf("extension_console: %w", err)
 			}
-			swCtx, swCancel := chromedp.NewContext(s.browserCtx, chromedp.WithExistingTarget(tid))
+			swCtx, swCancel := chromedp.NewContext(bctx, chromedp.WithExistingTarget(tid))
 			if err := chromedp.Run(swCtx); err != nil {
 				swCancel()
 				return nil, nil, fmt.Errorf("extension_console: attach: %w", err)
@@ -450,11 +474,15 @@ func registerExtensionTools(server *mcp.Server, s *mcpSession) {
 		Name:        "extension_evaluate",
 		Description: "Evaluate JavaScript in the context of an extension's service worker. Finds the service worker target and runs Runtime.evaluate there.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input ExtensionEvaluateInput) (*mcp.CallToolResult, any, error) {
-		tid, err := findExtensionSW(s.browserCtx, input.ID)
+		bctx, err := s.browserContext(ctx)
 		if err != nil {
 			return nil, nil, fmt.Errorf("extension_evaluate: %w", err)
 		}
-		result, err := evalInExtensionSW(s.browserCtx, tid, input.Expression)
+		tid, err := findExtensionSW(bctx, input.ID)
+		if err != nil {
+			return nil, nil, fmt.Errorf("extension_evaluate: %w", err)
+		}
+		result, err := evalInExtensionSW(bctx, tid, input.Expression)
 		if err != nil {
 			return nil, nil, fmt.Errorf("extension_evaluate: %w", err)
 		}
@@ -470,6 +498,10 @@ func registerExtensionTools(server *mcp.Server, s *mcpSession) {
 		Description: "Get data from extension storage via Runtime.evaluate in the extension's service worker. Area: local (default), sync, session, or managed. Optionally filter by keys.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input GetExtensionStorageInput) (*mcp.CallToolResult, any, error) {
+		bctx, err := s.browserContext(ctx)
+		if err != nil {
+			return nil, nil, fmt.Errorf("get_extension_storage: %w", err)
+		}
 		area := input.Area
 		if area == "" {
 			area = "local"
@@ -477,7 +509,7 @@ func registerExtensionTools(server *mcp.Server, s *mcpSession) {
 		if !validStorageArea(area) {
 			return nil, nil, fmt.Errorf("get_extension_storage: invalid area %q (use local, sync, session, or managed)", area)
 		}
-		tid, err := findExtensionSW(s.browserCtx, input.ID)
+		tid, err := findExtensionSW(bctx, input.ID)
 		if err != nil {
 			return nil, nil, fmt.Errorf("get_extension_storage: %w (extension needs a background service worker)", err)
 		}
@@ -488,7 +520,7 @@ func registerExtensionTools(server *mcp.Server, s *mcpSession) {
 		} else {
 			expr = fmt.Sprintf(`JSON.stringify(await chrome.storage.%s.get(null))`, area)
 		}
-		result, err := evalInExtensionSW(s.browserCtx, tid, expr)
+		result, err := evalInExtensionSW(bctx, tid, expr)
 		if err != nil {
 			return nil, nil, fmt.Errorf("get_extension_storage: %w", err)
 		}
@@ -501,6 +533,10 @@ func registerExtensionTools(server *mcp.Server, s *mcpSession) {
 		Name:        "set_extension_storage",
 		Description: "Set values in extension storage via Runtime.evaluate in the extension's service worker. Area: local (default), sync, session, or managed.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input SetExtensionStorageInput) (*mcp.CallToolResult, any, error) {
+		bctx, err := s.browserContext(ctx)
+		if err != nil {
+			return nil, nil, fmt.Errorf("set_extension_storage: %w", err)
+		}
 		area := input.Area
 		if area == "" {
 			area = "local"
@@ -508,7 +544,7 @@ func registerExtensionTools(server *mcp.Server, s *mcpSession) {
 		if !validStorageArea(area) {
 			return nil, nil, fmt.Errorf("set_extension_storage: invalid area %q", area)
 		}
-		tid, err := findExtensionSW(s.browserCtx, input.ID)
+		tid, err := findExtensionSW(bctx, input.ID)
 		if err != nil {
 			return nil, nil, fmt.Errorf("set_extension_storage: %w (extension needs a background service worker)", err)
 		}
@@ -517,7 +553,7 @@ func registerExtensionTools(server *mcp.Server, s *mcpSession) {
 			return nil, nil, fmt.Errorf("set_extension_storage: marshal: %w", err)
 		}
 		expr := fmt.Sprintf(`await chrome.storage.%s.set(JSON.parse(%q))`, area, string(valJSON))
-		_, err = evalInExtensionSW(s.browserCtx, tid, expr)
+		_, err = evalInExtensionSW(bctx, tid, expr)
 		if err != nil {
 			return nil, nil, fmt.Errorf("set_extension_storage: %w", err)
 		}
@@ -530,6 +566,10 @@ func registerExtensionTools(server *mcp.Server, s *mcpSession) {
 		Name:        "clear_extension_storage",
 		Description: "Clear all data in extension storage area via Runtime.evaluate in the extension's service worker. Area: local (default), sync, session, or managed.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input ClearExtensionStorageInput) (*mcp.CallToolResult, any, error) {
+		bctx, err := s.browserContext(ctx)
+		if err != nil {
+			return nil, nil, fmt.Errorf("clear_extension_storage: %w", err)
+		}
 		area := input.Area
 		if area == "" {
 			area = "local"
@@ -537,12 +577,12 @@ func registerExtensionTools(server *mcp.Server, s *mcpSession) {
 		if !validStorageArea(area) {
 			return nil, nil, fmt.Errorf("clear_extension_storage: invalid area %q", area)
 		}
-		tid, err := findExtensionSW(s.browserCtx, input.ID)
+		tid, err := findExtensionSW(bctx, input.ID)
 		if err != nil {
 			return nil, nil, fmt.Errorf("clear_extension_storage: %w (extension needs a background service worker)", err)
 		}
 		expr := fmt.Sprintf(`await chrome.storage.%s.clear()`, area)
-		_, err = evalInExtensionSW(s.browserCtx, tid, expr)
+		_, err = evalInExtensionSW(bctx, tid, expr)
 		if err != nil {
 			return nil, nil, fmt.Errorf("clear_extension_storage: %w", err)
 		}
@@ -619,8 +659,8 @@ func evalInExtensionSW(browserCtx context.Context, tid target.ID, expr string) (
 
 // runOnExtensionsPage opens chrome://extensions in a temporary tab,
 // evaluates the given JS expression, and closes the tab.
-func runOnExtensionsPage(s *mcpSession, expr string) (string, error) {
-	tabCtx, tabCancel := chromedp.NewContext(s.browserCtx)
+func runOnExtensionsPage(browserCtx context.Context, expr string) (string, error) {
+	tabCtx, tabCancel := chromedp.NewContext(browserCtx)
 	defer tabCancel()
 
 	if err := chromedp.Run(tabCtx, chromedp.Navigate("chrome://extensions")); err != nil {
@@ -650,7 +690,7 @@ func runOnExtensionsPage(s *mcpSession, expr string) (string, error) {
 
 	// Close the temporary tab.
 	tid := chromedp.FromContext(tabCtx).Target.TargetID
-	_ = chromedp.Run(s.browserCtx, chromedp.ActionFunc(func(ctx context.Context) error {
+	_ = chromedp.Run(browserCtx, chromedp.ActionFunc(func(ctx context.Context) error {
 		return target.CloseTarget(tid).Do(ctx)
 	}))
 

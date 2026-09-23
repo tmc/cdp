@@ -95,6 +95,8 @@ func TestValidateRawCDPInput(t *testing.T) {
 		{name: "block target close", input: RawCDPInput{Method: "Target.closeTarget", Target: "browser"}, wantErr: true},
 		{name: "block target create", input: RawCDPInput{Method: "Target.createTarget", Target: "browser"}, wantErr: true},
 		{name: "block browser context create", input: RawCDPInput{Method: "Target.createBrowserContext", Target: "browser"}, wantErr: true},
+		{name: "block browser context dispose", input: RawCDPInput{Method: "Target.disposeBrowserContext", Target: "browser"}, wantErr: true},
+		{name: "block page close", input: RawCDPInput{Method: "Page.close"}, wantErr: true},
 		{name: "allow target info", input: RawCDPInput{Method: "Target.getTargets", Target: "browser"}, wantMethod: "Target.getTargets", wantTarget: "browser"},
 	}
 
@@ -190,6 +192,7 @@ func TestIsRawCDPCommandName(t *testing.T) {
 }
 
 func TestRunRawCDPLiveTargetAndBrowser(t *testing.T) {
+	skipIfNoBrowser(t)
 	chromePath := testutil.FindChrome()
 	if chromePath == "" {
 		t.Skip("no Chrome-compatible browser found")

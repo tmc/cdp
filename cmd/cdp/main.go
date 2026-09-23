@@ -1539,6 +1539,7 @@ func main() {
 			RemoteHost:        remoteHost,
 			RemotePort:        remotePort,
 			RemoteTab:         remoteTab,
+			TabID:             tabID,
 			Headless:          headless,
 			Verbose:           verbose,
 			OutputDir:         outputDir,
@@ -3696,6 +3697,10 @@ func main() {
 						fmt.Println("No --output-dir configured; context has no effect on output")
 					}
 					name := strings.TrimSpace(parts[1])
+					if err := validPathSegment("context name", name); err != nil {
+						fmt.Printf("Error: %v\n", err)
+						continue
+					}
 					contextStack = append(contextStack, name)
 					dir := filepath.Join(outputDir, filepath.Join(contextStack...))
 					if outputDir != "" {

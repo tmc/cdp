@@ -1,6 +1,7 @@
 package main
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 )
@@ -31,5 +32,21 @@ func TestContextStackParentTag(t *testing.T) {
 	}
 	if got := contextStackParentTag([]string{"login", "submit"}); got != "submit" {
 		t.Fatalf("parent tag = %q", got)
+	}
+}
+
+func TestPushContextMkdirFailure(t *testing.T) {
+	// A regular file where the output directory should be makes MkdirAll fail.
+	outputDir := filepath.Join(t.TempDir(), "file")
+	if err := os.WriteFile(outputDir, nil, 0o666); err != nil {
+		t.Fatal(err)
+	}
+	s := &mcpSession{outputDir: outputDir}
+	dir, err := s.pushContext("step")
+	if err == nil {
+		t.Fatalf("pushContext = %q, nil; want error", dir)
+	}
+	if len(s.contextStack) != 0 {
+		t.Fatalf("contextStack = %q after failed push, want empty", s.contextStack)
 	}
 }

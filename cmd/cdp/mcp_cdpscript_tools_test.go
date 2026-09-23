@@ -69,7 +69,9 @@ func TestScriptFormat(t *testing.T) {
 		{name: "explicit txtar", format: "txtar", file: "x.cdp", text: "log x\n", want: "txtar"},
 		{name: "txtar suffix", file: "x.txtar", text: "log x\n", want: "txtar"},
 		{name: "txtar marker", file: "x.cdp", text: "\n-- main.cdp --\nlog x\n", want: "txtar"},
+		{name: "txtar marker first line", file: "inline.cdp", text: "-- main.cdp --\nlog x\n", want: "txtar"},
 		{name: "plain", file: "x.cdp", text: "log x\n", want: "cdp"},
+		{name: "dashes without marker", file: "x.cdp", text: "log x\n-- not a marker\n", want: "cdp"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

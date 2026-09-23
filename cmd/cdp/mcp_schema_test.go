@@ -5,10 +5,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -47,28 +45,11 @@ func mcpToolSchema(ctx context.Context) ([]byte, error) {
 	server := mcp.NewServer(&mcp.Implementation{Name: "cdp", Version: "schema"}, nil)
 	registerMCPTools(server, &mcpSession{refs: newRefRegistry()}, mcpConfig{EnableInspect: true})
 
-	serverTransport, clientTransport := mcp.NewInMemoryTransports()
-	serverSession, err := server.Connect(ctx, serverTransport, nil)
+	tools, err := listMCPTools(ctx, server)
 	if err != nil {
-		return nil, fmt.Errorf("connect schema server: %w", err)
+		return nil, err
 	}
-	defer serverSession.Close()
-
-	client := mcp.NewClient(&mcp.Implementation{Name: "cdp-schema", Version: "1"}, nil)
-	clientSession, err := client.Connect(ctx, clientTransport, nil)
-	if err != nil {
-		return nil, fmt.Errorf("connect schema client: %w", err)
-	}
-	defer clientSession.Close()
-
-	result, err := clientSession.ListTools(ctx, nil)
-	if err != nil {
-		return nil, fmt.Errorf("list MCP tools: %w", err)
-	}
-	sort.Slice(result.Tools, func(i, j int) bool {
-		return result.Tools[i].Name < result.Tools[j].Name
-	})
 	return json.MarshalIndent(struct {
 		Tools []*mcp.Tool `json:"tools"`
-	}{result.Tools}, "", "  ")
+	}{tools}, "", "  ")
 }

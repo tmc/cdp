@@ -18,6 +18,7 @@ import (
 // reveals explicitly. Waiting for the selector must not outlive its request.
 func actionDiffBrowser(t *testing.T, options ...chromedp.ContextOption) context.Context {
 	t.Helper()
+	skipIfNoBrowser(t)
 	path := testutil.FindChrome()
 	if path == "" {
 		t.Skip("no Chromium browser available")

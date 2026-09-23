@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"sort"
 	"sync"
 
 	"github.com/chromedp/cdproto/cdp"
@@ -45,6 +46,7 @@ type mcpSession struct {
 	contextStack      []string
 	observationGate   chan struct{}
 	observation       *browserObservation // protected by observationGate
+	builtinTools      map[string]bool     // built-in tool names; set before the server runs
 }
 
 // activeCtx returns the current active tab context, waiting for browser setup
@@ -190,8 +192,8 @@ func (s *mcpSession) pushContext(name string) (string, error) {
 	s.contextStack = append(s.contextStack, name)
 	dir := s.contextOutputDir()
 	if err := os.MkdirAll(dir, 0755); err != nil {
-		log.Printf("error creating context dir: %v", err)
-		return dir, nil
+		s.contextStack = s.contextStack[:len(s.contextStack)-1]
+		return "", fmt.Errorf("create context dir: %w", err)
 	}
 	if s.recorder != nil {
 		s.recorder.SetOutputDir(dir)
@@ -293,7 +295,8 @@ func (s *mcpSession) contextPath() string {
 type mcpConfig struct {
 	RemoteHost        string
 	RemotePort        int
-	RemoteTab         string
+	RemoteTab         string // -remote-tab: target ID or URL
+	TabID             string // -tab: target ID; takes precedence over RemoteTab
 	Headless          bool
 	Verbose           bool
 	OutputDir         string
@@ -308,6 +311,73 @@ type mcpConfig struct {
 	LoadExtensions    string
 	EnableInspect     bool
 	MaxBodyBytes      int64
+}
+
+// listMCPTools returns the tools registered on server, sorted by name.
+// It lists them over an in-memory client session.
+func listMCPTools(ctx context.Context, server *mcp.Server) ([]*mcp.Tool, error) {
+	serverTransport, clientTransport := mcp.NewInMemoryTransports()
+	serverSession, err := server.Connect(ctx, serverTransport, nil)
+	if err != nil {
+		return nil, fmt.Errorf("connect server: %w", err)
+	}
+	defer serverSession.Close()
+
+	client := mcp.NewClient(&mcp.Implementation{Name: "cdp-list", Version: "1"}, nil)
+	clientSession, err := client.Connect(ctx, clientTransport, nil)
+	if err != nil {
+		return nil, fmt.Errorf("connect client: %w", err)
+	}
+	defer clientSession.Close()
+
+	var tools []*mcp.Tool
+	for tool, err := range clientSession.Tools(ctx, nil) {
+		if err != nil {
+			return nil, fmt.Errorf("list tools: %w", err)
+		}
+		tools = append(tools, tool)
+	}
+	sort.Slice(tools, func(i, j int) bool { return tools[i].Name < tools[j].Name })
+	return tools, nil
+}
+
+// mcpTargetID resolves -tab and -remote-tab to the target ID to attach to,
+// as the non-MCP remote path does. -remote-tab may be a target ID or a URL;
+// resolving it lists the targets at the remote host.
+func mcpTargetID(cfg mcpConfig) (string, error) {
+	if cfg.TabID != "" || cfg.RemoteTab == "" {
+		return cfg.TabID, nil
+	}
+	tabs, err := getChromeTabsFrom(cfg.RemoteHost, cfg.RemotePort)
+	if err != nil {
+		return "", fmt.Errorf("list tabs at %s:%d: %w", cfg.RemoteHost, cfg.RemotePort, err)
+	}
+	return remoteTargetID("", cfg.RemoteTab, tabs)
+}
+
+// registerServerTools registers the built-in tools and, when cfg.ToolsDir is
+// set, define_tool and the custom tools in that directory. A custom tool may
+// not take the name of a built-in tool.
+func registerServerTools(ctx context.Context, server *mcp.Server, session *mcpSession, cfg mcpConfig) error {
+	registerMCPTools(server, session, cfg)
+	if cfg.ToolsDir == "" {
+		return nil
+	}
+	if err := registerDefineToolMeta(server, session, cfg.ToolsDir); err != nil {
+		return fmt.Errorf("register define_tool: %w", err)
+	}
+	tools, err := listMCPTools(ctx, server)
+	if err != nil {
+		return fmt.Errorf("list built-in tools: %w", err)
+	}
+	session.builtinTools = make(map[string]bool, len(tools))
+	for _, t := range tools {
+		session.builtinTools[t.Name] = true
+	}
+	if err := loadAndRegisterCustomTools(server, session, cfg.ToolsDir); err != nil {
+		log.Printf("warning: loading custom tools: %v", err)
+	}
+	return nil
 }
 
 // runMCP starts the MCP server with browser session tools on stdio.
@@ -361,15 +431,8 @@ func runMCP(cfg mcpConfig) error {
 		Version: "0.1.0",
 	}, nil)
 
-	registerMCPTools(server, session, cfg)
-
-	if cfg.ToolsDir != "" {
-		if err := loadAndRegisterCustomTools(server, session, cfg.ToolsDir); err != nil {
-			log.Printf("warning: loading custom tools: %v", err)
-		}
-		if err := registerDefineToolMeta(server, session, cfg.ToolsDir); err != nil {
-			return fmt.Errorf("register define_tool: %w", err)
-		}
+	if err := registerServerTools(ctx, server, session, cfg); err != nil {
+		return err
 	}
 
 	// Start coverage API server for the DevTools extension.
@@ -402,10 +465,16 @@ func runMCP(cfg mcpConfig) error {
 			session.mu.Unlock()
 		}
 
+		tabID, err := mcpTargetID(cfg)
+		if err != nil {
+			log.Printf("error: select remote tab: %v", err)
+			recordSetupErr(fmt.Errorf("select remote tab: %w", err))
+			return
+		}
 		fcfg := fullCaptureConfig{
 			RemoteHost:        cfg.RemoteHost,
 			RemotePort:        cfg.RemotePort,
-			TabID:             cfg.RemoteTab,
+			TabID:             tabID,
 			Verbose:           cfg.Verbose,
 			Headless:          cfg.Headless,
 			DebugPort:         cfg.DebugPort,

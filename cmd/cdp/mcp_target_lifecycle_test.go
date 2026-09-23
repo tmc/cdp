@@ -18,6 +18,7 @@ type targetEventsKey struct{}
 
 func targetLifecycleBrowser(t *testing.T) (context.Context, string, string, []target.ID) {
 	t.Helper()
+	skipIfNoBrowser(t)
 	path := testutil.FindChrome()
 	if path == "" {
 		t.Skip("no Chromium browser available")

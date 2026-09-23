@@ -36,6 +36,14 @@ func (s *mcpSession) ensureSourcemaps() *sourcemapManager {
 	return s.syntheticMaps
 }
 
+// sourcemaps returns the session's sourcemap manager, or nil if no bundle
+// has been analyzed yet.
+func (s *mcpSession) sourcemaps() *sourcemapManager {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.syntheticMaps
+}
+
 func (im *InteractiveMode) ensureSourcemaps() *sourcemapManager {
 	if im.syntheticMaps == nil {
 		im.syntheticMaps = newSourcemapManager()

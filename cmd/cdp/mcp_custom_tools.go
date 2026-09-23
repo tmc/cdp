@@ -8,49 +8,16 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/tmc/cdp/cdpscript"
 	"github.com/tmc/cdp/internal/tooldef"
 )
 
-// builtinToolNames is the set of MCP tool names registered by the cdp server.
-// Custom tools that collide with these names are prefixed with "custom_".
-var builtinToolNames = map[string]bool{
-	"navigate": true, "navigate_back": true, "navigate_forward": true, "reload": true,
-	"screenshot": true, "get_page_content": true, "page_snapshot": true,
-	"click": true, "type_text": true, "wait_for": true,
-	"evaluate": true, "raw_cdp": true,
-	"find_element": true, "get_element": true, "check_element": true,
-	"press_key": true, "hover": true, "focus": true,
-	"get_console": true, "get_errors": true,
-	"list_frames": true, "switch_frame": true,
-	"scroll":        true,
-	"handle_dialog": true, "get_dialogs": true,
-	"upload_file": true,
-	"get_storage": true, "set_storage": true, "clear_storage": true,
-	"set_viewport": true, "set_user_agent": true, "set_offline": true,
-	"set_geolocation": true, "set_extra_headers": true,
-	"intercept_request": true, "intercept_response": true,
-	"remove_intercept": true, "list_intercepts": true,
-	"save_pdf":    true,
-	"start_trace": true, "stop_trace": true, "analyze_trace": true,
-	"save_state": true, "load_state": true,
-	"snapshot_dom": true, "dom_diff": true, "list_dom_snapshots": true,
-	"analyze_bundle": true, "generate_sourcemap": true, "serve_sourcemap": true,
-	"list_sourcemaps": true, "refine_sourcemap": true,
-	"list_tabs": true, "switch_tab": true, "new_tab": true,
-	"push_context": true, "pop_context": true,
-	"get_har_entries": true, "get_cookies": true, "set_cookie": true,
-	"save_sources": true, "list_sources": true, "read_source": true, "search_source": true,
-	"start_coverage": true, "stop_coverage": true, "get_coverage": true,
-	"get_coverage_delta": true, "compare_coverage": true, "list_snapshots": true,
-	"define_tool":   true,
-	"run_cdpscript": true, "validate_script": true, "list_examples": true,
-}
-
 // loadAndRegisterCustomTools scans toolsDir for .cdp files and registers each
-// as an MCP tool backed by the cdpscript executor.
+// as an MCP tool backed by the cdpscript executor. Tools whose names collide
+// with session.builtinTools are skipped.
 func loadAndRegisterCustomTools(server *mcp.Server, session *mcpSession, toolsDir string) error {
 	defs, err := tooldef.LoadDir(toolsDir)
 	if err != nil {
@@ -61,9 +28,9 @@ func loadAndRegisterCustomTools(server *mcp.Server, session *mcpSession, toolsDi
 			log.Printf("warning: custom tool %q skipped: %v", def.SourcePath, err)
 			continue
 		}
-		if builtinToolNames[def.Name] {
-			log.Printf("warning: custom tool %q collides with built-in, registering as custom_%s", def.Name, def.Name)
-			def.Name = "custom_" + def.Name
+		if session.builtinTools[def.Name] {
+			log.Printf("warning: custom tool %q skipped: name %q is a built-in tool", def.SourcePath, def.Name)
+			continue
 		}
 		registerCustomTool(server, session, def)
 		log.Printf("loaded custom tool: %s (%s)", def.Name, def.SourcePath)
@@ -93,7 +60,7 @@ func registerCustomTool(server *mcp.Server, session *mcpSession, def *tooldef.To
 				IsError: true,
 			}, nil
 		}
-		result, err := executeToolScript(session, def.Script, env)
+		result, err := executeToolScript(ctx, session, def.Script, env)
 		if err != nil {
 			return &mcp.CallToolResult{
 				Content: []mcp.Content{&mcp.TextContent{Text: fmt.Sprintf("error: %v", err)}},
@@ -122,10 +89,16 @@ func parseArguments(raw json.RawMessage) (map[string]string, error) {
 	return env, nil
 }
 
-// executeToolScript runs a cdpscript body against the MCP session's browser.
-func executeToolScript(session *mcpSession, scriptBody string, env map[string]string) (string, error) {
+// executeToolScript runs a cdpscript body against the MCP session's active
+// tab. It waits for browser setup and stops when reqCtx is done.
+func executeToolScript(reqCtx context.Context, session *mcpSession, scriptBody string, env map[string]string) (string, error) {
+	actx, err := session.activeContext(reqCtx)
+	if err != nil {
+		return "", err
+	}
+	ctx, cancel := requestToolCtx(reqCtx, actx, 5*time.Minute)
+	defer cancel()
 	session.mu.Lock()
-	ctx := session.ctx
 	outputDir := session.contextOutputDir()
 	session.mu.Unlock()
 
@@ -165,9 +138,11 @@ func registerDefineToolMeta(server *mcp.Server, session *mcpSession, toolsDir st
 		}
 
 		toolName := input.Name
-		if builtinToolNames[toolName] {
-			toolName = "custom_" + toolName
-			log.Printf("warning: define_tool %q collides with built-in, using %s", input.Name, toolName)
+		if session.builtinTools[toolName] {
+			return &mcp.CallToolResult{
+				Content: []mcp.Content{&mcp.TextContent{Text: fmt.Sprintf("tool name %q is a built-in tool", toolName)}},
+				IsError: true,
+			}, nil, nil
 		}
 
 		def := &tooldef.ToolDef{

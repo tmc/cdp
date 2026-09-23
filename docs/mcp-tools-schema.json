@@ -1070,17 +1070,6 @@
       "annotations": {
         "readOnlyHint": true
       },
-      "description": "List curated cdpscript examples and their header metadata.",
-      "inputSchema": {
-        "additionalProperties": false,
-        "type": "object"
-      },
-      "name": "list_examples"
-    },
-    {
-      "annotations": {
-        "readOnlyHint": true
-      },
       "description": "List installed Chrome extensions. Uses CDP Extensions domain when available, falls back to chrome.developerPrivate.getExtensionsInfo() on chrome://extensions, then target enumeration.",
       "inputSchema": {
         "additionalProperties": false,

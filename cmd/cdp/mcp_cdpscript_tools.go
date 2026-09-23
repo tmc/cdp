@@ -82,20 +82,6 @@ func registerCDPScriptTools(server *mcp.Server, s *mcpSession) {
 		}
 		return nil, map[string]any{"ok": true}, nil
 	})
-
-	addMCPTool(server, &mcp.Tool{
-		Name:        "list_examples",
-		Description: "List curated cdpscript examples and their header metadata.",
-		Annotations: &mcp.ToolAnnotations{
-			ReadOnlyHint: true,
-		},
-	}, func(ctx context.Context, req *mcp.CallToolRequest, input struct{}) (*mcp.CallToolResult, any, error) {
-		examples, err := readExampleIndex("examples")
-		if err != nil {
-			return nil, nil, fmt.Errorf("list_examples: %w", err)
-		}
-		return nil, examples, nil
-	})
 }
 
 func executeCDPScriptInput(ctx context.Context, engine *cdpscript.Engine, input cdpscriptInput, name, text string) error {
@@ -138,56 +124,20 @@ func scriptFormat(format, name, text string) string {
 	case "txtar", "cdp":
 		return format
 	}
-	if strings.Contains(text, "\n-- main.cdp --") || strings.HasSuffix(name, ".txtar") {
+	if hasTxtarMarker(text) || strings.HasSuffix(name, ".txtar") {
 		return "txtar"
 	}
 	return "cdp"
 }
 
-type exampleInfo struct {
-	Name         string `json:"name"`
-	Path         string `json:"path"`
-	Purpose      string `json:"purpose,omitempty"`
-	Usage        string `json:"usage,omitempty"`
-	Inputs       string `json:"inputs,omitempty"`
-	Verification string `json:"verification,omitempty"`
-}
-
-func readExampleIndex(dir string) ([]exampleInfo, error) {
-	matches, err := filepath.Glob(filepath.Join(dir, "*.txtar"))
-	if err != nil {
-		return nil, err
-	}
-	out := make([]exampleInfo, 0, len(matches))
-	for _, path := range matches {
-		data, err := os.ReadFile(path)
-		if err != nil {
-			return nil, err
-		}
-		info := exampleInfo{
-			Name: strings.TrimSuffix(filepath.Base(path), filepath.Ext(path)),
-			Path: path,
-		}
-		header := string(data)
-		if i := strings.Index(header, "\n-- "); i >= 0 {
-			header = header[:i]
-		}
-		info.Purpose = headerValue(header, "Purpose")
-		info.Usage = headerValue(header, "Usage")
-		info.Inputs = headerValue(header, "Inputs")
-		info.Verification = headerValue(header, "Verification")
-		out = append(out, info)
-	}
-	return out, nil
-}
-
-func headerValue(header, key string) string {
-	prefix := "# " + key + ":"
-	for _, line := range strings.Split(header, "\n") {
-		line = strings.TrimSpace(line)
-		if strings.HasPrefix(line, prefix) {
-			return strings.TrimSpace(strings.TrimPrefix(line, prefix))
+// hasTxtarMarker reports whether text has a txtar file marker line,
+// "-- name --", on any line including the first.
+func hasTxtarMarker(text string) bool {
+	for line := range strings.Lines(text) {
+		line = strings.TrimRight(line, "\r\n")
+		if len(line) > len("--  --") && strings.HasPrefix(line, "-- ") && strings.HasSuffix(line, " --") {
+			return true
 		}
 	}
-	return ""
+	return false
 }
