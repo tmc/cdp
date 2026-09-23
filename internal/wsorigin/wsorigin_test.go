@@ -13,7 +13,7 @@ func TestCheck(t *testing.T) {
 	}{
 		{"no origin", "", true},
 		{"devtools frontend", "devtools://devtools", true},
-		{"chrome extension", "chrome-extension://abcdefghijklmnop", true},
+		{"chrome extension", "chrome-extension://abcdefghijklmnop", false},
 		{"http localhost", "http://localhost:9229", true},
 		{"http localhost subdomain", "http://app.localhost:8080", true},
 		{"http 127.0.0.1", "http://127.0.0.1:9230", true},

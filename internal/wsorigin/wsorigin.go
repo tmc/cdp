@@ -16,9 +16,10 @@ import (
 
 // Check reports whether the request's Origin is acceptable for a local
 // debug WebSocket server. It permits requests with no Origin header
-// (non-browser clients), devtools:// and chrome-extension:// origins,
-// and http/https origins on a loopback host. Use it as a gorilla/websocket
-// Upgrader CheckOrigin.
+// (non-browser clients), devtools:// origins, and http/https origins on a
+// loopback host. It rejects chrome-extension:// origins, since any
+// installed extension could otherwise drive the debug session. Use it as a
+// gorilla/websocket Upgrader CheckOrigin.
 func Check(r *http.Request) bool {
 	origin := r.Header.Get("Origin")
 	if origin == "" {
@@ -29,7 +30,7 @@ func Check(r *http.Request) bool {
 		return false
 	}
 	switch u.Scheme {
-	case "devtools", "chrome-extension":
+	case "devtools":
 		return true
 	case "http", "https":
 		return loopback(u.Hostname())
