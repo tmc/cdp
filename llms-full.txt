@@ -1,0 +1,3847 @@
+--- docs/index.html
+
+---
+title: cdp documentation
+description: Drive Chrome from the command line to capture network traffic, extract rendered pages, and write browser automation that runs as tests.
+icon: book-open
+---
+
+# cdp documentation
+
+This repository is built on the Chrome DevTools Protocol. Everything here
+drives a real browser, so JavaScript runs, single-page applications render, and
+authenticated sessions work.
+
+There are three entry points, and which one you want depends on how durable the
+work needs to be.
+
+## `cdp` — generalized browser scripting
+
+The interactive and agent-driven surface. Attach to a browser you are already
+logged into, drive it from a prompt or over MCP, capture traffic while you
+click, extract or render what you find. Reach for it when the work is
+exploratory, or when getting to the interesting page needs a human or an agent
+first.
+
+```bash
+cdp -headless -url https://example.com -render body
+```
+
+→ [The `cdp` guide](/docs/cdp) · [Quickstart](/docs/quickstart) ·
+[Capture traffic](/docs/capturing-traffic) · [MCP server](/docs/plugins)
+
+## `cdpscript` — Unix-like tools for browser operations
+
+The durable command-line surface. A script is a txtar archive that runs the
+same way every time, takes arguments, writes artifacts, and exits with a status
+a shell can branch on. Give it a shebang line and `chmod +x` and it *is* a Unix
+tool — one you can put on `$PATH`, in a pipeline, or in a Makefile.
+
+```
+#!/usr/bin/env cdpscript
+# greet - print the title of a page
+
+-- main.cdp --
+goto $ARG1
+title
+```
+
+```bash
+./greet.cdpscript https://example.com    # or: cdpscript -o ./artifacts greet.cdpscript
+```
+
+→ [cdpscript](/docs/scripting) ·
+[Tutorial](/docs/tutorial-first-script)
+
+## `cdpscripttest` — Go-native browser testing
+
+The testing surface. The same archives run under `go test`, so a script that
+reproduces a bug becomes the regression test for it without being rewritten.
+Fixtures travel inside the archive, and browser tests sit behind a build tag so
+an ordinary `go test ./...` needs no browser.
+
+```go
+cdpscripttest.RunCDPScript(t.Context(), "greet.txtar", opts)
+```
+
+→ [The `cdpscripttest` guide](/docs/cdpscripttest) ·
+[Use it from your module](/docs/cdpscripttest/adopting) ·
+[Agentic workflows](/docs/cdpscripttest/agentic) ·
+[Testing this repository](/docs/testing)
+
+## I want to…
+
+| Goal | Start here |
+| --- | --- |
+| Install the tools and see one work | [Quickstart](/docs/quickstart) |
+| Learn the idioms by building something small | [Tutorial: your first script](/docs/tutorial-first-script) |
+| Understand how these tools fit together | [How cdp works](/docs/how-cdp-works) |
+| Record network traffic, including behind a login | [Capture network traffic](/docs/capturing-traffic) |
+| Find what changed between two page loads | [Differential capture](/docs/differential-capture) |
+| Automate a browser task repeatably | [cdpscript](/docs/scripting) |
+| Let an AI agent drive the browser | [Use cdp as an MCP server](/docs/plugins) |
+| Debug an Electron application | [Electron debugging](/docs/electron-mcp) |
+| Fetch through a proxy | [churl behind a proxy](/docs/churl-proxy) |
+| Fix something that is going wrong | [Troubleshooting](/docs/troubleshooting) |
+| Work on this repository | [Testing](/docs/testing) |
+| Look up a flag or command | [Command reference](/docs/commands) |
+| Read about one tool end to end | [cdp](/docs/cdp) · [cdpscript](/docs/scripting) · [cdpscripttest](/docs/cdpscripttest) · [churl](/docs/churl) |
+
+## The other commands
+
+Focused tools alongside the three entry points above. (`native-host` also
+ships, but Chrome starts it — see [Command reference](/docs/commands).)
+
+| Command | Use it for |
+| --- | --- |
+| `chrome-to-har` | One-shot HAR capture, plus differential capture |
+| [`churl`](/docs/churl) | Fetching a URL with JavaScript executed |
+| `chdb` | Debugging a page: breakpoints, DOM, heap, tracing |
+| `ndp` | Debugging Node.js and V8 |
+
+`chdb` and `ndp` have no guide here: they are documented by their own `--help`
+and `go doc`, and no page on this site has verified their workflows. Start with
+`chdb help` or `ndp help`.
+
+Every command documents its own flags, checked by a test that fails when a flag
+is added without being documented:
+
+```bash
+go doc ./cmd/cdp
+```
+
+See [Command reference](/docs/commands) for the full list.
+
+## Next steps
+
+- [Quickstart](/docs/quickstart) — install and see a tool work.
+- [Tutorial: your first script](/docs/tutorial-first-script) — the guided
+  build, once the quickstart runs.
+- [How cdp works](/docs/how-cdp-works) — the model behind the tools, and what
+  is stable.
+- [Troubleshooting](/docs/troubleshooting) — when a command misbehaves.
+
+Already installed and looking for a specific task? Pick a row from the table
+above.
+
+
+--- docs/quickstart.html
+
+---
+title: Quickstart
+description: Install the cdp tools and confirm they can drive a browser, in about five minutes.
+icon: rocket
+---
+
+# Quickstart
+
+## Install
+
+The tools need Go 1.26 or later and a Chromium-based browser — Chrome,
+Chromium, Brave, Edge, Opera, or Vivaldi. They launch a browser you already
+have rather than downloading one.
+
+```bash
+go install github.com/tmc/cdp/cmd/cdp@latest
+go install github.com/tmc/cdp/cmd/churl@latest
+go install github.com/tmc/cdp/cmd/cdpscript@latest
+```
+
+These land in `$(go env GOPATH)/bin`, usually `~/go/bin`. Make sure that is on
+your `PATH`.
+
+## Confirm a browser is found
+
+```bash
+cdp -list-browsers
+```
+
+```
+Brave	/Applications/Brave Browser.app/Contents/MacOS/Brave Browser		Running
+Brave	/Applications/Brave Browser.app/Contents/MacOS/Brave Browser	151.1.93.129	Installed
+Chrome Canary	/Applications/Google Chrome Canary.app/…/Google Chrome Canary	canary	Installed
+```
+
+The columns are name, path, version, and whether that browser is running now.
+Your list will differ. If nothing is found, or you want a specific browser,
+pass `-chrome-path` to any command or set `CHROME_PATH` in the environment.
+
+## Extract something from a page
+
+This runs headless, so no window appears:
+
+```bash
+cdp -headless -url 'data:text/html,<h1>Hi</h1>' -extract h1
+```
+
+```
+"{\"text\":\"Hi\"}"
+```
+
+The result is a JSON string. `-extract-mode` selects what you get back —
+`text`, `html`, `attr:name`, or `count`.
+
+## Render a page as Markdown
+
+```bash
+cdp -headless -url 'data:text/html,<h1>Title</h1><p>Body <b>text</b>.</p>' -render body
+```
+
+```
+# Title
+
+Body **text**.
+```
+
+## Confirm JavaScript actually runs
+
+This is what separates these tools from `curl`. Serve a page whose content is
+built by JavaScript after load:
+
+```bash
+mkdir -p /tmp/cdp-demo/api && cd /tmp/cdp-demo
+echo '{"count":3}' > api/items
+cat > index.html <<'HTML'
+<!doctype html><title>Demo</title><h1>Demo site</h1>
+<script>fetch('/api/items').then(r=>r.json()).then(d=>{
+  document.body.insertAdjacentHTML('beforeend','<div id=done>'+d.count+'</div>')})</script>
+HTML
+python3 -m http.server 8099 &
+```
+
+Now fetch it:
+
+```bash
+churl http://localhost:8099/
+```
+
+```
+<html><head><title>Demo</title></head><body><h1>Demo site</h1>
+<script>fetch('/api/items').then(r=>r.json()).then(d=>{
+  document.body.insertAdjacentHTML('beforeend','<div id=done>'+d.count+'</div>')})</script>
+<div id="done">3</div></body></html>
+```
+
+The `<div id="done">3</div>` does not exist in the served HTML — the page's own
+JavaScript fetched it and inserted it. `curl http://localhost:8099/` does not
+show it. Keep this server running if you want to follow the
+[capture guide](/docs/capturing-traffic); otherwise stop it with
+`pkill -f 'http.server 8099'`.
+
+You are now in `/tmp/cdp-demo`, so anything you capture or screenshot next
+lands there. `cd -` to go back.
+
+## Take a screenshot
+
+```bash
+cdp -headless -url 'data:text/html,<h1>Hi</h1>' -screenshot 'full shot.png'
+```
+
+```
+Screenshot saved to: shot.png (3119 bytes)
+```
+
+The byte count will differ on your machine; fonts and device pixel ratio change
+the rendering.
+
+## Next steps
+
+- [Tutorial: your first script](/docs/tutorial-first-script) — turn these one-off
+  commands into something repeatable that runs as a test.
+- [How cdp works](/docs/how-cdp-works) — why there are several commands and when to
+  reach for each.
+- [Troubleshooting](/docs/troubleshooting) — if any command above did not behave as
+  shown.
+
+
+--- docs/tutorial-first-script.html
+
+---
+title: "Tutorial: your first script"
+description: Build a browser automation script from scratch, run it, make it fail on purpose, and turn it into a Go test.
+icon: graduation-cap
+---
+
+# Tutorial: your first script
+
+By the end of this you will have written a script that drives a browser,
+asserted something about the page, watched the assertion fail and fixed it, and
+run the same script as a Go test. It takes about ten minutes.
+
+You need `cdpscript` installed and a Chromium-based browser. See the
+[Quickstart](/docs/quickstart) if you have not done that yet.
+
+## 1. Write the script
+
+A script is a [txtar](https://pkg.go.dev/golang.org/x/tools/txtar) archive: a
+plain text file holding one or more named files. The one named `main.cdp` is
+the script; anything else is a fixture written to disk before the run.
+
+Create `greet.txtar`:
+
+```
+-- main.cdp --
+goto data:text/html,%3Ctitle%3EGreeting%3C/title%3E%3Ch1%3EHello,%20cdp%3C/h1%3E
+wait h1
+assert text h1 'Hello, cdp'
+title
+screenshot greet.png
+```
+
+Five commands: load a page, wait for an element, assert its text, print the
+page title, save a screenshot.
+
+The URL is percent-encoded for a reason. Script arguments split on whitespace,
+so a URL containing a literal space is truncated at the space and you silently
+load a different page than you meant to. `%20` avoids that.
+
+## 2. Run it
+
+```bash
+cdpscript -headless -o . greet.txtar
+```
+
+```
+Greeting
+Saved screenshot to greet.png (4699 bytes)
+```
+
+`-o .` puts artifacts in the current directory; `-headless` keeps the window
+hidden. Drop `-headless` to watch it happen — useful when a script does
+something you did not expect.
+
+The byte count depends on your fonts and screen, so expect a different number.
+
+## 3. Make it fail
+
+Assertions are the point of a script; a script that cannot fail is not testing
+anything. Change the expected text to something wrong:
+
+```
+assert text h1 'Goodbye, cdp'
+```
+
+```
+cdpscript: greet.txtar:3: assert text h1 'Goodbye, cdp': assertion failed:
+text "Hello, cdp" does not contain "Goodbye, cdp"
+```
+
+```bash
+echo $?
+```
+
+```
+3
+```
+
+The failure names the file, the line, the command, and both sides of the
+comparison. Exit status 3 means specifically "an assertion failed", as
+distinct from 1 for a broken script and 2 for a usage error — so a shell
+caller can tell "the page was wrong" from "the script was wrong".
+
+Put the correct text back before continuing.
+
+## 4. Carry a fixture in the archive
+
+The other files in the archive are written to a temporary directory that
+becomes the script's working directory, so commands that take a filename can
+use a plain relative path. Create a second archive, `helper-demo.txtar`,
+leaving `greet.txtar` as it is:
+
+```
+-- main.cdp --
+goto data:text/html,%3Ch1%3EX%3C/h1%3E
+jsfile helper.js
+assert text h1 'patched'
+
+-- helper.js --
+document.querySelector('h1').textContent = 'patched';
+```
+
+```bash
+cdpscript -headless helper-demo.txtar
+```
+
+```
+patched
+```
+
+This is how `jsfile`, `upload`, and the other file-taking commands reach
+fixtures without depending on anything outside the archive. Note that it works
+for *filenames*, not URLs — there is no variable holding the temporary
+directory, so you cannot `goto` an embedded HTML file. To test against real
+pages, serve them, which is what the test harness in the next step does for
+you.
+
+## 5. Run it as a Go test
+
+The same archive runs under `go test` through the `cdpscripttest` package, so
+a script that reproduces a bug becomes the regression test for it without
+being rewritten.
+
+You have been working in a bare directory, so make it a module first. Fetch
+`cdpscripttest` by its own path — fetching `github.com/tmc/cdp` alone leaves
+the test without the dependencies that package needs:
+
+```bash
+go mod init tutdemo
+go get github.com/tmc/cdp/cdpscripttest@latest
+```
+
+Then save this beside `greet.txtar`, as `greet_test.go`:
+
+```go
+//go:build cdp
+
+package tutdemo_test
+
+import (
+	"testing"
+
+	"github.com/tmc/cdp/cdpscripttest"
+)
+
+func TestGreet(t *testing.T) {
+	err := cdpscripttest.RunCDPScript(t.Context(), "greet.txtar",
+		cdpscripttest.CDPScriptRunOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+```
+
+```bash
+go test -tags cdp -p 1 -parallel 1 -run TestGreet ./...
+```
+
+```
+ok  	tutdemo	1.842s
+```
+
+The `tutdemo` in that line is the module name you passed to `go mod init`.
+
+The `cdp` build tag keeps browser-dependent tests out of an ordinary
+`go test ./...`. `-p 1` stops several packages from launching browsers at once;
+`-parallel 1` also serializes fixtures inside one package. See
+[Testing](/docs/testing) for why that matters.
+
+For a suite of scripts rather than one, loop over a glob and call
+`RunCDPScript` for each. If your fixtures need a server, start one and pass its
+address in `Env` as `FIXTURE_BASE_URL` — nothing sets that variable for you.
+See [cdpscript](/docs/scripting), which also explains why the
+`cdpscripttest` *command* must not be used on this kind of archive.
+
+## Next steps
+
+- [cdpscript](/docs/scripting) — the full command set, arguments, and
+  the debugging workflow for a script that misbehaves.
+- [Capture network traffic](/docs/capturing-traffic) — record what the page requested
+  while your script drove it.
+- [How cdp works](/docs/how-cdp-works) — why scripts deliberately have no loops.
+
+
+--- docs/troubleshooting.html
+
+---
+title: Troubleshooting
+description: Diagnose the common failures — missing requests, browser not found, script errors, and stderr noise that is not an error.
+icon: circle-question
+---
+
+# Troubleshooting
+
+Every symptom below was reproduced against this repository's tools. For bugs
+with no workaround yet, see [Known issues](/docs/known-issues).
+
+## A request I expected is missing from the capture
+
+**Cause:** the tool stopped watching before the request happened. Anything a
+page fetches after load — an XHR, a lazily loaded image, an analytics beacon —
+needs the capture to still be running.
+
+**Fix:** wait for something that only exists once the page is ready, with
+`-wait-for '<selector>'`, or `-wait-stable` when you do not know a selector.
+
+[Capture network traffic](/docs/capturing-traffic) shows the same page captured
+with and without waiting, and what each produces.
+
+## Cannot navigate to invalid URL
+
+A script's arguments split on whitespace, so a URL containing a literal space
+is cut at the space:
+
+```
+cdpscript: greet.txtar:1: goto /index.html: chrome navigation error:
+navigate to URL: Cannot navigate to invalid URL (-32000)
+```
+
+Percent-encode the URL — `%20` for spaces, `%3C` and `%3E` for angle brackets:
+
+```
+goto data:text/html,%3Ch1%3EHello,%20cdp%3C/h1%3E
+```
+
+The same truncation silently loads a *different* page when the remainder still
+parses as a URL, which shows up as an assertion failing against text you can
+see in the browser. If an assertion fails on text that looks correct, check the
+URL for spaces first.
+
+## A script asserts against text that looks right but fails
+
+```
+assertion failed: text "Hello," does not contain "Hello, cdp"
+```
+
+The quoted actual value is what the page really contained. `"Hello,"` ending at
+the comma is the truncation above. If the actual value is genuinely different,
+the page changed; run without `-headless` to watch it.
+
+## Exit status is 3, not 1
+
+That is deliberate. `cdpscript` exits 2 for a usage error, 3 for a failed
+assertion, and 1 for anything else, so a shell caller can tell "the page was
+wrong" from "the script was wrong":
+
+```bash
+cdpscript -headless greet.txtar; echo $?
+```
+
+## The browser prints errors even though the run succeeded
+
+Chromium writes to stderr on startup regardless of outcome:
+
+```
+DevTools listening on ws://127.0.0.1:59062/devtools/browser/f676ffa2-…
+[…:ERROR:chrome/browser/profiles/profile_attributes_storage.cc:1036] Failed to PNG encode the image.
+```
+
+Neither line indicates failure. Check the exit status, and redirect stderr with
+`2>/dev/null` if it is in the way.
+
+## No browser found, or the wrong one is used
+
+```bash
+cdp -list-browsers
+```
+
+lists what was discovered and which is running. To pin one, pass
+`-chrome-path`, or set `CHROME_PATH`. By default `cdp` prefers a browser that
+is already running; `-auto-discover=false` stops that and launches a fresh one,
+which is what you want for a reproducible capture.
+
+## cdp attach finds nothing
+
+```
+No attachable CDP targets found on localhost.
+Probe diagnostics:
+  localhost:9222: devtools endpoint not reachable
+  …
+Start a browser with remote debugging enabled, then rerun attach:
+  '/Applications/Brave Browser.app/…/Brave Browser' --remote-debugging-port=9222 --user-data-dir="$(mktemp -d)"
+  cdp attach --port 9222
+```
+
+The command prints the exact invocation for each browser it found, including
+the `--user-data-dir` — a browser already running without remote debugging
+cannot be attached to retroactively.
+
+## The -js flag prints null instead of my value
+
+`-js` prints the evaluation result, and `console.log(...)` evaluates to
+`undefined`, rendered as `null`:
+
+```bash
+cdp -headless -url '…' -js 'console.log(document.title)'
+```
+
+```
+Executed 1 JavaScript script(s) in new Chrome instance
+null
+```
+
+To get a value out, use `-extract` for element content or `-render` for the
+page as Markdown. To see the page's console output, use `-console`.
+
+## The -har flag requires -url
+
+`-har` writes one archive for one bounded navigation, so it needs to know what
+to navigate to. For a session you drive yourself, stream instead:
+
+```bash
+cdp -harl -harl-file session.har.jsonl -shell
+```
+
+## An authenticated page behaves as though logged out
+
+A browser `cdp` launches has an empty profile. `-use-profile` copies a
+profile's cookies but is a point-in-time snapshot; sites that refresh tokens or
+pin sessions to a device may still reject it. Attach to a browser you logged
+into by hand instead:
+
+```bash
+cdp -remote-host localhost -remote-port 9222 -shell
+```
+
+See [How cdp works](/docs/how-cdp-works) for why the two differ.
+
+## Browser tests fail only in a full run
+
+For package-level browser contention, run with `-p 1`. For `cdpscripttest`
+fixtures, add `-parallel 1` to serialize its subtests:
+
+```bash
+go test -p 1 ./...
+go test -p 1 -parallel 1 -tags cdp ./cdpscripttest
+```
+
+Go tests different packages in parallel by default, and several packages each
+launching a browser contend for profile directories and ports. Failures that
+appear only at full parallelism are usually this, not a regression. See
+[Testing](/docs/testing).
+
+## Next steps
+
+- [Known issues](/docs/known-issues) — open bugs and their workarounds.
+- [How cdp works](/docs/how-cdp-works) — the model behind most of these symptoms.
+
+
+--- docs/cdp.html
+
+---
+title: cdp
+description: The live browser surface — attach to a running browser or launch one, then navigate, evaluate, extract, render, screenshot, or capture.
+icon: terminal
+---
+
+# cdp
+
+`cdp` is the surface you reach for when the work is exploratory: you want to
+look at a page, poke it, and see what comes back. It drives a browser it
+launches, a browser you are already logged into, or a browser on another
+machine, and it exposes the same actions three ways: as flags for one-shot use,
+as an interactive shell, and as MCP tools an agent can call.
+
+```bash
+cdp -headless -url https://example.com -render body
+```
+
+```
+# Example Domain
+
+This domain is for use in documentation examples without needing permission. Avoid use in operations.
+
+[Learn more](https://iana.org/domains/example)
+```
+
+## The three ways to drive it
+
+**One-shot flags.** Give a `-url` and an action; cdp does it and exits.
+
+```bash
+cdp -headless -url https://example.com -js 'document.title'
+cdp -headless -url https://example.com -extract h1
+cdp -headless -url https://example.com -screenshot 'full shot.png'
+```
+
+**A shell.** With no `-url` and no `-js`, cdp starts interactive. This is the
+mode for working out what a page needs before writing it down:
+
+```bash
+cdp -shell
+```
+
+**MCP.** `cdp --mcp` exposes the same operations as tools for an agent. See
+[Use cdp as an MCP server](/docs/plugins).
+
+## Where the browser comes from
+
+By default cdp *discovers* a browser: if one is already listening on the debug
+port it attaches to that, otherwise it launches its own. Which path you get
+therefore depends on what happens to be running, so pin it when that matters.
+
+```bash
+cdp -remote-host localhost -remote-port 9222 --list-tabs   # what is out there
+cdp -remote-host localhost -remote-port 9222 -tab <id> -js 'document.title'
+cdp -use-profile Default -url https://app.example.com -shell  # copy of a logged-in profile
+```
+
+`-use-profile` launches against a *copy* of a profile; `-remote-host` attaches
+to the live one. The two are not equivalent — see
+[How cdp works](/docs/how-cdp-works).
+
+`-auto-discover=false` forces a launch: cdp ignores any browser already
+listening, resolves an installed executable, and starts a fresh one. That is
+what you want for a reproducible capture. If no browser can be found it exits 3
+with `No browser executable found` rather than proceeding. Pass `-chrome-path`
+to name the executable yourself.
+
+## Output shapes
+
+`-render` converts a selector's HTML to Markdown, which is usually what you
+want for reading. `-extract` returns structured data and is the one to script
+against. Note that it prints a JSON-encoded string, so a consumer unwraps it
+once:
+
+```bash
+cdp -headless -url https://example.com -extract h1
+```
+
+```
+"{\"text\":\"Example Domain\"}"
+```
+
+`-format json` wraps `-js` results in an array:
+
+```bash
+cdp -headless -url https://example.com -format json -js 'document.title'
+```
+
+```json
+[
+  "Example Domain"
+]
+```
+
+`-screenshot` takes a *selector*, optionally followed by a filename — `'full
+shot.png'`, not `shot.png`. This is the easy typo to make, and it fails badly:
+a bare path is read as a selector, so cdp waits the full timeout for an element
+named `shot.png` before giving up.
+
+```
+Error: [general_error] Screenshot failed: screenshot selector "shot.png": context deadline exceeded
+```
+
+That took 63 seconds against this tree and exits 1. `-timeout` bounds the wait:
+`-timeout 10` fails in 13 seconds instead.
+
+## When to use something else
+
+- The work should run the same way twice → [`cdpscript`](/docs/scripting).
+- The work should fail a build when it breaks → [`cdpscripttest`](/docs/cdpscripttest).
+- You only want the bytes a page fetched → [`chrome-to-har`](/docs/capturing-traffic).
+- You only want the rendered page → [`churl`](/docs/churl).
+
+## Next steps
+
+- [Quickstart](/docs/quickstart) — install and run the first command.
+- [Capture network traffic](/docs/capturing-traffic) — recording what a page fetches.
+- [Use cdp as an MCP server](/docs/plugins) — the agent-facing surface.
+- [Command reference](/docs/commands) — `go doc ./cmd/cdp` for every flag.
+- [Known issues](/docs/known-issues) — what is broken today.
+
+
+--- docs/scripting.html
+
+---
+title: cdpscript
+description: Write txtar automation scripts, pass them arguments, run them as Go tests, and debug the ones that fail.
+icon: file-code
+---
+
+# cdpscript
+
+New to scripts? Start with the [tutorial](/docs/tutorial-first-script), which builds
+one from scratch. This page is the working reference for the workflow.
+
+A script is a txtar archive containing a `main.cdp` file whose commands run in
+order against a browser. The same archive runs three ways: from the command
+line with `cdpscript`, as part of a `cdp` session with `cdp run`, and as a Go
+test through the `cdpscripttest` package. That last one is the point — a script
+that reproduces a bug becomes the regression test for it without being
+rewritten.
+
+For the command set and syntax, see `go doc ./cdpscript` and
+[skills/writing-cdp-scripts/references/script-format.md](https://github.com/tmc/cdp/blob/main/skills/writing-cdp-scripts/references/script-format.md).
+For the testing commands and conditions, see `go doc ./cdpscripttest`.
+
+## Running a script
+
+```bash
+cdpscript script.txtar
+cdpscript -o ./artifacts -headless script.txtar
+```
+
+Artifacts such as screenshots and PDFs go to `-o`, and the exit status
+distinguishes a failed assertion (3) from a broken script (1) and a usage error
+(2), so a shell caller can tell "the page was wrong" from "the script was
+wrong". An interrupted run exits 130.
+
+Values containing spaces must be quoted, and URLs containing spaces must be
+percent-encoded — arguments split on whitespace, and an unquoted URL is
+truncated at the first space rather than rejected.
+
+## Scripts are executables
+
+A script can carry a shebang line and run as a command in its own right. The
+line lives above the first `-- file --` marker, in the txtar comment section,
+so it is part of the archive rather than something stripped before running:
+
+```
+#!/usr/bin/env cdpscript
+# greet - print the title of a page
+#
+# usage: greet.cdpscript URL
+
+-- main.cdp --
+goto $ARG1
+title
+```
+
+```bash
+chmod +x greet.cdpscript
+./greet.cdpscript https://example.com
+```
+
+```
+Example Domain
+```
+
+`env` resolves `cdpscript` through `PATH`, so this needs `$(go env GOPATH)/bin`
+on your `PATH` — the [quickstart](/docs/quickstart) sets that up. Without it the
+shebang fails with `env: cdpscript: No such file or directory`, which does not
+obviously point back at the install step.
+
+Name the file `.cdpscript` rather than `.txtar` when it is meant to be run this
+way. The rest of the comment section is the script's help text, so
+`./greet.cdpscript --help` prints the name, the description, and the usage line
+without running the browser. Combined with argv and exit status, this is what
+makes a script an ordinary Unix tool: it can be dropped on `$PATH`, piped, and
+branched on.
+
+To pass flags to `cdpscript` itself, use `env -S`, which splits the rest of the
+shebang line into separate arguments:
+
+```
+#!/usr/bin/env -S cdpscript -headless
+```
+
+Verified on darwin. A plain `#!/usr/bin/env cdpscript` line is portable; `-S`
+needs a `env` that supports it (GNU coreutils 8.30+, and the BSD `env` on
+macOS).
+
+## Fixtures travel with the script
+
+Because a txtar archive holds several files, a script can carry what it needs.
+The extra files are written to a temporary directory that becomes the script's
+working directory, so file-taking commands such as `jsfile` and `upload` reach
+them by relative name. The
+[tutorial](/docs/tutorial-first-script) works through an example.
+
+That covers filenames, not URLs: there is no variable holding the temporary
+directory, so a script run by `cdpscript` cannot `goto` an embedded HTML file.
+
+The repository's own fixtures reach a served page through `$FIXTURE_BASE_URL`:
+
+```
+-- main.cdp --
+goto $FIXTURE_BASE_URL/interaction/pages/form-submit.html
+wait '#signup-form'
+fill '#name' Ada Lovelace
+click '#submit'
+wait '#result'
+```
+
+That is an ordinary environment variable, not a feature: the Go test that runs
+these scripts starts a server and passes the address in `Env` (see below).
+Under a plain `cdpscript` run it is unset, which turns the `goto` into an
+invalid URL — see [Troubleshooting](/docs/troubleshooting).
+
+A self-contained script needs no network, which is what makes it usable as a
+test. Scripts that depend on a third-party site belong in the live examples,
+not in the fixture suite.
+
+## Arguments and environment
+
+Scripts take positional arguments as `$ARG1`, `$ARG2`, and so on, with `$ARGC`
+holding the count, and can read environment variables:
+
+```
+# usage: search.txtar <query>
+-- main.cdp --
+goto https://example.com/search?q=$ARG1
+wait '#results'
+```
+
+## Control flow stays outside
+
+The syntax comes from `rsc.io/script`: commands run in sequence, `!` expects
+failure, `?` allows failure, and `[cond]` guards a command on a condition.
+
+There are deliberately no loops or retries. Anything needing real control flow
+belongs in the shell or the Go test that calls the script, rather than in a
+second language embedded in the script format.
+
+## Two archive dialects
+
+This is the thing to get straight before running anything, because getting it
+wrong produces a passing result rather than an error.
+
+- **`main.cdp` archives** — the dialect this page describes, run by
+  `cdpscript` and, from Go, by `cdpscripttest.RunCDPScript`.
+- **Comment-section archives** — an older dialect where the script body is the
+  txtar *comment* and the commands are `navigate`, `rtc-*`, and similar. These
+  are what the `cdpscripttest` *command* and `cdpscripttest.Test` run;
+  `cdpscripttest/testdata/rtc-*.txt` are examples.
+
+The `cdpscripttest` command executes only the comment section. Handed a
+`main.cdp` archive it finds an empty comment, runs nothing, and prints `ok`:
+
+```bash
+sed 's/Saved Ada/DEFINITELY WRONG/' testdata/interaction/form-submit.txtar > bogus.txtar
+cdpscripttest -v bogus.txtar
+```
+
+```
+    using browser: /Applications/Brave Browser.app/…
+=== bogus.txtar
+ok  bogus.txtar
+```
+
+The assertion was falsified and it still passed, because no command ran. Do not
+use the `cdpscripttest` command to check a `main.cdp` archive.
+
+## Running scripts as tests
+
+Run `main.cdp` archives with `RunCDPScript`, supplying the environment
+yourself. `$FIXTURE_BASE_URL` is not set for you — it is an ordinary variable
+that the caller puts in `Env`, which is how the shipped fixtures reach their
+test server (`cdpscripttest/interaction_test.go`):
+
+```go
+baseURL := startTestServer(t)
+
+opts := cdpscripttest.CDPScriptRunOptions{
+	Headless: true,
+	Timeout:  20 * time.Second,
+	Env: []string{
+		"FIXTURE_BASE_URL=" + baseURL,
+	},
+}
+if err := cdpscripttest.RunCDPScript(t.Context(), path, opts); err != nil {
+	t.Fatalf("%s: %v", path, err)
+}
+```
+
+`cdpscripttest.Test` is the entry point for the other dialect; it does not
+start a server and does not set `$FIXTURE_BASE_URL`.
+
+Browser fixtures are behind the `cdp` build tag so an ordinary `go test ./...`
+does not need a browser:
+
+```bash
+go test -tags cdp -p 1 -parallel 1 ./cdpscripttest
+```
+
+See [Testing](/docs/testing) for why `-parallel 1` matters for fixtures.
+
+## Working on a script that fails
+
+For a `main.cdp` archive, use `cdpscript` — it runs the script body and reports
+real failures:
+
+```bash
+# Watch it happen
+cdpscript greet.txtar
+
+# Verbose, with artifacts kept
+cdpscript -v -o ./artifacts -headless greet.txtar
+```
+
+Drop `-headless` to see the browser. An assertion failure names the file, the
+line, and both sides of the comparison, and exits 3.
+
+The `cdpscripttest` command's `-i`, `-headful`, `-watch`, `-images`, and
+`-update-golden` options apply to comment-section archives — the older format
+used by the fixtures under `cdpscripttest/testdata/`, such as `rtc-basic.txt`.
+Compare one against a `main.cdp` archive to tell which kind you have.
+
+## Next steps
+
+- [Tutorial: your first script](/docs/tutorial-first-script) — the guided version, if
+  you skipped it.
+- [Capture network traffic](/docs/capturing-traffic) — recording what the page
+  requested while the script drove it.
+- [Troubleshooting](/docs/troubleshooting) — the failures scripts hit most often.
+- [Testing](/docs/testing) — running the fixture suite.
+
+
+--- docs/churl.html
+
+---
+title: churl
+description: Fetch a URL through a real browser so JavaScript runs, then print the rendered HTML, text, or JSON — with an optional HAR alongside.
+icon: download
+---
+
+# churl
+
+`churl` is shaped like `curl`, but every request runs in a real browser. That
+is the whole point: a page that renders its content from JavaScript comes back
+rendered, not as the empty shell `curl` would print.
+
+```bash
+churl https://example.com
+```
+
+```html
+<html lang="en"><head><title>Example Domain</title>…
+```
+
+The default output is the rendered HTML — the DOM after scripts ran, not the
+bytes the server sent.
+
+## Output formats
+
+```bash
+churl --output-format=text https://example.com
+churl --output-format=json https://example.com
+churl --output-format=pdf -o page.pdf https://example.com
+churl --har capture.har https://example.com     # any format, plus a HAR
+churl -o page.html https://example.com
+```
+
+`json` returns `url`, `title`, and `content`. `text` is the extracted text, and
+it includes the contents of `<style>` elements, so a page's CSS appears as a
+line of text near the top. Pipe it through your own filter if that
+matters.
+
+`pdf` prints the rendered page through Chrome's own print pipeline, so it is
+the page as the browser would print it — backgrounds included, JavaScript
+already run. It is binary, so churl refuses to write it to a terminal; pass
+`-o` or redirect:
+
+```bash
+churl --output-format=pdf https://example.com > page.pdf
+```
+
+The waiting flags matter more here than for other formats, because whatever has
+not rendered when the print happens is simply absent from the file:
+
+```bash
+churl --output-format=pdf --wait-for '#report-ready' -o report.pdf https://app.example.com
+```
+
+`--har` works alongside any format.
+
+### PDF print settings
+
+Print geometry decides whether a generated document is usable or has to be
+reprinted by hand, so all of it is reachable — but through one flag rather than
+ten:
+
+```bash
+churl --output-format=pdf --pdf 'page=a4,margin=0.75' -o page.pdf URL
+churl --output-format=pdf --pdf 'page=210mmx297mm,margin=20mm 15mm,outline' -o doc.pdf URL
+churl --output-format=pdf --pdf 'page=tabloid,landscape,scale=0.8' -o wide.pdf URL
+```
+
+| Setting | Meaning |
+| --- | --- |
+| `page=` | `letter` (default), `legal`, `tabloid`, `ledger`, `a0`–`a6`, or `WxH` |
+| `margin=` | 1, 2, or 4 space-separated lengths, in CSS order (default 0.4in) |
+| `scale=` | render scale (default 1) |
+| `ranges=` | print only these one-based pages, e.g. `ranges=1-5 8` |
+| `landscape` | landscape orientation |
+| `outline` | PDF bookmarks from the headings; implies `tagged` |
+| `tagged` | tagged (accessible) PDF |
+| `css-page-size` | honour `@page` size from the document's own CSS |
+
+Lengths accept `in`, `mm`, `cm`, and `px` suffixes and are inches when
+unsuffixed, so `a4` and `210mmx297mm` describe the same page. Values may not
+contain commas — that is why `margin` and `ranges` take space-separated lists.
+
+`outline` is the one worth reaching for when printing a docs tree: it turns the
+heading structure into PDF bookmarks. It only works alongside `tagged`, because
+Chrome derives the outline from the tag tree, so asking for `outline` turns
+tagging on for you.
+
+A document that declares `@page` size in its own CSS overrides `page=` and
+`landscape`, even without `css-page-size`. This is quiet — the flag simply has
+no effect — so check the document's CSS before concluding the flag is broken.
+
+### Headers, footers, and page numbers
+
+`--pdf-header` and `--pdf-footer` stay separate flags, because the templates are
+HTML and would not survive a comma-separated list. Chrome substitutes any
+element carrying the classes `date`, `title`, `url`, `pageNumber`, or
+`totalPages`:
+
+```bash
+churl --output-format=pdf --pdf 'margin=1' \
+  --pdf-footer '<div style="font-size:9px;width:100%;text-align:center">page <span class="pageNumber"></span> of <span class="totalPages"></span></div>' \
+  -o report.pdf https://example.com
+```
+
+The catch: the template renders *inside* the margin, so a footer with the
+default 0.4in margin is clipped or invisible. Give the edge room — `margin=1` is
+a safe starting point — and set the font size explicitly, because the template
+does not inherit the page's styles.
+
+### Images in the PDF
+
+There is no image-quality or resampling setting. `Page.printToPDF` has none,
+and `deviceScaleFactor` does not affect its output — the same page printed at
+scale factor 1, 2, and 3 produces byte-identical PDFs.
+
+Images are embedded at their **source** resolution, not at the size they are
+displayed. The same page with a 1600px-wide source image produced a 24 KB PDF
+where a 200px source produced 2.5 KB, both shown at the same width. If you need
+sharper images in the PDF, load sharper images.
+
+## Waiting for the page to settle
+
+A rendered page is only worth reading once it has stopped changing. `churl`
+waits for network idle by default, and takes two more explicit signals:
+
+```bash
+churl --wait-for '#app-root' https://app.example.com
+churl --stable-timeout 60 https://slow.example.com
+```
+
+`--wait-for-challenge` is on by default and waits out anti-bot interstitials
+such as Cloudflare's.
+
+## Proxies
+
+Full coverage is on its own page — including the `<-loopback>` behavior that
+makes `localhost` URLs fail as soon as you set `--proxy`.
+
+→ [churl behind a proxy](/docs/churl-proxy)
+
+## Blocking, scripts, and WebSockets
+
+`churl` can drop requests inside the browser (`--block-ads`,
+`--block-tracking`, `--block-domain`, `--block-regex`), inject JavaScript
+before or after load (`--script-before`, `--script-after`, and their
+`--script-file-*` forms), and watch WebSocket traffic (`--ws-enabled`,
+`--ws-send`, `--ws-wait-for`). These are documented flag-by-flag in `go doc
+./cmd/churl`; no page here has verified their workflows end to end.
+
+## What does not work
+
+The wget-style recursion and mirroring flags — `-r`, `-m`, `-l`, `-np`, `-P`
+and the rest — are parsed and ignored. `churl` exits 0 and writes nothing. Use
+it for single-URL fetches and drive a crawl from a shell loop.
+See [Known issues](/docs/known-issues).
+
+## Exit status
+
+- `0` success
+- `2` usage error, such as an unknown flag
+- `1` everything else, including every proxy and navigation failure
+
+There is no finer failure classification; do not branch on a specific code
+beyond these three. Verified against this tree: a proxy that refuses the
+connection (`churl --proxy http://127.0.0.1:9 https://example.com`) exits `1`,
+and an unknown flag exits `2`.
+
+## When to use something else
+
+- You want the traffic, not the page → [`chrome-to-har`](/docs/capturing-traffic).
+- You want to click through something first → [`cdp`](/docs/cdp).
+- You want it to run the same way tomorrow → [`cdpscript`](/docs/scripting).
+
+## Next steps
+
+- [churl behind a proxy](/docs/churl-proxy) — proxy, authentication, and bypass.
+- [Capture network traffic](/docs/capturing-traffic) — when the HAR is the goal.
+- [Command reference](/docs/commands) — `go doc ./cmd/churl` for every flag.
+
+
+--- docs/churl-proxy.html
+
+---
+title: churl behind a proxy
+description: Route churl through HTTP, HTTPS, or SOCKS5 proxies, with authentication for HTTP and HTTPS and bypass rules for all three.
+icon: shield-halved
+---
+
+# Proxy Support in churl
+
+The `churl` command supports both HTTP/HTTPS and SOCKS5 proxies, with authentication for HTTP and HTTPS proxies and bypass lists for all three.
+
+## Basic Usage
+
+### HTTP/HTTPS Proxy
+
+```bash
+# Basic HTTP proxy
+churl --proxy http://proxy.example.com:8080 https://example.com
+
+# HTTP proxy with authentication
+churl --proxy http://proxy.example.com:8080 --proxy-user username:password https://example.com
+
+# HTTPS proxy
+churl --proxy https://proxy.example.com:8080 https://example.com
+```
+
+### SOCKS5 Proxy
+
+```bash
+# Basic SOCKS5 proxy
+churl --socks5-proxy socks5://proxy.example.com:1080 https://example.com
+```
+
+## Advanced Options
+
+### Proxy Bypass List
+
+Skip the proxy for specific hosts:
+
+```bash
+# Bypass proxy for localhost and internal domains
+churl --proxy http://proxy.example.com:8080 --proxy-bypass "localhost,127.0.0.1,*.internal.com" https://example.com
+
+# Multiple bypass entries
+churl --proxy http://proxy.example.com:8080 --proxy-bypass "localhost,*.local,10.0.0.0/8" https://example.com
+```
+
+### Authentication
+
+Proxy authentication is supported for HTTP and HTTPS proxies only. It works by
+answering Chrome's HTTP 407 challenge; there is no SOCKS5 credential path in
+this tool, so `--proxy-user` has no effect on a `--socks5-proxy` connection.
+
+```bash
+# Username and password authentication
+churl --proxy http://proxy.example.com:8080 --proxy-user myuser:mypass https://example.com
+```
+
+## Output Formats with Proxy
+
+All output formats work with proxy:
+
+```bash
+# HTML output through proxy
+churl --proxy http://proxy.example.com:8080 https://example.com
+
+# HAR output through proxy
+churl --proxy http://proxy.example.com:8080 --output-format har https://example.com
+
+# JSON output through proxy
+churl --proxy http://proxy.example.com:8080 --output-format json https://example.com
+
+# Save to file
+churl --proxy http://proxy.example.com:8080 -o output.html https://example.com
+```
+
+## Common Use Cases
+
+### Corporate Proxy
+
+```bash
+# Corporate proxy with authentication
+churl --proxy http://corporate-proxy.company.com:8080 \
+      --proxy-user domain\\username:password \
+      --proxy-bypass "*.company.com,localhost" \
+      https://external-site.com
+```
+
+### Testing Through Proxy
+
+```bash
+# Test site loading through proxy
+churl --proxy http://proxy.example.com:8080 --verbose https://example.com
+
+# Check what headers are sent
+churl --proxy http://proxy.example.com:8080 --output-format json https://httpbin.org/headers
+```
+
+### SOCKS5 Proxy (e.g., SSH tunnel)
+
+```bash
+# Use SSH tunnel as SOCKS5 proxy
+# First, set up SSH tunnel: ssh -D 8080 user@server
+churl --socks5-proxy socks5://localhost:8080 https://example.com
+```
+
+## Troubleshooting
+
+### Verbose Mode
+
+Use `--verbose` to see detailed proxy information:
+
+```bash
+churl --proxy http://proxy.example.com:8080 --verbose https://example.com
+```
+
+This will show:
+- Proxy server being used
+- Authentication status
+- Bypass list configuration
+- Connection details
+
+### Common Issues
+
+Every proxy failure exits `1` and prints the same line on stderr, whatever the
+cause:
+
+```
+Error: Failed to navigate to the requested URL.
+```
+
+Observed against this tree with `churl --proxy http://127.0.0.1:9
+http://localhost:8099/`.
+
+If a `localhost` URL fails as soon as you set `--proxy`, that is expected and
+fixable: with `--proxy` set and no `--proxy-bypass`, churl passes Chrome
+`--proxy-bypass-list=<-loopback>`, which *disables* Chrome's implicit loopback
+bypass, so even `localhost` is sent to the proxy. Pass an explicit bypass to
+reach loopback directly:
+
+```bash
+churl --proxy http://127.0.0.1:9 --proxy-bypass "localhost,127.0.0.1" http://localhost:8099/
+```
+
+Observed: that command exits 0 and returns the page, while the same command
+without `--proxy-bypass` exits 1.
+
+The causes below are the cases the flags exist to cover; they were not
+individually reproduced, and the exit status will not tell them apart.
+
+1. **Authentication failures**: Ensure username:password format is correct
+2. **Connection timeouts**: Check proxy server availability
+3. **SSL/TLS issues**: Some proxies may have certificate problems
+4. **Bypass not working**: Verify bypass list syntax
+
+### Testing Proxy Configuration
+
+Test if your proxy works:
+
+```bash
+# Test basic connectivity
+churl --proxy http://proxy.example.com:8080 --verbose https://httpbin.org/ip
+
+# Test authentication
+churl --proxy http://proxy.example.com:8080 --proxy-user test:test --verbose https://httpbin.org/ip
+
+# Test bypass
+churl --proxy http://proxy.example.com:8080 --proxy-bypass httpbin.org --verbose https://httpbin.org/ip
+```
+
+## Security Considerations
+
+1. **Credentials in command line**: Be careful with proxy credentials in command line (visible in process list)
+2. **HTTPS through proxy**: Ensure your proxy supports HTTPS CONNECT method
+3. **Certificate validation**: Proxy may intercept SSL certificates
+4. **Logging**: Proxy servers may log all traffic
+
+## Implementation Notes
+
+- Chrome's `--proxy-server` flag is used internally
+- Authentication is handled via Chrome DevTools Protocol
+- Bypass list uses Chrome's `--proxy-bypass-list` flag
+- SOCKS5 support is native to Chrome
+- Proxy authentication works for HTTP and HTTPS proxies only (HTTP 407 challenge)
+
+## Exit codes
+
+churl does not classify proxy failures by exit status; the contract is
+tool-wide, not proxy-specific. See [churl](/docs/churl#exit-status).
+
+## Next steps
+
+- [Capture network traffic](/docs/capturing-traffic) — recording what passes through.
+- [Command reference](/docs/commands) — `go doc ./cmd/churl` for every proxy flag.
+
+
+--- docs/cdpscripttest.html
+
+---
+title: cdpscripttest
+description: Run browser scripts under go test — as cdpscript archives through RunCDPScript, or as rsc.io/script fixtures through Test.
+icon: flask
+---
+
+# cdpscripttest
+
+`cdpscripttest` is the testing surface. Its point is that a script you already
+have becomes a test without being rewritten: the archive that reproduced a bug
+from the shell is the archive that fails the build when the bug returns.
+
+Browser-backed tests sit behind a build tag, so an ordinary `go test ./...`
+needs no browser at all:
+
+```bash
+go test -tags cdp -p 1 -parallel 1 ./cdpscripttest
+```
+
+`-parallel 1` matters — this package runs fixtures as parallel subtests, and
+`-p 1` serializes packages rather than those subtests.
+
+## Where to go next
+
+| You want to | Page |
+|---|---|
+| Use this from your own module | [Adopting cdpscripttest](/docs/cdpscripttest/adopting) |
+| Write fixtures, and pick the right dialect | [Writing fixtures](/docs/cdpscripttest/fixtures) |
+| Compare screenshots across runs | [Visual testing](/docs/cdpscripttest/visual) |
+| Add app-specific commands, own the server | [Extending the engine](/docs/cdpscripttest/extending) |
+| Turn a run into a readable artifact | [Reports and artifacts](/docs/cdpscripttest/reports) |
+| Build a product with an agent driving the browser | [Agentic workflows](/docs/cdpscripttest/agentic) |
+
+## The shortest useful test
+
+```go
+func TestLogin(t *testing.T) {
+	srv := httptest.NewServer(handler)
+	defer srv.Close()
+
+	err := cdpscripttest.RunCDPScript(t.Context(), "testdata/login.txtar",
+		cdpscripttest.CDPScriptRunOptions{
+			Headless: true,
+			Env:      []string{"FIXTURE_BASE_URL=" + srv.URL},
+		})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+```
+
+`RunCDPScript` is the path for `main.cdp` archives — the dialect `cdpscript`
+runs — and it executes them through that same runtime, so the test and the
+command cannot drift apart.
+
+Passing a fixture server's address through `Env` is the normal way a script
+reaches a page: there is no variable holding the archive's temporary directory,
+so a script cannot `goto` a file embedded beside it.
+
+## Two dialects, and the one that bites
+
+`Test` and the `cdpscripttest` **command** run a different dialect from
+`RunCDPScript`. Their scripts live in the txtar *comment* section and use
+`navigate`, `title`, `eval`, `stdout`, `cmp`, and the `rtc-*` commands, with
+`rsc.io/script` syntax: `!` expects failure, `?` allows it, `[cond]` guards a
+line.
+
+Handed a `main.cdp` archive, the `cdpscripttest` command finds an empty comment
+section, runs nothing, and prints `ok`. A falsified assertion still passes. Use
+`RunCDPScript` for those archives and keep the command for comment-section
+fixtures. [Writing fixtures](/docs/cdpscripttest/fixtures) shows both side by
+side.
+
+## Fixtures should not need the network
+
+A test that depends on a third-party site fails for reasons that have nothing
+to do with the code. Serve what the script needs from the test, and keep
+workflows against real sites as explicitly live-only examples.
+[Extending the engine](/docs/cdpscripttest/extending) shows how to make the
+fixture own its server so this is automatic.
+
+## Next steps
+
+- [Adopting cdpscripttest](/docs/cdpscripttest/adopting) — using it from another module.
+- [Tutorial: your first script](/docs/tutorial-first-script) — write a script, break it, run it as a test.
+- [cdpscript](/docs/scripting) — the script format and the dialect split.
+- [Testing](/docs/testing) — running this repository's own suite.
+- `go doc ./cdpscripttest` — the command set, conditions, and every option.
+
+
+--- docs/cdpscripttest/adopting.html
+
+---
+title: Adopting cdpscripttest
+description: Import path, what the dependency costs your module graph, version pinning, and the build-tag arrangement that keeps browsers out of a default go test.
+icon: download
+---
+
+# Adopting cdpscripttest
+
+`cdpscripttest` is an exported package of the `github.com/tmc/cdp` module, not a
+module of its own:
+
+```go
+import "github.com/tmc/cdp/cdpscripttest"
+```
+
+```bash
+go get github.com/tmc/cdp
+```
+
+There is no separate `go get` for the test package. Requiring it requires the
+whole module.
+
+## What the dependency costs
+
+Because `cdpscripttest` is part of the main module, importing it brings that
+module's whole dependency set into your graph — chromedp and the libraries the
+`cdp` and `churl` commands use for extraction and rendering. Expect minimum
+versions of anything you already share to be raised to whatever `cdp` requires,
+and expect new indirect entries.
+
+That is minimal version selection working correctly, not churn. But if your
+project pins any of those deliberately, look before you adopt:
+
+```bash
+go mod graph | grep github.com/tmc/cdp   # what it brings
+go get github.com/tmc/cdp && go mod tidy # then read the go.mod diff
+```
+
+Read the diff rather than assuming. `go mod tidy` drops a stale *require* but
+never removes a `replace`, so an unused replace directive can survive the
+cleanup and keep pointing at a path that no longer resolves.
+
+**The build tag does not make it free.** Guarding your test file with
+`//go:build cdp` keeps the browser out of a default `go test ./...`, but the
+import still puts `github.com/tmc/cdp` in your main module graph and in
+`go.sum`. The tag controls *execution*, not *dependency*.
+
+## Pinning
+
+Behavior here can change without a version number changing to warn you, so if
+you depend on this in CI, pin an exact version rather than tracking whatever
+`@latest` resolves to:
+
+```bash
+go get github.com/tmc/cdp@<commit-or-version>
+```
+
+Check what you actually got — `go list -m github.com/tmc/cdp` — rather than
+assuming `@latest` picked up the branch tip.
+
+For local development against a checkout, a `replace` is normal:
+
+```
+replace github.com/tmc/cdp => ../cdp
+```
+
+If you use a `replace` pointing at a sibling directory, make sure that
+directory really is a module root with its own `go.mod`. A `replace` at a path
+that has no `go.mod` fails at dependency resolution, before any compilation, with
+`no such file or directory` — an error that reads like a missing file rather
+than a misconfigured module.
+
+## The build-tag arrangement
+
+Put browser-backed tests behind a tag so contributors without a browser, and CI
+jobs that only lint, are unaffected:
+
+```go
+//go:build cdp
+
+package myapp_test
+```
+
+```bash
+go test -tags cdp -p 1 ./...
+```
+
+Two failure modes this creates, both of which look like success:
+
+- **Forgetting the tag.** The file is excluded, the package still passes, and
+  nothing browser-related ran.
+- **A glob that matches nothing.** `Test` calls `t.Fatal` on an empty glob,
+  which protects you there — but a `-run` pattern that matches no subtest exits
+  0 with nothing executed.
+
+Check `-v` output for named subtests before believing a pass. When a run is
+long, wait for the final `ok`/`FAIL <package> <time>` line: Go emits `=== RUN`
+lines as subtests start but does not stream their verdicts, so a log read
+mid-run undercounts failures.
+
+## Verifying an adoption
+
+```bash
+go build ./...
+go vet -tags cdp ./path/to/pkg
+go test -tags cdp -p 1 -parallel 1 -run TestCDPScript ./path/to/pkg -v
+```
+
+The third command is the only one that proves anything, and only if its output
+names subtests that actually ran.
+
+## Next steps
+
+- [Writing fixtures](/docs/cdpscripttest/fixtures) — the two dialects.
+- [Extending the engine](/docs/cdpscripttest/extending) — app-specific commands.
+- [Testing](/docs/testing) — this repository's own suite.
+
+
+--- docs/cdpscripttest/fixtures.html
+
+---
+title: Writing fixtures
+description: The two script dialects side by side, txtar structure, commands, conditions, and the environment variables a fixture can read.
+icon: file-code
+---
+
+# Writing fixtures
+
+A fixture is a txtar archive either way. What differs is which runtime reads it,
+and that choice decides the whole vocabulary.
+
+Two dialects, and four Go entry points. The dialect decides the vocabulary; the
+entry point decides the orchestration:
+
+| Entry point | Dialect | Use for |
+|---|---|---|
+| `Test` | native | a glob of independent fixtures, run as parallel subtests |
+| `RunFiles` | native | files run **sequentially**, with per-file results and reports |
+| `Run` | native | one script against a `State` you already built |
+| `RunCDPScript` | cdpscript | a `main.cdp` archive, through the real cdpscript runtime |
+
+## Choosing a dialect
+
+|  | Native fixture | cdpscript archive |
+|---|---|---|
+| Runner | `Test`, `RunFiles`, or `Run` | `cdpscripttest.RunCDPScript(ctx, path, opts)` |
+| Body lives in | the txtar comment section | a `-- main.cdp --` section |
+| Navigate | `navigate /path` (BASE_URL-relative) | `goto <url>` |
+| Wait | `wait-visible <sel>` (alias `wait`) | `wait <sel>` or `wait 2s` |
+| Evaluate | `eval <js>` (alias `js`), `evalfile` | `js <code>`, `jsfile <path>` |
+| Assert | `stdout '<regexp>'` after a command | `assert exists\|text\|visible\|status\|response\|header` |
+| Extras | `screenshot-compare`, `rtc-*`, `network-emulate`, `distill`, `markdown` | the cdpscript command set |
+
+Pick `RunCDPScript` when the archive should also run as a command-line tool —
+that path executes the same runtime as `cdpscript` and `cdp run`, so the test
+cannot drift from the tool. Pick a native fixture when you want the richer
+assertion and comparison surface.
+
+The tell is a `main.cdp` section. Handed such an archive, the native runner
+finds an empty comment section, runs nothing, and reports success.
+
+## A native fixture
+
+```text
+# Verify the result element renders after setup.
+navigate /app
+evalfile setup.js
+text '#result'
+stdout 'ok'
+
+# Only meaningful with a visible window.
+[!headless] screenshot-compare --threshold 3 '#main' main.png
+
+-- setup.js --
+document.getElementById('result').textContent = 'ok';
+```
+
+Every line is a comment (`#`), a condition guard, or a command. `!` before a
+command expects failure. `stdout`/`stderr` match the previous command's output
+as a regexp. `cmp` compares files, which pairs with txtar sections.
+
+Named sections are extracted into the test's working directory before the
+script runs, so a fixture carries its own HTML, JS, and JSON without external
+files.
+
+## A cdpscript archive
+
+```text
+#!/usr/bin/env cdpscript
+# Check the account page renders a session list.
+#
+# Usage:
+#   FIXTURE_BASE_URL=http://127.0.0.1:8090 cdpscript account.txtar
+
+-- main.cdp --
+goto ${FIXTURE_BASE_URL}/account
+wait '#sessions'
+assert exists '#sessions'
+assert text '#sessions' Session
+```
+
+See [cdpscript](/docs/scripting) for the full command set and the Unix tool
+contract these get when run from the command line.
+
+## Conditions
+
+Boolean: `headless`, `rtc`, `short`, `verbose`.
+
+Prefix conditions take a colon- or space-separated argument:
+
+```text
+[exec:html2md] markdown '#main'
+[element:#status] text '#status'
+[title:*Dashboard*] screenshot dash.png
+[stdout:ok] echo matched
+[rtc-state connected] rtc-ice
+```
+
+All negate with `!`:
+
+```text
+[!headless] skip 'requires headed mode'
+[!rtc] skip 'WebRTC not injected'
+```
+
+`skip` ends the script without failing; `stop` ends it early without failing or
+skipping. Use `skip` for "this environment cannot run this," and `stop` for
+"nothing further to check."
+
+## Waiting is the whole game
+
+The most common fixture failure is asserting on text before the page has
+produced it. A run that captures `Loading...` where it expected content is not
+a flaky test — it is a missing wait.
+
+```text
+navigate /account
+wait-visible '#sessions'      # not optional
+text '#sessions'
+stdout '[Ss]ession'
+```
+
+`timeout <duration>` sets the default wait timeout for the script (default
+10s); `--timeout` on an individual `wait-visible` overrides it for that line.
+
+## Environment
+
+| Variable | Meaning |
+|---|---|
+| `WORK` | the test's working directory |
+| `TMPDIR` | temporary directory, cleaned up after the test |
+| `BASE_URL` | the base URL passed to `Test`; read-only, change with `set-base-url` |
+| `SCREENSHOT_DIR` | override the screenshot output directory |
+
+For a `RunCDPScript` archive, `CDPScriptRunOptions.Env` is how a fixture server's
+address reaches the script, and `Args` becomes `ARG1..ARGN` with `ARGC`.
+
+## Next steps
+
+- [Visual testing](/docs/cdpscripttest/visual) — screenshots and baselines.
+- [Extending the engine](/docs/cdpscripttest/extending) — commands of your own.
+- `go doc ./cdpscripttest` — every command, condition, and flag.
+
+
+--- docs/cdpscripttest/visual.html
+
+---
+title: Visual testing
+description: Screenshot comparison against baselines, masking dynamic content with blur, where baselines live, and screen recording.
+icon: image
+---
+
+# Visual testing
+
+`screenshot-compare` captures an element and compares it against a stored
+baseline, failing when the difference exceeds a threshold. It is the cheapest
+way to catch a layout regression that no text assertion would notice.
+
+```text
+screenshot-compare --threshold 3 --blur '.timestamp' '#main' main.png
+```
+
+Options: `--threshold N` is the maximum allowed diff percent (default 5), and
+`--update` overwrites the baseline with the current capture.
+
+Related commands: `screenshot [file]` for a full-page PNG, `screenshot-sel
+[--padding N] <sel> [file]` for one element, and `screenrecord start|stop` to
+write an animated GIF, PNG, numbered PNG frames, or WebM of a tab. WebM uses
+`ffmpeg` from `PATH`; the other formats have no external dependency. If a
+script fails while recording, cdpscripttest stops the recording during cleanup
+and leaves the artifact path in the command log.
+
+## The first run always passes
+
+On first run the capture *becomes* the baseline. A brand-new
+`screenshot-compare` therefore cannot fail, and a fixture added this way is not
+yet testing anything. Look at the generated image before you trust it, and
+commit it deliberately.
+
+## Blur, do not raise the threshold
+
+Every dynamic element — a timestamp, a generated id, a live counter, a relative
+"3 minutes ago" — differs between runs and eats your diff budget. The
+temptation is to raise `--threshold` until the test goes green. That also
+raises it past the regressions you were trying to catch.
+
+`--blur <selector>` replaces the element's text with a fixed placeholder and
+applies a mild CSS blur before capture, so the content produces identical
+pixels across runs while still showing that it was present. The flag repeats:
+
+```text
+screenshot-compare --blur '.badge' --blur '[class*="time"]' --threshold 5 main main.png
+```
+
+A fixture masking a table full of live state looks like:
+
+```text
+screenshot-compare --blur '.badge, td, [class*="status"], [class*="time"], [class*="id"]' \
+	--threshold 12 'main, [role="main"], body' table.png
+```
+
+A threshold that high is a signal the mask is incomplete. When a comparison
+fails, the runner writes the current capture next to the baseline as
+`<name>.fail.png` — open both before changing any number.
+
+Two flags exist for exactly this diagnosis:
+
+```bash
+go test -tags cdp -cdp-emit-unblurred ./...   # save an unmasked copy alongside each capture
+go test -tags cdp -cdp-skip-blur ./...        # disable masking entirely, to see raw content
+```
+
+`-cdp-emit-unblurred` is the one to reach for first: it shows what the mask hid,
+which is how you find the element you forgot to blur.
+
+## Where baselines live
+
+Baselines live in the artifact directory, which is resolved in this order:
+
+1. `CDPSCRIPTTEST_ARTIFACTS` environment variable
+2. `-cdp-artifacts=<dir>` flag
+3. `-emit-artifacts`, which derives the path from the script's own location —
+   `testdata/interaction/viewport.txtar` → `testdata/interaction/artifacts/viewport/`
+4. `t.ArtifactDir()`
+
+Environment variables take precedence over their flag counterparts.
+
+```bash
+CDPSCRIPTTEST_ARTIFACTS=./out go test -tags cdp -p 1 -parallel 1 ./...
+# ./out/fleet-view/fleet-full-page.png
+```
+
+That flat layout is the readable one when you want to inspect images.
+
+**Baselines you intend to keep must live somewhere durable.** If the artifact
+root is a temporary directory that the run clears, every comparison is a first
+run and the suite silently stops catching regressions. Commit baselines under
+`testdata/` and point the artifact directory at them.
+
+## Updating baselines
+
+```bash
+go test -update-golden -tags cdp -run TestCDPScript ./path/to/pkg
+```
+
+`UPDATE_GOLDEN` is the environment equivalent. Update when you changed the UI on
+purpose, and look at every changed image before committing. Updating to make a
+red test green converts a caught regression into a committed one — it is the
+one move that turns this whole mechanism off.
+
+## Stabilizing the render
+
+Pixel comparison is only as reproducible as the browser you run it in. Fix the
+window size so layout does not depend on the terminal or display:
+
+```go
+opts = append(opts, chromedp.WindowSize(1280, 800))
+```
+
+Expect headed and headless to differ. Font availability differs across machines
+too, which is the usual reason a baseline captured locally fails in CI. Prefer
+comparing a single component (`screenshot-sel`) over a full page when the page
+contains anything you do not control.
+
+## Next steps
+
+- [Writing fixtures](/docs/cdpscripttest/fixtures) — the commands around these.
+- [Reports and artifacts](/docs/cdpscripttest/reports) — turning a run into
+  something reviewable.
+
+
+--- docs/cdpscripttest/extending.html
+
+---
+title: Extending the engine
+description: Add app-specific commands, let fixtures own the server they test, and run scripts sequentially when they share mutable state.
+icon: puzzle-piece
+---
+
+# Extending the engine
+
+`Engine` embeds `*script.Engine`, so anything your fixtures repeat can become a
+command instead. This is where a fixture suite stops being a pile of scripts and
+starts being a language for your application.
+
+```go
+eng := cdpscripttest.NewEngine()
+eng.Cmds["start-server"] = startServerCmd()
+eng.Cmds["reset-state"] = resetStateCmd()
+eng.Cmds["sign-in"] = signInCmd()
+```
+
+A fixture then opens with three words instead of twenty lines:
+
+```text
+start-server
+reset-state
+sign-in
+navigate /app
+wait-visible '.dashboard'
+```
+
+`NewEngine` is test-only — `DefaultConds` calls `testing.Short()`, which panics
+outside a test binary. Use `NewCLIEngine` for standalone tools.
+
+## Writing a command
+
+`cdpscripttest.CDPState(s)` recovers the CDP state from the `*script.State`, and
+`RunWithWaitTimeout(cs, name, readySelector, timeout, actions...)` runs chromedp
+actions and waits for a readiness selector afterwards.
+
+```go
+func signInCmd() script.Cmd {
+	return script.Command(
+		script.CmdUsage{Summary: "dev-mode login, wait for app shell"},
+		func(s *script.State, args ...string) (script.WaitFunc, error) {
+			if len(args) != 0 {
+				return nil, script.ErrUsage
+			}
+			cs, err := cdpscripttest.CDPState(s)
+			if err != nil {
+				return nil, err
+			}
+			return func(*script.State) (string, string, error) {
+				out, err := cdpscripttest.RunWithWaitTimeout(cs, "sign-in", ".app-shell", 0,
+					chromedp.Navigate(cs.BaseURL()+"/session/new"),
+					chromedp.Navigate(cs.BaseURL()+"/app"),
+					chromedp.WaitVisible(".app-shell", chromedp.ByQuery),
+				)
+				return out, "", err
+			}, nil
+		},
+	)
+}
+```
+
+Return `script.ErrUsage` for bad arguments so the failure reads like every other
+command's. The outer function validates and the returned `WaitFunc` does the
+work, which is what lets the engine log the command before it runs.
+
+`State` exposes `BaseURL`, `CDPCtx`, `Headless`, `ScreenshotDir`, `WaitTimeout`,
+and the `rtc-*` bookkeeping — see `go doc ./cdpscripttest State`.
+
+## Let the fixtures own the server
+
+The rule that fixtures should not depend on third-party network is easy to
+state and easy to violate by accident, because "the dev server is already
+running" is true on your machine. Make it structurally true instead: a command
+that checks whether `$BASE_URL` answers and starts one if not.
+
+```go
+func startServerCmd() script.Cmd {
+	return script.Command(
+		script.CmdUsage{Summary: "ensure the demo server is running"},
+		func(s *script.State, args ...string) (script.WaitFunc, error) {
+			baseURL, _ := s.LookupEnv("BASE_URL")
+			url, err := ensureServer(baseURL) // build, pick a free port, poll health
+			if err != nil {
+				return nil, fmt.Errorf("start-server: %w", err)
+			}
+			return func(*script.State) (string, string, error) {
+				return url + "\n", "", nil
+			}, nil
+		},
+	)
+}
+```
+
+Pick the port with `net.Listen("tcp", "127.0.0.1:0")` rather than hardcoding
+one, start the server at most once with a `sync.Once`, and poll a health
+endpoint until it answers before returning. A `reset-state` command that clears
+accumulated state between scripts pairs with it.
+
+**Set `no-proxy-server`.** An exported `HTTP_PROXY` makes Chrome route even
+localhost requests through a proxy that cannot reach your test server, and the
+failure presents as though the server never started:
+
+```go
+opts = append(opts,
+	chromedp.Flag("no-proxy-server", true),
+	chromedp.WindowSize(1280, 800),
+)
+```
+
+## Running fixtures sequentially
+
+`Test` calls `t.Parallel()` for every fixture, so they run concurrently against
+one browser. That is right when fixtures are independent and wrong when they
+share mutable server state — one script's writes become another's flake.
+
+**`-p 1` does not fix this.** It serializes *packages*, not the subtests inside
+one. Use `-parallel 1` to serialize test fixtures, or reach for `RunFiles`,
+which runs files in order and owns the allocator lifecycle:
+
+```go
+files, err := cdpscripttest.ExpandGlobs([]string{"testdata/cdp/*.txt"})
+if err != nil {
+	t.Fatal(err)
+}
+
+res, err := cdpscripttest.RunFiles(t.Context(), eng, files, cdpscripttest.RunOptions{
+	BaseURL:     srv.URL,
+	ArtifactDir: artifacts,
+	EmitReport:  true,
+	OnResult: func(sr cdpscripttest.ScriptResult) {
+		if sr.Err != nil {
+			t.Errorf("%s: %v", sr.File, sr.Err)
+		}
+	},
+})
+if err != nil {
+	t.Fatal(err)
+}
+t.Logf("%d passed, %d failed", res.Passed(), res.Failed())
+```
+
+`RunOptions` also carries `AllocatorOpts` (defaulting to headless) and `Env`.
+`ExpandGlobs` accepts several patterns and handles `...`-style recursion, which
+plain `filepath.Glob` — what `Test` uses — does not.
+
+For a single script against a `State` you already built, `Run(t, e, s, filename,
+r)` is the smallest entry point.
+
+### Rolling your own loop
+
+Only worth it when you need something `RunOptions` does not expose — a shared
+browser context across scripts, custom per-script report handling, or
+`ErrSkip`/`ErrStop` mapped to your own semantics:
+
+```go
+for _, file := range files {
+	name := strings.TrimSuffix(filepath.Base(file), ".txt")
+	t.Run(name, func(t *testing.T) {
+		tabCtx, cancel := chromedp.NewContext(browserCtx)
+		t.Cleanup(cancel)
+
+		workdir := t.TempDir()
+		s, err := cdpscripttest.NewStateWithArtifactDir(tabCtx, workdir, baseURL,
+			filepath.Join(artifactRoot, name), env)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		a, err := txtar.ParseFile(file)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := s.ExtractFiles(a); err != nil {
+			t.Fatal(err)
+		}
+
+		log := new(strings.Builder)
+		err = eng.Execute(s.State, file, bufio.NewReader(bytes.NewReader(a.Comment)), log)
+		switch {
+		case err == nil:
+		case errors.Is(err, cdpscripttest.ErrSkip):
+			t.Skip(err)
+		case errors.Is(err, cdpscripttest.ErrStop):
+		default:
+			t.Errorf("FAIL: %v", err)
+		}
+	})
+}
+```
+
+One browser, a fresh tab per script. Handling `ErrSkip` as `t.Skip` and
+`ErrStop` as success is what makes the `skip` and `stop` commands mean what they
+say — treat them as failures and fixtures that deliberately bail will look
+broken.
+
+## Next steps
+
+- [Reports and artifacts](/docs/cdpscripttest/reports) — capturing what a run did.
+- [Agentic workflows](/docs/cdpscripttest/agentic) — why this shape suits agent-driven development.
+- `go doc ./cdpscripttest` — `Engine`, `State`, and the default command set.
+
+
+--- docs/cdpscripttest/reports.html
+
+---
+title: Reports and artifacts
+description: Per-script and combined Markdown reports pairing each script with its log and images, rendering them to HTML, and redacting the environment first.
+icon: file-lines
+---
+
+# Reports and artifacts
+
+A browser test that only reports pass or fail throws away most of what it saw.
+`cdpscripttest` can emit a Markdown report pairing each script's source with its
+command log and the artifacts it produced — which turns a failing run into
+something a person, or an agent, can read without rerunning it.
+
+```go
+cdpscripttest.GenerateReport(reportPath, name, archive.Comment, log)
+```
+
+The command log is what `Engine.Execute` writes to its `io.Writer`, so capture
+it in a `strings.Builder` rather than discarding it.
+
+## Combined reports
+
+For a suite, one merged report beats a directory of files:
+
+```go
+w, err := cdpscripttest.NewCombinedReportWriter(combinedPath, names, sources)
+...
+w.Update(cdpscripttest.ScriptReport{
+	Name:        name,
+	Source:      archive.Comment,
+	Log:         log,
+	ArtifactDir: scriptArtifacts,
+	Failed:      failed,
+})
+```
+
+`Update` is called per script as it finishes, so a run that crashes halfway
+still leaves a readable report covering what completed. `GenerateCombinedReport`
+writes them all at once when you already have the full set.
+
+For Go tests, the compatibility flags `-emit-cdp-report` and
+`-emit-cdp-report-combined` write Markdown reports into the normal artifact
+tree. For a self-contained report tree with native HTML, use:
+
+```bash
+go test -p 1 -parallel 1 -tags cdp ./cdpscripttest \
+  -cdp-report-dir=./report \
+  -emit-cdp-report-html \
+  -emit-cdp-report-combined
+```
+
+This writes `index.md` and `index.html` at `./report`, with each fixture's
+`report.md`, `report.html`, and existing artifacts in `./report/<fixture>/`.
+`-cdp-report-dir` takes precedence over the usual artifact-root selection.
+`-emit-cdp-report-html` writes HTML only when `-cdp-report-dir` is set.
+
+## Rendering to HTML
+
+`cdpscripttest/report` renders HTML directly with `html/template`. HTML pages
+use relative links to the existing artifact tree, so no converter or asset-copy
+step is required.
+
+## What ends up in a report, and what to redact
+
+`GenerateReport` takes the script source and the execution log. It does not
+serialize the environment, so a credential in `os.Environ()` does not land in a
+report merely by being there.
+
+The leak path is the **log**. Anything a script prints is captured, so a fixture
+that runs `env`, echoes a variable, or evaluates JavaScript that returns a token
+puts that value into the report — which then gets committed, rendered to HTML,
+and attached to pull requests.
+
+Two defenses, and you want both. Do not print secrets from a fixture. And when a
+run's report will be shared, filter the environment you hand the runner so a
+careless `env` cannot expose anything:
+
+```go
+func sanitize(env []string) []string {
+	out := make([]string, 0, len(env))
+	for _, kv := range env {
+		k, v, ok := strings.Cut(kv, "=")
+		if !ok {
+			continue
+		}
+		if sensitive(k) {
+			out = append(out, k+"=[redacted]")
+			continue
+		}
+		out = append(out, k+"="+v)
+	}
+	return out
+}
+```
+
+Treat a key as sensitive when it contains `TOKEN`, `SECRET`, `PASSWORD`,
+`COOKIE`, or `PRIVATE_KEY`, or ends in `_KEY` or `_API`. That list is a floor,
+not a guarantee — a key named `github_pat` passes all of those checks. Prefer an
+allowlist when the report is published.
+
+The same caution applies to captures: a HAR of an authenticated session contains
+the headers that made it authenticated. See
+[Capture network traffic](/docs/capturing-traffic).
+
+## Coverage
+
+Native fixture execution starts CDP coverage collection by default and writes
+`coverage.json` into each script's artifact directory. That is why the file
+appears next to your screenshots without anyone asking for it.
+
+```bash
+CDPSCRIPTTEST_COVERAGE=0 go test -tags cdp ./...   # also 'false', 'off'
+```
+
+Coverage only records JavaScript that executed, so a server-rendered page with
+little script produces a near-empty file — expected, not a failure.
+
+## Artifact layout
+
+Screenshots, baselines, GIFs, and reports share one artifact directory per
+script. Resolution order and the flat `CDPSCRIPTTEST_ARTIFACTS` layout are
+covered in [Visual testing](/docs/cdpscripttest/visual).
+
+Keep the artifact root out of the committed tree unless it holds baselines you
+mean to keep. A run that clears its artifact root each time cannot accumulate
+baselines — every comparison becomes a first run, and first runs always pass.
+
+## Next steps
+
+- [Visual testing](/docs/cdpscripttest/visual) — where baselines live.
+- [Agentic workflows](/docs/cdpscripttest/agentic) — reports as agent-readable evidence.
+
+
+--- docs/cdpscripttest/agentic.html
+
+---
+title: Agentic workflows
+description: Why the fixture format suits agent-driven product development, and the loop that turns live browser exploration into a committed regression suite.
+icon: robot
+---
+
+# Agentic workflows
+
+An agent building a web product has a verification problem. It can change code
+confidently, but "does the page still work?" is a question about pixels, focus,
+overlays, and network timing that no unit test answers. The usual outcome is an
+agent that reports success because the code compiled.
+
+The three tools in this repository close that loop, and `cdpscripttest` is the
+step that makes the closure durable.
+
+## The loop
+
+1. **Explore live.** The agent drives a real browser through `cdp --mcp`,
+   screenshot-first: observe, act, verify, re-observe. See
+   [cdp](/docs/cdp). Screenshots are the source of truth here — most browser
+   failures are layout, focus, overlay, iframe, or dialog problems that a text
+   snapshot cannot show.
+2. **Crystallize.** The sequence that worked becomes a txtar script with
+   assertions and an exit code — see [cdpscript](/docs/scripting). This is the
+   step that converts a session into an artifact.
+3. **Commit.** The same archive runs under `go test` through `RunCDPScript`, or
+   as a native fixture. Now it fails the build when the behavior regresses,
+   rather than when someone remembers to check.
+
+Each step narrows what the next one has to trust. The agent is not asked to
+remember that the account page needs a wait before its text assertion; the
+fixture encodes it.
+
+## Why the format holds up
+
+**Fixtures are text an agent can write and diff.** A txtar archive is a
+plain-text file with its assertions inline. An agent can generate one, read a
+failure that cites `file:line`, and edit it — none of which is true of a
+screenshot-comparison tool driven by a GUI.
+
+**The failure message is the diagnosis.** `assert text h1 NotThePage: assertion
+failed: text "Example Domain" does not contain "NotThePage"` says what was
+expected, what was found, and where. Compare with a bare non-zero exit, which
+sends the agent back to re-run the whole flow to learn anything.
+
+**Exit codes distinguish kinds of failure.** `3` is an assertion that failed —
+the product is wrong. `1` is a runtime error — the script is wrong. `2` is
+usage. An agent can branch on that instead of guessing.
+
+**Reports are readable evidence.** A run emits Markdown pairing each script's
+source with its command log and images
+([Reports and artifacts](/docs/cdpscripttest/reports)), so an agent that did not
+run the test can still read what happened. This matters when one agent
+implements and another reviews.
+
+**Custom commands compress the vocabulary.** A single `sign-in` command instead
+of six lines of navigation means the agent writes fixtures about the feature
+rather than about the login flow
+([Extending the engine](/docs/cdpscripttest/extending)).
+
+## What this looks like at size
+
+A suite of this shape scales to dozens of fixtures over an application's own
+dev server, started by the suite itself on a free port, with visual baselines
+committed for the pages whose layout matters. It needs nothing on the machine
+but a browser.
+
+The shape that makes that work: fixtures own their server, share one browser
+with a fresh tab each, reset state between scripts, and mask dynamic content
+rather than loosening thresholds.
+
+## Where it is weak
+
+Worth knowing before you lean on it:
+
+- **A fixture with no assertion always passes.** So does a `-run` pattern that
+  matches nothing, and a test file whose build tag was omitted. Check `-v`
+  output for named subtests before believing a green run.
+- **The first `screenshot-compare` cannot fail** — the capture becomes the
+  baseline. A visual test added today proves nothing until it has a committed
+  baseline someone looked at.
+- **Timing is the dominant failure mode.** Most flakes are a missing wait, not a
+  broken product. An agent that responds to a flake by raising a timeout or a
+  diff threshold is disabling the test; the correct response is a wait on the
+  thing that was actually missing.
+- **The script language has no loops or retries, deliberately.** Control flow
+  belongs in the Go test or the shell. An agent that wants a retry loop is
+  usually papering over a missing wait.
+- **Pixel comparison is machine-sensitive.** Fonts and headed-versus-headless
+  rendering differ, so baselines captured locally can fail in CI. Prefer
+  component captures over full pages.
+
+## Next steps
+
+- [cdp](/docs/cdp) — the live loop and the MCP tool surface.
+- [cdpscript](/docs/scripting) — crystallizing a session into an archive.
+- [Extending the engine](/docs/cdpscripttest/extending) — commands for your app.
+- [Adopting cdpscripttest](/docs/cdpscripttest/adopting) — using it from your module.
+
+
+--- docs/how-cdp-works.html
+
+---
+title: How cdp works
+description: Why this repository has several browser commands, how capture and authentication actually work, and which design choices are deliberate.
+icon: diagram-project
+---
+
+# How cdp works
+
+This page explains the model behind the tools. It is background reading, not a
+set of steps — for those, see the [task guides](/docs/index).
+
+## Everything drives a real browser
+
+The Chrome DevTools Protocol is the interface Chrome's own developer tools use.
+It is a bidirectional JSON protocol over a WebSocket, organized into domains
+such as `Page`, `Network`, `DOM`, and `Runtime`, each with methods and events.
+
+Every command here speaks that protocol to a browser you already have
+installed. Nothing reimplements HTTP or HTML. That is the whole reason a page
+built entirely by JavaScript behaves the same for these tools as for a person
+with a browser window open, and it is also why these tools cannot be as fast or
+as light as `curl`.
+
+## Why there are several commands
+
+They differ in who is in control of the session.
+
+- **`chrome-to-har`** owns the whole session: it launches, navigates, waits,
+  writes a HAR, exits. Best when the capture is fully described by a URL and
+  some waiting rules.
+- **`churl`** owns the session too, but the deliverable is the page, not the
+  traffic. It is shaped like `curl` and `wget`, and fetching a single URL with
+  JavaScript executed works well. Its `wget`-style recursion and mirroring
+  flags are accepted but not implemented — see
+  [Known issues](/docs/known-issues).
+- **`cdp`** does not assume it owns the session. It can attach to a browser you
+  logged into by hand, keep running while you click, and expose the browser to
+  an agent over MCP. This is what you reach for when getting to the interesting
+  traffic requires a human or an agent doing something first.
+- **`cdpscript`** replays a fixed sequence, and **`cdpscripttest`** runs those
+  sequences as tests.
+- **`chdb`** and **`ndp`** are debuggers rather than capture tools — breakpoints
+  and heap snapshots for pages and for Node.js respectively.
+
+When two of them could do the job, prefer the one that owns less of the
+session: a `chrome-to-har` invocation that works is easier to rerun than an
+interactive `cdp` session that worked once.
+
+## Capture is a recording of protocol events
+
+A HAR is assembled from `Network` domain events as they arrive, not by proxying
+traffic. Two consequences follow, and both surprise people:
+
+**Capture stops when the tool stops.** A page that fetches data a second after
+load will not appear in the archive unless the tool was still watching. This is
+the single most common reason an expected request is missing, and it is why the
+waiting flags exist rather than being a nicety. See
+[Capture network traffic](/docs/capturing-traffic) for the demonstration.
+
+**Bodies are not free.** Response bodies must be requested per response and
+held, so full-body capture is a deliberate mode (`-full-capture`) rather than
+the default, and `-max-body-bytes` exists to bound it.
+
+## Authentication is about which profile the browser uses
+
+A browser launched with an empty profile has no cookies, so it has no access to
+anything behind a login. There are two ways to fix that and they are not
+equivalent:
+
+Copying a profile (`-use-profile`) duplicates the profile directory, cookies
+included, into a temporary directory and launches against the copy. Your real
+profile is never written to, which is safe, but the copy is a point-in-time
+snapshot: a token refreshed since the copy, or a site that pins a session to a
+device, may still reject it.
+
+Attaching to a running browser (`-remote-host`) keeps the real, live session.
+Nothing is copied. This is what works for sites with strict sign-in, at the
+cost of needing a browser started with remote debugging enabled and logged in
+by hand first.
+
+## Captures contain credentials
+
+A capture of an authenticated session contains the headers that made it
+authenticated. That is what makes it useful for debugging and what makes it
+dangerous to attach to a bug report. Redaction of secrets in HAR and source
+output is therefore on by default, and turning it off is an explicit
+`-no-scrub`.
+
+## Scripts deliberately have no loops
+
+The script language has sequencing, failure expectations (`!`, `?`), and
+conditional guards (`[cond]`) — but no loops, no retries, and no variables
+beyond arguments and the environment.
+
+This is a deliberate limit, not an unfinished feature. A script that needs real
+control flow is better expressed in the shell or in the Go test that calls it,
+where there are already debuggers, libraries, and a type checker. Adding a
+second control-flow language inside the archive would mean maintaining a
+programming language as a side effect of maintaining a browser tool.
+
+## What is stable and what is not
+
+The module has no tagged release. `go install …@latest` resolves to a
+pseudo-version of the default branch, so an upgrade can change behavior without
+a version number changing to warn you. Pin a specific pseudo-version if you
+depend on this in automation.
+
+Within that, the surfaces differ in how settled they are:
+
+- **Settled:** single-URL capture on `chrome-to-har` and `cdp`, the fetch and
+  extraction flags on `churl`, and the script command set. These have tests,
+  and every flag is covered by a documentation test.
+- **Moving:** the MCP tool surface, including the inspection tools behind
+  `-enable-inspect`. Tool names and arguments have changed and may change
+  again.
+- **Accepted but not implemented:** `churl`'s recursion and mirroring flags.
+  They parse, churl exits 0, and nothing is written.
+- **Known-broken in places:** see [Known issues](/docs/known-issues), which
+  lists open bugs with workarounds rather than pretending they are fixed.
+
+Most Go packages are `internal/` precisely so that no stability guarantee is
+needed. The exceptions are deliberate: `cdpscript` and `cdpscripttest` are
+importable because running and testing scripts from another module is the
+point. They are still pre-1.0 — pin a pseudo-version rather than tracking the
+branch. See [Adopting cdpscripttest](/docs/cdpscripttest/adopting) for what the
+dependency pulls in.
+
+## Documentation lives with the code
+
+Each command's flags are documented in its own `doc.go`, and a test walks the
+flags the command actually registers and fails if any is missing from that
+file. The guides in this directory therefore do not repeat flag tables; they
+explain workflows and link to `go doc`. When a guide and `go doc` disagree,
+`go doc` is the one that is checked by a test.
+
+## Next steps
+
+- [Capture network traffic](/docs/capturing-traffic) — the waiting and authentication
+  ideas above, applied.
+- [cdpscript](/docs/scripting) — the command set and the debugging loop.
+- [Command reference](/docs/commands) — where each command's flags are documented.
+
+
+--- docs/capturing-traffic.html
+
+---
+title: Capture network traffic
+description: Record HAR and streaming captures, including authenticated sessions and full request and response bodies.
+icon: network-wired
+---
+
+# Capture network traffic
+
+Three commands in this repository capture traffic, and which one you want
+depends on how much control you need over the session:
+
+- `chrome-to-har` navigates to a URL and writes a HAR. Use it for
+  one-shot, scriptable captures.
+- `cdp` captures while you drive the browser, by hand or from an agent. Use it
+  when getting to the traffic requires logging in, clicking through, or
+  otherwise doing something a URL alone will not express.
+- `churl -har` captures alongside a fetch, when the page content is what you
+  are really after.
+
+For the complete flag reference, see `go doc ./cmd/chrome-to-har`,
+`go doc ./cmd/cdp`, and `go doc ./cmd/churl`. This guide covers the workflows
+those flags add up to.
+
+## A single-page capture
+
+```bash
+chrome-to-har -url https://example.com -output example.har
+```
+
+Modern pages keep loading well after the load event fires, so a capture that
+stops too early is the usual reason a request you expected is missing. Against
+a page that fetches `/api/items` from JavaScript after load:
+
+```bash
+chrome-to-har -headless -url http://localhost:8099/ -output demo.har
+jq -r '.log.entries[] | "\(.request.method) \(.request.url) \(.response.status)"' demo.har
+```
+
+```
+GET http://localhost:8099/ 200
+```
+
+One entry: the XHR never made it. Waiting for something the fetch produces
+fixes it:
+
+```bash
+chrome-to-har -headless -url http://localhost:8099/ -wait-for '#done' -output demo2.har
+```
+
+```
+GET http://localhost:8099/ 200
+GET http://localhost:8099/api/items 200
+GET http://localhost:8099/favicon.ico 404
+```
+
+`-wait-for` waits for a selector; `-wait-stable` waits for the network and DOM
+to go quiet, which is what you want when you do not know a selector to wait on.
+To keep the archive to what you care about, filter it with `-urls` and `-omit`,
+or stop requests from being made at all with `-block`.
+
+(The fixture server used above is the one from the
+[Quickstart](/docs/quickstart).)
+
+## Streaming instead of archiving
+
+A HAR is written at the end of the run, which is inconvenient for a long
+session and impossible for one that never ends. Both `chrome-to-har -stream`
+and `cdp -harl` emit one JSON object per entry as it arrives:
+
+```bash
+chrome-to-har -url https://example.com -stream -urls 'api\.example\.com'
+cdp -harl -harl-file session.har.jsonl
+```
+
+`cdp -harl` writes to `output.har.jsonl` by default. Pass `-harl-file -` to
+stream to stdout, which is what you want when piping into `jq`.
+
+`cdp -har` writes the file whether cdp launches the browser or attaches to one
+already listening on the debug port. `-har-mode` selects how much it records:
+`enhanced`, the default, captures roughly 3.4 KB per entry against `simple`'s
+576 bytes for the same page. Reach for `chrome-to-har` when the HAR is the
+deliverable rather than a sanity check.
+
+## Authenticated sessions
+
+This is the part that most often goes wrong. A browser `cdp` launches on its
+own has an empty profile: no cookies, no session, so no access to anything
+behind a login.
+
+There are two ways to get an authenticated session, and they are not
+interchangeable:
+
+**Copy a profile.** `-use-profile` copies the named Chrome profile, with its
+cookies, into a temporary directory and launches against the copy:
+
+```bash
+cdp -list-profiles
+cdp -use-profile Default -har session.har -url https://example.com -interactive
+```
+
+The copy means your real profile is never written to, but also that anything
+requiring a live session — a token refreshed since the copy, a device
+challenge — may fail. Copying cookies out of Chrome's database needs `sqlite3`
+on your `PATH` when you use `-cookie-domains`.
+
+**Attach to a browser you already logged into.** This keeps the real session,
+which is what you want for anything with a strict sign-in:
+
+```bash
+# Start the browser with debugging enabled, then log in normally.
+cdp attach                      # prints attachable targets, or how to launch
+cdp -remote-host localhost -remote-port 9222 -har session.har -shell
+```
+
+`cdp attach` with no browser listening prints the exact command to launch one.
+
+## Capturing bodies
+
+By default a capture records metadata and headers. `-full-capture` also records
+complete request and response bodies, which is what you need when the answer is
+in a response payload rather than in the request log:
+
+```bash
+cdp -full-capture -harl -output-dir ./capture -shell
+```
+
+Bodies make captures large. `-max-body-bytes` caps each one; the default of 0
+keeps them whole.
+
+`-output-dir` organizes output by the navigated page's domain rather than one
+flat file, and saved page sources land under that domain's directory. Set
+`-group-by-page=false` to group by the domain each request went to instead.
+
+`-full-capture` also captures WebRTC activity, controlled by
+`-webrtc-capture`: any of `sdp`, `datachannel`, and `ice`, or `all`, or `none`.
+It defaults to `sdp,datachannel`, because ICE is noisy and rarely what you are
+looking for.
+
+## Secrets
+
+Captures of authenticated sessions contain credentials — that is what makes
+them useful and what makes them dangerous to pass around. HAR and source output
+is redacted by default. `-no-scrub` turns redaction off; think about where the
+file is going before you use it.
+
+## Reading a capture
+
+A HAR is JSON, so `jq` is usually enough:
+
+```bash
+# Requests that failed
+jq '.log.entries[] | select(.response.status >= 400) | .request.url' capture.har
+
+# Everything sent to one host
+jq -r '.log.entries[] | select(.request.url | contains("api.example.com"))
+	| "\(.request.method) \(.request.url) \(.response.status)"' capture.har
+
+# Headers on a specific request, when you need to replay it
+jq '.log.entries[] | select(.request.url | contains("/download"))
+	| .request.headers' capture.har
+```
+
+Streamed NDJSON is one entry per line, so the same filters work with
+`jq -c` over the stream, without waiting for the run to finish.
+
+## Next steps
+
+- [Differential capture](/docs/differential-capture) — comparing two captures of
+  the same page.
+- [How cdp works](/docs/how-cdp-works) — why capture stops when the tool stops, and
+  why the two authentication paths differ.
+- [Troubleshooting](/docs/troubleshooting) — missing requests and logged-out
+  sessions.
+
+
+--- docs/differential-capture.html
+
+---
+title: Differential capture
+description: Record named captures of the same page and compare them to see which requests appeared, disappeared, or changed between runs.
+icon: code-compare
+---
+
+# Differential capture
+
+Differential capture records named captures and compares them, so you can see
+what changed between two runs of the same page. It is the tool for questions
+like "which requests does the new build make that the old one did not?"
+
+Captures live in a working directory, which is what ties a comparison together.
+Pass the same `-diff-work-dir` to every command in a session, or they will not
+see each other. (The `localhost:8099` fixture below is the demo server from the
+[Quickstart](/docs/quickstart).)
+
+## Recording two captures
+
+```bash
+chrome-to-har -headless -diff-mode -diff-work-dir ./diffwork \
+	-url http://localhost:8099/ -capture-name base
+```
+
+```
+Completed capture: base (ID: 20260804-185921-3ec56fb6)
+To compare with another capture, use: -compare-with <capture-id> -baseline 20260804-185921-3ec56fb6
+```
+
+Make whatever change you are measuring, then record the second capture into the
+same directory:
+
+```bash
+chrome-to-har -headless -diff-mode -diff-work-dir ./diffwork \
+	-url http://localhost:8099/ -capture-name after
+```
+
+`-capture-name` is a label for your benefit; the ID is what the comparison
+flags take. `-list-captures` reports both:
+
+```bash
+chrome-to-har -diff-work-dir ./diffwork -list-captures
+```
+
+```
+Available captures (2):
+  ID: 20260804-185924-892cd850
+  Name: after
+  URL: http://localhost:8099/
+  Timestamp: 2026-08-04 18:59:24
+  Status: completed
+  Entries: 1
+  Size: 2.15 KB
+  …
+```
+
+`Status: completed` with a nonzero `Entries` is what a usable capture looks
+like. A capture stuck at `recording` with `Entries: 0` did not record anything,
+and comparing against it will fail for want of a HAR file.
+
+Recording obeys the ordinary capture flags, so `-wait-for`, `-wait-stable`,
+`-urls`, and `-block` all apply. Use them: a capture that stops before the page
+finishes loading produces a diff full of differences that are really just
+timing.
+
+## Comparing
+
+```bash
+chrome-to-har -diff-mode -diff-work-dir ./diffwork \
+	-baseline 20260804-185921-3ec56fb6 \
+	-compare-with 20260804-185924-892cd850 \
+	-diff-format json -diff-output report.json
+```
+
+```
+Comparison completed successfully
+Report generated: report.json
+Summary: 0 added, 0 removed, 1 modified requests
+```
+
+`-diff-format` accepts `html` (the default), `json`, `text`, and `csv`. The
+JSON report carries `baseline_capture`, `compare_capture`, `summary`,
+`network_diffs`, `resource_diffs`, `performance_diff`, and `timestamp`; the
+`summary` object holds the added, removed, modified, and unchanged request
+counts. Reach for `json` when something downstream reads the result, and `html`
+when a person does.
+
+Two captures of an unchanged page still report `1 modified` in the example
+above — response timings differ between runs even when the bytes do not. Treat
+`added` and `removed` as the signal, and read `modified` with that in mind.
+
+## When a plain diff is enough
+
+If all you want is which URLs appeared or disappeared, two ordinary captures
+and `jq` answer it without a working directory:
+
+```bash
+chrome-to-har -headless -url http://localhost:8099/ -wait-for '#done' -output before.har
+# make the change
+chrome-to-har -headless -url http://localhost:8099/ -wait-for '#done' -output after.har
+
+diff <(jq -r '.log.entries[].request.url' before.har | sort) \
+     <(jq -r '.log.entries[].request.url' after.har  | sort)
+```
+
+The differential mode earns its keep when you want the comparison itself as an
+artifact — a report to attach, or timing and resource changes rather than a
+list of URLs.
+
+## Next steps
+
+- [Capture network traffic](/docs/capturing-traffic) — the single-capture
+  workflow these build on.
+- [Command reference](/docs/commands) — `go doc ./cmd/chrome-to-har` for every
+  flag.
+
+
+--- docs/plugins.html
+
+---
+title: Use cdp as an MCP server
+description: Expose the browser to Claude Code, Claude Desktop, and Codex through the cdp MCP server.
+icon: plug
+---
+
+# cdp as an MCP plugin
+
+`cdp` ships an MCP server (`cdp -mcp`) that exposes its Chrome DevTools
+Protocol toolkit — navigate, click/type, screenshot, PDF, extract text/HTML,
+capture HAR/HARL, intercept and block requests, manage cookies and storage, and
+emulate devices. Captured HAR and source-capture output is secret-redacted by
+default.
+
+The MCP tool surface is still moving: tool names and arguments have changed and
+may change again (see [How cdp works](/docs/how-cdp-works)), and most of the
+open bugs in [Known issues](/docs/known-issues) are in these tools. Pin a
+pseudo-version if an agent workflow depends on a specific tool name.
+
+The same server backs three packaging targets:
+
+| Target | Format | Files |
+|---|---|---|
+| Claude Code | repo-as-plugin / marketplace | [`.claude-plugin/plugin.json`](https://github.com/tmc/cdp/blob/main/.claude-plugin/plugin.json), [`.mcp.json`](https://github.com/tmc/cdp/blob/main/.mcp.json), [`.claude-plugin/marketplace.json`](https://github.com/tmc/cdp/blob/main/.claude-plugin/marketplace.json) |
+| Claude Desktop | MCP bundle (`.mcpb`) | [`plugins/mcpb/`](https://github.com/tmc/cdp/blob/main/plugins/mcpb/) |
+| Codex | `config.toml` | [`plugins/codex/`](https://github.com/tmc/cdp/blob/main/plugins/codex/) |
+
+## Prerequisite
+
+All three launch the `cdp` binary; none embed it. Install it (Go 1.26+):
+
+```bash
+go install github.com/tmc/cdp/cmd/cdp@latest
+```
+
+This lands at `$(go env GOPATH)/bin/cdp` (typically `~/go/bin/cdp`). The Claude
+Code and Codex integrations resolve `cdp` from your shell `PATH`, so add that
+directory to `PATH`. The Claude Desktop bundle instead launches the binary by
+absolute path (a GUI app does not inherit your shell `PATH`), defaulting to
+`~/go/bin/cdp`.
+
+## Claude Code
+
+The repository is itself a Claude Code plugin and a single-plugin marketplace.
+Once the repository is published to its default branch on GitHub:
+
+```bash
+/plugin marketplace add tmc/cdp
+/plugin install cdp@cdp
+```
+
+These two commands were not executed for this revision; the plugin files they
+read are present on `main`.
+
+`/plugin marketplace add` reads `marketplace.json` from the repository's default
+branch, so this flow works only after these files land on `main`. Until then —
+or for local development — load the plugin directly from a checkout:
+
+```bash
+claude --plugin-dir .
+```
+
+Either way you get the `cdp` MCP server (see [`.mcp.json`](https://github.com/tmc/cdp/blob/main/.mcp.json)) and
+the browser-automation skills under [`skills/`](https://github.com/tmc/cdp/blob/main/skills). The plugin prompts
+for a "Run Chrome headless" toggle at enable time (default on); turn it off to
+watch the browser.
+
+## Claude Desktop
+
+Build the MCP bundle:
+
+```bash
+cd plugins/mcpb
+npx -y @anthropic-ai/mcpb pack .   # writes cdp-0.1.0.mcpb
+```
+
+Open the `.mcpb` with Claude Desktop and enable it in Settings → Extensions.
+Set "Path to the cdp binary" if your install isn't at the `~/go/bin/cdp`
+default. See [`plugins/mcpb/README.md`](https://github.com/tmc/cdp/blob/main/plugins/mcpb/README.md) for
+customizing the launch (visible browser, capture directory, extra tools).
+
+## Codex
+
+```bash
+codex mcp add cdp -- cdp -mcp -headless
+```
+
+Or append the block in [`plugins/codex/config.toml`](https://github.com/tmc/cdp/blob/main/plugins/codex/config.toml)
+to `~/.codex/config.toml`. See [`plugins/codex/README.md`](https://github.com/tmc/cdp/blob/main/plugins/codex/README.md).
+
+## Launch options
+
+`cdp -mcp` takes the same flags as the CLI (`cdp` accepts both `-flag` and
+`--flag`). Common adjustments:
+
+- drop `-headless` to watch Chrome while the agent drives it;
+- `-output-dir <dir>` to persist HAR/HARL captures and saved page sources;
+- `-enable-inspect` to expose the reversing/inspection tools;
+- `-tools-dir <dir>` to register custom `.cdp` tool definitions;
+- `-no-scrub` to disable secret redaction (on by default).
+
+Run `cdp -help` for the full list.
+
+## Next steps
+
+- [Electron debugging](/docs/electron-mcp) — driving Electron apps over the same
+  server.
+- [Command reference](/docs/commands) — `go doc ./cmd/cdp` for every MCP-related
+  flag.
+- [How cdp works](/docs/how-cdp-works) — what the agent is actually driving.
+
+
+--- docs/electron-mcp.html
+
+---
+title: Electron debugging
+description: Attach to and debug Electron applications over the DevTools Protocol.
+icon: atom
+---
+
+# Electron debugging
+
+<Note>
+The flows on this page are derived from the tools' documented capabilities.
+Unlike [Troubleshooting](/docs/troubleshooting), they are not covered by tests
+in this repository and were not executed for this revision. The MCP tool names
+used here are a moving surface — see
+[How cdp works](/docs/how-cdp-works).
+</Note>
+
+Electron apps have two process types that use different protocols:
+
+- **Renderer** (Chromium): Use `cdp --mcp` with `--connect-existing --debug-port`
+- **Main process** (Node.js): Use `ndp --mcp` with `--node-port`
+
+## Finding the ports
+
+### Renderer (Chrome DevTools Protocol)
+
+Launch Electron with remote debugging enabled:
+
+```bash
+electron --remote-debugging-port=9222 your-app/
+```
+
+### Main process (V8 Inspector)
+
+Launch Electron with Node.js inspector enabled:
+
+```bash
+electron --inspect=9229 your-app/
+# or break on first line:
+electron --inspect-brk=9229 your-app/
+```
+
+### Both at once
+
+```bash
+electron --remote-debugging-port=9222 --inspect=9229 your-app/
+```
+
+## MCP configuration
+
+Add both servers to `.mcp.json` for full Electron debugging:
+
+```json
+{
+  "mcpServers": {
+    "electron-renderer": {
+      "command": "cdp",
+      "args": ["--mcp", "--connect-existing", "--debug-port", "9222", "--headless=false"]
+    },
+    "electron-main": {
+      "command": "ndp",
+      "args": ["--mcp", "--node-port", "9229"]
+    }
+  }
+}
+```
+
+## What each server provides
+
+### cdp (renderer)
+
+- Page navigation, screenshots, DOM interaction
+- Network interception and HAR recording
+- CSS/JS coverage for frontend code — returns nothing on pages with little or
+  no JavaScript, see [Known issues](/docs/known-issues)
+- Extension management — does not work for DevTools-only extensions, see
+  [Known issues](/docs/known-issues)
+- Sourcemap analysis for bundled frontend code
+
+### ndp (main process)
+
+- JavaScript evaluation in Node.js context
+- Source listing and reading (all loaded modules)
+- Console and error capture
+- CPU profiling and heap snapshots
+- Code coverage for backend code
+- Sourcemap analysis for bundled server code
+- `detect_electron` tool to identify Electron environment
+
+## Detecting Electron
+
+The `detect_electron` tool on the ndp server checks for Electron-specific
+globals and reports the Electron version, process type, app name, and path.
+This helps agents understand the debugging context.
+
+## Common patterns
+
+### Debug a renderer crash
+
+1. Connect cdp to renderer port
+2. Use `screenshot` and `page_snapshot` to see current state
+3. Use `get_console` and `get_errors` for error context
+4. Use `evaluate` to inspect DOM/JS state
+
+### Debug main process hang
+
+1. Connect ndp to inspector port
+2. Use `start_cpu_profile` / `stop_cpu_profile` to find hot code
+3. Use `evaluate` to inspect process state
+4. Use `get_console` for logged output
+
+### Trace IPC between processes
+
+1. Connect both servers
+2. In ndp: `evaluate` with `process.on('message', ...)` or Electron IPC listeners
+3. In cdp: `evaluate` with `ipcRenderer.on(...)` watchers
+4. Use `get_console` on both sides to see message flow
+
+## Next steps
+
+- [Use cdp as an MCP server](/docs/plugins) — the MCP setup this depends on.
+- [Troubleshooting](/docs/troubleshooting) — attach failures and browser discovery.
+
+
+--- docs/testing.html
+
+---
+title: Testing
+description: Run the test suites in this repository, including browser-dependent and script fixture tests.
+icon: vial
+---
+
+# Testing Guide
+
+This repository uses ordinary `go test` workflows. Some packages run entirely in-process. Others require a local Chrome or Chromium binary and skip automatically when the browser is unavailable or when tests run in short mode.
+
+## Quick Start
+
+```bash
+# Fast pass
+go test -short ./...
+
+# Full repository test run
+go test -p 1 ./...
+
+# Focus on the main browser-facing packages
+go test -p 1 ./cmd/... ./internal/browser/...
+
+# Browser script fixtures, which are behind a build tag
+go test -tags cdp -p 1 -parallel 1 ./cdpscripttest
+```
+
+Use `-p 1` when several browser-driving packages run together. For the
+`cdpscripttest` fixture package, also use `-parallel 1`: its `t.Parallel`
+subtests launch Chrome concurrently, and `-p 1` serializes packages, not
+subtests.
+
+## Test Categories
+
+### Pure Go tests
+
+These do not require a local browser. They cover parsers, helpers, filtering, diff logic, and other in-process code.
+
+```bash
+go test -short ./...
+```
+
+### Browser-dependent tests
+
+These launch or connect to Chrome and exercise real browser flows.
+
+```bash
+go test -p 1 ./cmd/churl/... ./internal/browser/...
+go test -p 1 ./cmd/cdp/...
+```
+
+If Chrome is not installed or discoverable, many of these tests call `testutil.SkipIfNoChrome(t)` and skip.
+
+### Script fixtures
+
+The `cdpscripttest` fixtures are txtar scripts rather than Go tests, and are
+behind the `cdp` build tag so a default `go test ./...` does not need a
+browser:
+
+```bash
+go test -tags cdp -p 1 -parallel 1 ./cdpscripttest
+```
+
+See [scripting.md](/docs/scripting) for writing them, and for the `cdpscripttest`
+command's `-i` and `-watch` modes, which are a faster way to debug a failing
+fixture than `go test` is.
+
+### Documentation tests
+
+Each command has a test asserting that every flag it registers, or every
+subcommand it defines, appears in its `doc.go`. These run in-process and need
+no browser:
+
+```bash
+go test ./cmd/... -run TestDocCovers
+```
+
+If you add a flag, this is the test that will tell you to document it.
+
+## Running Specific Tests
+
+```bash
+# List tests in a package
+go test -list . ./cmd/churl
+
+# Run one test
+go test -run TestBasicRun ./cmd/churl
+
+# Run with verbose output
+go test -v ./cmd/churl
+
+# Run with coverage
+go test -coverprofile=coverage.out ./...
+go tool cover -html=coverage.out
+```
+
+## Chrome Test Helpers
+
+Browser-facing tests share helpers in `internal/testutil/chrome.go`.
+
+Useful helpers:
+
+- `testutil.SkipIfNoChrome(t)`: skip when Chrome is unavailable or `go test -short` is in use
+- `testutil.MustStartChrome(t, ctx, headless)`: launch Chrome for a test and fail immediately on setup errors
+- `testutil.TestServer(t, handler)`: start a local HTTP server for integration tests
+
+Example:
+
+```go
+func TestWithChrome(t *testing.T) {
+	testutil.SkipIfNoChrome(t)
+
+	ctx := context.Background()
+	chromeCtx, cancel := testutil.MustStartChrome(t, ctx, true)
+	defer cancel()
+
+	_ = chromeCtx
+}
+```
+
+## Environment
+
+Recognized environment variables include:
+
+- `CHROME_PATH`: explicit path to a Chrome or Chromium executable
+- `CI`: commonly used to signal non-interactive test environments
+
+In practice, the most important control is whether Chrome is installed and discoverable.
+
+## Common Failure Modes
+
+### Chrome not found
+
+Install Chrome, Chromium, or another supported Chromium-based browser, or set `CHROME_PATH`.
+
+```bash
+export CHROME_PATH="/path/to/chrome"
+go test ./cmd/churl/...
+```
+
+### Slow or flaky browser startup
+
+Increase the test timeout for broader package runs:
+
+```bash
+go test -timeout 30m ./...
+```
+
+### Need a fast pre-commit pass
+
+Use short mode:
+
+```bash
+go test -short ./...
+```
+
+## Updating cdproto
+
+The DevTools protocol changes with Chrome, and the generated `cdproto`
+bindings follow it. Most of that lands safely: a command whose signature
+changed, or that was removed, breaks the build. What does not break the build
+is a call made by *raw string* rather than through a binding — it compiles,
+ships, and fails at run time with `-32601 method not found` against every
+browser and every version. Nothing catches it, forever.
+
+`internal/cdpproto` closes that gap. `methods.txt` is a committed list of every
+command and event the pinned `cdproto` declares, and two tests use it:
+
+- `TestNoUnknownProtocolMethods` scans every non-test Go file for string
+  literals shaped like a method name and fails on any the protocol does not
+  have.
+- `TestSnapshotIsCurrent` fails when `methods.txt` no longer matches the
+  `cdproto` in `go.mod` — which is precisely the moment a dependency bump needs
+  a human to look at it.
+
+The update procedure:
+
+```bash
+go get -u github.com/chromedp/cdproto github.com/chromedp/chromedp
+go generate ./internal/cdpproto
+git diff internal/cdpproto/methods.txt
+```
+
+That diff is the point of the exercise. It lists exactly which commands and
+events appeared and disappeared, and it is what drives the rest of the update:
+
+1. **Removed names** — anything the diff deletes that the tree still calls will
+   fail `TestNoUnknownProtocolMethods`. Delete the call; a removed method has no
+   working fallback.
+2. **Added names** — decide whether the new capability should be exposed as a
+   `cdp` command, a `cdpscript` command, or not at all. Most additions are not
+   worth surfacing.
+3. **Docs and skills** — if step 2 changed a tool's surface, update the page
+   under `docs/` and the matching `skills/*/SKILL.md` in the same commit. The
+   doc-sync tests already couple these: a flag or command added without its
+   documentation fails `internal/docscan`.
+
+Then run the browser suite, because protocol changes surface as behavior
+changes rather than compile errors:
+
+```bash
+go test -p 1 -parallel 1 -tags cdp ./cdpscripttest -count=1
+```
+
+Finally, a name absent from `methods.txt` is not always new. It may never have
+existed, or it may have been removed. Either way the call fails at run time
+with `-32601` against every browser, so the fix is to delete it, not to wait
+for the protocol to catch up.
+
+## Notes
+
+- There is no repository `Makefile` or Docker-based test harness in the current tree.
+
+This page is about running *this repository's* suite. To use `cdpscripttest`
+from your own module — import path, what the dependency costs, and the
+build-tag arrangement — see
+[Adopting cdpscripttest](/docs/cdpscripttest/adopting).
+
+## Next steps
+
+- [cdpscripttest](/docs/cdpscripttest) — the testing package end to end.
+- [cdpscript](/docs/scripting) — authoring the fixtures this runs.
+- [Troubleshooting](/docs/troubleshooting) — parallelism and browser-discovery
+  failures.
+
+
+--- docs/commands.html
+
+---
+title: Command reference
+description: Where every command's flags and subcommands are documented, and how that documentation is kept in sync with the code.
+icon: terminal
+---
+
+# Command reference
+
+Flag-level reference lives in each command's `doc.go` rather than here, so it
+cannot drift from the code it describes. Read it with `go doc`, which needs no
+network and works against the version you have checked out.
+
+| Command | Reference | Covers |
+| --- | --- | --- |
+| `cdp` | `go doc ./cmd/cdp` | Automation, capture, extraction, MCP, the interactive shell |
+| `chrome-to-har` | `go doc ./cmd/chrome-to-har` | HAR capture, filtering, blocking, waiting, differential capture |
+| `churl` | `go doc ./cmd/churl` | Fetching, output formats, WebSockets (recursion and mirroring are not implemented) |
+| `chdb` | `go doc ./cmd/chdb` | Page debugging: breakpoints, DOM, network, heap, tracing |
+| `ndp` | `go doc ./cmd/ndp` | Node.js and V8 debugging |
+| `cdpscript` | `go doc ./cmd/cdpscript` | Running one script |
+| `cdpscripttest` | `go doc ./cmd/cdpscripttest` | Running scripts as tests |
+| `native-host` | `go doc ./cmd/native-host` | The Chrome native messaging host |
+
+Library packages:
+
+| Package | Reference | Covers |
+| --- | --- | --- |
+| `cdpscript` | `go doc ./cdpscript` | The script command set and syntax |
+| `cdpscripttest` | `go doc ./cdpscripttest` | Running scripts from Go tests |
+
+The two cobra-based commands, `chdb` and `ndp`, also document themselves at the
+command line:
+
+```bash
+chdb help
+chdb help <command>
+ndp help
+```
+
+## How this stays accurate
+
+Each command has a test that enumerates the flags the command actually
+registers — by walking the source for flag registrations, or the command tree
+for the cobra commands — and fails if any is absent from its `doc.go`:
+
+```bash
+go test ./cmd/... -run TestDocCovers
+```
+
+Adding a flag without documenting it fails `go test ./cmd/...`. It does not
+break `go build`, and the repository has no CI configuration that runs it for
+you. This is why the guides
+in this directory link to `go doc` instead of reproducing flag tables: a table
+here would have no such gate.
+
+## Script format
+
+The script command set is documented in the `cdpscript` package. The format
+reference, including the txtar layout and the full command list, is in
+[skills/writing-cdp-scripts/references/script-format.md](https://github.com/tmc/cdp/blob/main/skills/writing-cdp-scripts/references/script-format.md).
+
+## Next steps
+
+- [cdpscript](/docs/scripting) — using the script commands in practice.
+- [Troubleshooting](/docs/troubleshooting) — when a documented flag does not behave
+  as expected.
+
+
+--- docs/known-issues.html
+
+---
+title: Known issues
+description: Open bugs and current limitations across the cdp tools, with workarounds where they exist.
+icon: triangle-exclamation
+---
+
+# Known issues
+
+Open bugs across the repository: the MCP tools, plus `churl`'s recursion and
+mirroring flags, which are accepted but do nothing.
+
+## Resolved Issues
+
+### click/type_text/hover/focus/press_key timeout units ambiguous
+
+Resolved by `interactionCtx`: timeout values from 1 through 60 are seconds;
+values greater than 60 are treated as milliseconds. This preserves the
+documented seconds API while handling common agent inputs such as `5000` for
+5 seconds.
+
+**Observed**: 2026-04-05, A998 session. `click(selector: "a[href='/explore']", timeout: 5000)` hung for 6+ minutes on github.com.
+
+**Files**: `cmd/cdp/mcp_tools.go`, `cmd/cdp/mcp_click_test.go`
+
+### Extensions domain pipe requirement for list/install/uninstall
+
+CDP Extensions-domain methods still require `--remote-debugging-pipe` and
+`--enable-unsafe-extension-debugging`, but the MCP extension tools no longer
+depend on that path for the common operations. `list_extensions`,
+`install_extension`, and `uninstall_extension` now fall back through
+`chrome.developerPrivate` or service-worker targets when the Extensions domain
+is unavailable over a remote-debugging port.
+
+**Files**: `cmd/cdp/mcp_extension_tools.go`
+
+### `-auto-discover=false` made cdp do nothing
+
+With `-auto-discover=false` and no `-chrome-path` or `-remote-host`, every
+action was a silent no-op: auto-discovery was what normally filled in
+`chromePath` or `remoteHost`, and the block implementing `-js`, `-render`,
+`-extract`, and `-har` was guarded on one of them being set.
+
+cdp now resolves an installed executable through `discovery.FindBestBrowser`
+and launches it fresh, and exits 3 with `No browser executable found` when
+there is none. Verified: `cdp -headless -auto-discover=false -url
+https://example.com -js 'document.title'` prints `Example Domain`.
+
+**Files**: `cmd/cdp/main.go`, `cmd/cdp/main_test.go`
+(`TestCDP_AutoDiscoverDisabledRunsAction`)
+
+### `-har` was discarded when cdp attached to a running browser
+
+`cdp -url … -har out.har` printed `Recording network traffic to:`, exited 0,
+and wrote no file whenever auto-discovery found a browser already listening on
+the debug port. The save was guarded on `recorder != nil`, but `-har-mode`
+defaults to `enhanced`, which populates `enhancedRecorder` and leaves
+`recorder` nil.
+
+Both modes now save on both paths. Verified against a browser confirmed
+listening: the default enhanced mode writes the file and reports `Recorded 1
+network requests`.
+
+**Files**: `cmd/cdp/main.go` (`saveHAR`), `cmd/cdp/main_test.go`
+(`TestCDP_RemoteEnhancedHARWritesFile`)
+
+### Differential capture did not record or compare
+
+`-diff-mode` registered a capture and returned without launching a browser, so
+nothing completed it and `-compare-with` had no HAR to read. The recording step
+exited 0 throughout, so a pipeline never noticed.
+
+Recording now goes through the normal HAR path into the differential working
+directory and calls `CompleteCapture`. Verified: two captures of the same page
+into one `-diff-work-dir` both reached `Status: completed` with `Entries: 1`,
+and the comparison wrote a report — `0 added, 0 removed, 1 modified requests`.
+
+**Files**: `cmd/chrome-to-har/main.go`, `internal/differential/controller.go`
+(`TestCaptureDifferentialCompletesCapture`)
+
+## Active Issues
+
+### 1. churl recursion and mirroring flags do nothing
+
+**Symptom**: `churl -r`, `-m`, `-l`, `-np`, and `-P` are accepted, and churl
+exits 0, but no files are written — the page is printed to stdout as though
+none of the flags were given.
+
+```
+churl -r -np -l 1 -P ./mirror http://localhost:8099/   # exit 0, ./mirror stays empty
+```
+
+**Root cause**: the options are parsed into fields that nothing reads;
+`cmd/churl/main.go` declares `recursive bool` and never consults it.
+
+**Workaround**: none for mirroring. For a single page, churl works as
+documented; for a crawl, drive it from a shell loop over URLs you enumerate
+yourself.
+
+**Observed**: 2026-08-04, against this tree.
+
+### 2. click can hang on elements that trigger navigation
+
+**Symptom**: `click` on a link that navigates the page may hang if the navigation changes the DOM before chromedp's click action completes. The element becomes stale mid-action.
+
+**Workaround**: Use `evaluate` with `document.querySelector('a').click()` for navigation-triggering clicks, or use `navigate` directly if the URL is known.
+
+**Files**: the `click` tool in `cmd/cdp/mcp_tools.go`
+
+### 3. Coverage snapshot on minimal-JS pages returns empty
+
+**Symptom**: `get_coverage` after `start_coverage` on server-rendered pages (e.g., Hacker News) returns 0 files because there's little/no JS to profile.
+
+**Not a bug**: Expected behavior — V8 coverage only tracks JavaScript execution. Document this in tool description.
+
+**Observed**: 2026-04-05, A998 session on news.ycombinator.com.
+
+### 4. extension_console/extension_evaluate fail for devtools-only extensions
+
+**Symptom**: "no target found for extension" when calling `extension_console` or `extension_evaluate` on a DevTools panel extension (like our coverage extension).
+
+**Root cause**: DevTools-only extensions (with `devtools_page` but no `background` service worker) don't create CDP-visible targets. There's no `chrome-extension://` target to attach to.
+
+**Workaround**: None currently. DevTools panel extensions run in the DevTools process, not as separate targets.
+
+**Observed**: 2026-04-05, A998 extension test. Extension ID agmhhbefggjmejggmflmppmacnbmhnne.
+
+## Next steps
+
+- [Troubleshooting](/docs/troubleshooting) — symptoms that have a workaround today.
+- [How cdp works](/docs/how-cdp-works) — which surfaces are settled and which
+  are still moving.
+- [Command reference](/docs/commands) — the documented behavior these deviate
+  from.
+
+
+--- README.html
+
+# cdp
+
+[![Go Reference](https://pkg.go.dev/badge/github.com/tmc/cdp.svg)](https://pkg.go.dev/github.com/tmc/cdp)
+
+`cdp` is a Go module for Chrome DevTools Protocol automation. It includes a live browser CLI, a txtar script runner, and a Go test harness for repeatable browser workflows.
+
+The browser-automation stack has three primary layers:
+
+- `cmd/cdp`: live CDP operation, MCP tools, browser attach, screenshots, HAR, raw CDP, and page artifacts.
+- `cdpscript`: executable txtar scripts that turn browser interactions into Unix-style tools.
+- `cdpscripttest`: `rsc.io/script`-style browser fixtures for Go tests, including a bridge that runs real `cdpscript` archives.
+
+For MCP actions tied to an inspected page, see [browser observations and actions](docs/browser-observations.md).
+
+## Commands
+
+- `chrome-to-har`: focused HAR capture CLI
+- `cdp`: the main Chrome/CDP CLI
+- `churl`: browser-backed fetch and page extraction
+- `chdb`: Chrome-focused debugger workflow
+- `ndp`: Node/V8 debugger workflow
+- `cdpscript`: run CDP scripts
+- `cdpscripttest`: test CDP scripts
+
+## Install
+
+The module requires Go 1.26 or newer.
+
+Install the broad CDP CLI:
+
+```bash
+go install github.com/tmc/cdp/cmd/cdp@latest
+```
+
+Install individual tools:
+
+```bash
+go install github.com/tmc/cdp/cmd/chrome-to-har@latest
+go install github.com/tmc/cdp/cmd/cdp@latest
+go install github.com/tmc/cdp/cmd/churl@latest
+go install github.com/tmc/cdp/cmd/chdb@latest
+go install github.com/tmc/cdp/cmd/ndp@latest
+go install github.com/tmc/cdp/cmd/cdpscript@latest
+go install github.com/tmc/cdp/cmd/cdpscripttest@latest
+```
+
+## Quick Start
+
+Attach to a browser the user is already using:
+
+```bash
+cdp attach --port 9222
+cdp --remote-host localhost --remote-port 9222 --tab <target-id> --shell
+cdp --remote-host localhost --remote-port 9222 --tab <target-id> --await --format json --js 'document.title'
+```
+
+Run a repeatable browser script:
+
+```bash
+cdpscript script.txtar
+cdpscript --tab <target-id> --port 9222 script.txtar
+cdp run --tab <target-id> --port 9222 script.txtar
+```
+
+Test browser behavior from Go:
+
+```go
+e := cdpscripttest.NewEngine()
+cdpscripttest.Test(t, e, allocCtx, "http://localhost:8080", "testdata/*.txt", nil)
+```
+
+For `cdpscript`-format txtars, use `cdpscripttest.RunCDPScript` so tests run the same runtime used by `cdpscript` and `cdp run`.
+
+```go
+err := cdpscripttest.RunCDPScript(ctx, "testdata/login.txtar", cdpscripttest.CDPScriptRunOptions{
+	Headless: true,
+	Env:      []string{"BASE_URL=http://localhost:8080"},
+})
+```
+
+Capture network activity with `chrome-to-har`:
+
+```bash
+go install github.com/tmc/cdp/cmd/chrome-to-har@latest
+chrome-to-har --url https://example.com --output out.har
+```
+
+Use `--shell` when you want to browse interactively while recording:
+
+```bash
+cdp --url https://example.com --har out.har --shell
+```
+
+Evaluate JavaScript in a page:
+
+```bash
+cdp --headless --url https://example.com --js 'document.title'
+```
+
+Fetch a page with browser execution:
+
+```bash
+churl https://example.com
+```
+
+Attach to a Node inspector target:
+
+```bash
+ndp node attach 9229
+```
+
+## Common Tasks
+
+Capture authenticated browser traffic with an existing profile:
+
+```bash
+chrome-to-har --profile "Default" \
+  --url https://app.example.com \
+  --wait-for '#app-root' \
+  --output app.har
+```
+
+Render a JavaScript-heavy page to text:
+
+```bash
+churl --output-format=text --wait-for ".loaded" https://example.com
+```
+
+Take a screenshot or extract content from a page:
+
+```bash
+cdp --url https://example.com --screenshot 'full page.png'
+cdp --url https://example.com --extract 'h1'
+cdp --url https://example.com --render body
+```
+
+Connect to an existing Chrome instance:
+
+```bash
+cdp attach --port 9222
+cdp --remote-host localhost --remote-port 9222 --tab <tab-id> --js 'document.title'
+```
+
+Connect to a remote browser:
+
+```bash
+cdp --remote-host 10.0.0.5 --remote-port 9222 --list-tabs
+churl --remote-host 10.0.0.5 --remote-port 9222 https://example.com
+```
+
+Use `ndp` against a Node inspector:
+
+```bash
+node --inspect=9229 app.js
+ndp node attach 9229
+```
+
+Run and test CDP scripts:
+
+```bash
+cdpscript login.txtar
+cdpscripttest --url http://localhost:8090 testdata/login.txt
+```
+
+## Command Summary
+
+`chrome-to-har` is the focused capture entry point. It is useful when you want HAR output, streaming entry logs, profile-based browsing, or differential capture that compares two runs of the same page.
+
+## What `cdp` Does
+
+The main `cdp` command is the broader general-purpose entry point. It goes beyond `chrome-to-har` and can:
+
+- connect to Chrome or Chromium locally or remotely
+- navigate, evaluate JavaScript, and extract page state
+- record HAR output and stream HARL JSONL capture data to a file, or to
+  stdout when `--harl-file -` is explicit
+- inject extra capture logic for traffic CDP does not expose directly, including gRPC-Web streams and WebRTC SDP, DataChannel, and ICE candidates (select the WebRTC streams to capture with `--webrtc-capture`, e.g. `--webrtc-capture=sdp,datachannel` (default), `=all`, or `=none`)
+- run in interactive and MCP-oriented modes
+
+## What `churl` Does
+
+`churl` is a browser-powered fetch tool for pages that need JavaScript execution. It is useful for:
+
+- SPA-aware page fetches
+- extracting rendered HTML or text
+- saving HAR alongside fetch output
+- scripted page interaction
+
+## What `ndp` and `chdb` Do
+
+`ndp` focuses on Node/V8 debugging flows. `chdb` focuses on Chrome-oriented debugging flows. Both are still evolving, but they are intended to expose debugger-oriented workflows rather than generic browser automation.
+
+## Automation Stack
+
+`cdp` is generalized browser scripting — the live operator surface. Use it when you need to attach to an existing browser, inspect tabs, observe with screenshots, act with coordinates or element refs, capture HAR/PDF/screenshots, or fall back to raw CDP.
+
+`cdpscript` is Unix-like tooling for browser operations — the durable automation surface. Scripts are txtar archives with `main.cdp`, optional embedded helper files, argv via `ARG1..ARGN`/`ARGC`, environment variables, output artifacts, and distinct exit codes for usage and assertion failures. A script with a `#!/usr/bin/env cdpscript` line and the executable bit is a command in its own right — its comment section becomes `--help` text:
+
+```bash
+chmod +x greet.cdpscript
+./greet.cdpscript https://example.com
+```
+
+`cdpscripttest` is Go-native browser testing — the testing surface. It runs local browser fixtures, screenshot comparisons, network/WebRTC tests, and real `cdpscript` archives under `go test`. Fixtures should avoid third-party network dependencies; authenticated site workflows should live as explicitly live-only examples.
+
+## Stability and Compatibility
+
+The module is pre-v1, so nothing here carries a v1 compatibility promise yet. The three surfaces are not equally settled, and the script DSL is deliberately the most stable of them.
+
+**Script DSL** (`main.cdp` commands, exit codes). Treated as a contract. Command names and argument order do not change meaning, a renamed command keeps its old name as an alias, and new behavior arrives as optional flags. Scripts written today are expected to keep running. `cdpscripttest` canonical names are hyphenated (`navigate`, `wait-visible`) and also register the shell spellings (`goto`, `wait`) as aliases; both are kept working.
+
+**Go API** (`cdpscript`, `cdpscripttest`). Stable in shape, not frozen. The engine types, the `Execute` methods, and the option constructors are unlikely to move; options are added over time. An exported option taking a type from an `internal/` package may be removed outright, since no code outside this module can call it. Other deprecations are marked in godoc for at least one release before removal.
+
+**MCP tool set** (`cdp --mcp`). The least stable surface. Tool names, input schemas, and result shapes follow what the hosts need and may change without notice. Pin a commit if you depend on a specific schema.
+
+Anything reached only under the `cdp` build tag — the screen recorder, the WebRTC shim, screenshot-comparison thresholds — is test-harness machinery and tracks the browser behavior it wraps. Baseline images and pixel thresholds are not a compatibility contract.
+
+## Trust Model
+
+`cdp` drives a real browser with the privileges of the user who starts it. It is not a sandbox.
+
+**On the command line and in `.cdp` scripts, the operator is the author.** `js`/`jsfile`/`eval` run arbitrary JavaScript in the page, `goto` reaches any URL the host can reach including `file://` and localhost, and `screenshot`/`pdf`/`har`/`download-dir` write where they are pointed — absolute paths verbatim, relative paths under `-output-dir`, unconfined either way. That is the intended power of a browser automation tool. A `.cdp` script is not a shell: the engine registers only its own commands, not `rsc.io/script`'s defaults, so there is no `exec`, `rm`, or `cp`.
+
+**Under `--mcp` the author changes.** The caller is an agent, and everything above reaches it. Three tools are stronger than "run JavaScript in a page": `evaluate` and `raw_cdp` expose the full page-JS and CDP surfaces, `upload_file` reads any absolute path on the host and can hand it to a page the same agent navigated to, and `run_cdpscript` runs agent-supplied script text with the server's own environment — credentials included — exposed as `${NAME}`. Tool and context names are validated so `define_tool` and `push_context` stay inside their directories, but artifact paths are not confined. Run the server with an environment and working directory you would hand to whatever is on the other end.
+
+**Captures are redacted by default** — request headers and query parameters, request and response bodies, WebSocket frames, and saved sources, unless `--no-scrub` is set. Text over 512 KiB passes through unscrubbed (a deliberate trade for capture speed on large bundles), and scrubbing covers captured artifacts rather than tool results: `get_cookies` returns cookie values as they are, and `save_state` writes them to disk in cleartext.
+
+Full statement: `go doc github.com/tmc/cdp/cmd/cdp`, section "Trust model".
+
+## Documentation
+
+Each command documents its own flags and subcommands, checked by a test:
+
+```bash
+go doc ./cmd/cdp
+go doc ./cmd/churl
+go doc ./cmd/chrome-to-har
+```
+
+The guides live in [docs/](docs/index.md), which opens with an "I want to…"
+table covering every page. The usual entry points:
+
+- [Quickstart](docs/quickstart.md) — install and see a tool work
+- [Tutorial: your first script](docs/tutorial-first-script.md) — build a
+  script, make it fail, run it as a Go test
+- [How cdp works](docs/how-cdp-works.md) — why there are several commands, and
+  what is stable
+- [Troubleshooting](docs/troubleshooting.md) — when something goes wrong
+
+For command-level help, use:
+
+```bash
+cdp --help
+churl --help
+chdb --help
+ndp --help
+cdpscript --help
+cdpscripttest --help
+```
+
+
+--- cmd/cua/README.html
+
+# cua
+
+`cua` presents browser and native computer use through seven MCP tools. It starts
+an exclusive backend process for each configured backend and client connection.
+Backend commands use argument arrays; no shell expands them.
+
+Build the coordinator with `go build ./cmd/cua`, then run `cua -config cua.json`.
+For example, a browser configuration can attach to an existing debugging target:
+
+```json
+{
+  "browser": {
+    "command": ["cdp", "-mcp", "-remote-host", "127.0.0.1", "-remote-port", "9222", "-remote-tab", "TARGET_ID"]
+  },
+  "native": {
+    "command": ["computer-use-mcp"],
+    "env": {"MACGO_NO_RELAUNCH": "1"}
+  }
+}
+```
+
+Replace the target ID, port and executable paths for your installation. Either
+backend may be omitted. The native direct mode avoids app relaunch; the process
+still needs macOS permissions. To request app approval, call `surfaces_list`
+with `kind: "native"`, `app`, and `request_approval: true` from a client supporting
+MCP form elicitation. The prompt identifies the app and explains that acceptance
+stores approval for future sessions. Ordinary discovery never prompts. Decline,
+cancel, unsupported clients and permission failures yield no new candidates.
+App approval does not grant Accessibility or Screen Recording permission. The
+request uses the same 30-second bound as discovery; a timeout is never treated as
+acceptance.
+
+Use `surfaces_list`, then `surface_select` with a returned `selection_id`.
+For native windows, first list apps, then list with `kind: "native"` and `app`.
+Selection retains a surface without capturing it. Call `surface_observe` with
+its `surface_id`; call `surface_act` with that surface and its `observation_id`.
+Browser actions are `click`, `type` and `navigate`. Native actions are `click`,
+`type_text`, `set_value`, `scroll`, `secondary_action`, `press_key` and `drag`.
+Action-specific fields go in `action_arguments`.
+
+Tokens belong to one connection. Each backend has one current observation; an
+action consumes it. Backend routing tokens cannot be supplied as action
+arguments. Results report execution, observation and postcondition separately.
+A lost reply may mean the action happened: never replay `dispatched_unknown`.
+Use a fresh observation to inspect the result instead.
+
+`surface_release` drops a selected surface. Native release frees its retained
+handle. Browser release is currently logical; its attachment remains until a
+later switch or disconnect. Disconnect closes the owned backend processes and
+preserves borrowed browser tabs and native windows. Cross-client handoff and
+owned window creation are not implemented. Operations within one connection
+are serialized, including operations on different backends.
+
+Use `app_approval_revoke` with an exact `bundle_id` to withdraw native app
+approval, even when the app is stopped. This affects persistent and session
+grants in cooperating backends sharing the native approval store. It does not
+prompt, change macOS permissions, close windows, or undo dispatched actions.
+A later explicit approval may grant access again. `revoked: false` with
+`error_text` or an MCP error means withdrawal was not confirmed; inspect current
+state and do not automatically retry. `timeout_ms` bounds waiting (default
+30 seconds, maximum 60 seconds); regular filesystem I/O remains subject to OS
+limits. This operation does not require a selected surface.
+
+Native action results preserve `recovery_id` and `pointer_recovery` when a
+pointer gesture needs cleanup. Use `native_recover_pointer` with `mode: "status"`
+to inspect recovery in this connection's native backend. If `retryable` is true,
+an explicit `mode: "retry"` with that exact `recovery_id` retries only the original
+confirmed-unsent mouse-up. It cannot create a new gesture or retry an uncertain
+post. Poll status for completion; never automatically retry. Status and retry
+do not consume a surface observation or require a new surface selection.
+
+
+--- docs/browser-observations.html
+
+# Browser observations and actions
+
+Use `browser_observe` and `browser_act` when an action must refer to the page
+state you inspected. Both are MCP tools provided by `cdp`.
+
+Call `browser_observe` with an empty object to observe the selected frame (the
+root by default), or pass `{"frame_id":"<frame ID>"}` for an exact frame in the
+active target. An explicit frame never falls back to its parent and does not
+change frame selection. The tool returns a `state_id`, `target_id`,
+document identity, URL, and accessibility tree. Interactive elements in the tree
+have refs such as `@1`. Copy the returned identifiers into your action:
+
+```json
+{
+  "state_id": "<returned state_id>",
+  "target_id": "<returned target_id>",
+  "action": "click",
+  "ref": "@1",
+  "expect": {"selector": "#count", "text": "1"}
+}
+```
+
+The ref must come from that observation. For typing, use `"action": "type"`
+and supply a nonempty `text`. To navigate the observed frame, use
+`"action": "navigate"` and an absolute `url`; omit `ref`. `timeout_ms` defaults to 30000 and accepts values
+from 1 through 60000; zero selects the default.
+
+A successful observation replaces the previous state. An action consumes its
+matching state before validation or dispatch, so the same handle cannot be
+retried after a failed attempt. Unknown state IDs do not consume the current
+state. Invalid timeout values are rejected before state lookup.
+
+The action checks the exact target context, frame, loader and document node.
+It also checks that the referenced node is connected to that document. A
+same-URL reload, detached node, or changed active target requires another
+observation. A detached node is never replaced by another node with the same
+name or role.
+
+Before input, the tool activates the target page. Before clicking, it scrolls
+the node into view and checks that its click
+point reaches that node or one of its descendants. An overlay covering that
+point is rejected. Before typing, it checks that focus remains on the observed
+node, including focus within a shadow tree.
+
+The result separates three questions:
+
+| Field | Values | Meaning |
+| --- | --- | --- |
+| `execution` | `not_dispatched`, `dispatched_unknown`, `completed` | Whether action-related commands were attempted and the input sequence or navigation command acknowledged. |
+| `observation` | `captured`, `unavailable` | Whether the subsequent page observation succeeded. |
+| `postcondition` | `not_requested`, `unknown`, `unmet`, `met` | Whether the optional exact text condition was checked and satisfied. |
+
+Page activation, scrolling and focusing are action-related side effects. A failure after one of
+these commands begins is conservatively `dispatched_unknown`. `completed`
+describes browser acknowledgement, not completion of the user's broader task.
+If capture fails after acknowledged input, execution remains `completed` and
+no `fresh_state` is returned. Inspect the target before considering another
+action; a missing observation is not permission to click again.
+
+Navigation waits, within the same timeout, for the acknowledged frame and
+loader's DOMContentLoaded event. A same-document navigation needs no new-loader
+wait. HTTP error pages are valid observations. A readiness or capture failure
+after navigation acknowledgement leaves execution `completed`; a lost
+acknowledgement is `dispatched_unknown`. A download is reported in `error_text`
+and does not imply a new document. Navigation is never automatically retried.
+
+When capture succeeds, use `fresh_state` for the next action. `expect` compares
+the exact `textContent` of a single CSS match in the captured document, once,
+without waiting for an eventual value. Missing or multiple matches are `unmet`;
+an evaluation error is `unknown`. It does not compare input values. `error_text`
+explains validation, execution, capture, or postcondition failures.
+
+The pair serializes its own requests and publishes complete observations.
+Page scripts, other tools and users can still change the page between validation
+and input. This is not a page transaction, and cancellation cannot undo input
+already sent. An observation records document identity; it does not freeze the
+DOM or guarantee that an unchanged node still has the same business meaning.
+
+The pair supports clicks, typing and navigation in the active target's root or
+same-process frames. Cross-process frames require their own active target.
+Screenshot coordinate mapping is not yet part of this pair.
+The pair requires the CDP Accessibility domain; it reports an observation error
+when that domain is unavailable.
+
+
+--- internal/chromedp/README.html
+
+# Internal chromedp runtime
+
+This directory carries the runtime sources and embedded JavaScript from
+chromedp v0.16.0 (commit `7963c203ed5458147d27dc39a5c06d2b12e81664`). The upstream
+license is retained in LICENSE. The upstream module checksum is
+`h1:rOO4deOm4CbZgBCa8mD9g2rDyIoNs0BkgvNrlbp5ouk=`.
+
+The local change adds `WithExistingTarget`: canceling a borrowed attachment
+releases its session without closing the browser's target. `WithTargetID` and
+newly allocated targets retain their existing close-on-cancel behavior. Invalid
+borrowed-target options fail during `Run`, before allocation. Browser-context
+option validation runs after option collection to handle both option orders.
+
+The MCP/browser implementation imports this package. The public `cdpscripttest`
+package and its CLI still use upstream chromedp, preserving their exported
+allocator options and action types. Contexts, options and concrete runtime types
+from the two implementations must not be exchanged. Protocol data types remain
+provided by the shared cdproto dependency. The shared browser feature list is a
+string, so each runtime can construct its own allocator option.
+
+The runtime sources, `kb`, `device`, embedded `js`, and license are copied here;
+the upstream module file, test image fixtures, and upstream test suite are not.
+The local configuration and lifecycle regression tests cover the changed
+behavior. Changes to this copy require comparison with the pinned upstream
+source and review of the upstream tests affected by the update. Preserve source
+and license provenance when updating; do not edit the Go module cache.
+
+An internal import path keeps versioned `go install` working without a module
+replacement directive. This is a maintained source copy, not an independently
+released module. Remove it when an upstream API can supply the required borrowed
+attachment contract, after qualifying the same lifecycle tests.

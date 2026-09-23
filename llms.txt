@@ -1,0 +1,57 @@
+# cdp
+
+> Drive Chrome from the command line to capture network traffic, extract rendered pages, and write browser automation that runs as tests.
+
+## Start here
+
+- [cdp documentation](docs/index.html): Drive Chrome from the command line to capture network traffic, extract rendered pages, and write browser automation that runs as tests.
+- [Quickstart](docs/quickstart.html): Install the cdp tools and confirm they can drive a browser, in about five minutes.
+- [Tutorial: your first script](docs/tutorial-first-script.html): Build a browser automation script from scratch, run it, make it fail on purpose, and turn it into a Go test.
+- [Troubleshooting](docs/troubleshooting.html): Diagnose the common failures — missing requests, browser not found, script errors, and stderr noise that is not an error.
+
+## Learn a tool end to end
+
+- [cdp](docs/cdp.html): The live browser surface — attach to a running browser or launch one, then navigate, evaluate, extract, render, screenshot, or capture.
+- [cdpscript](docs/scripting.html): Write txtar automation scripts, pass them arguments, run them as Go tests, and debug the ones that fail.
+- [churl](docs/churl.html): Fetch a URL through a real browser so JavaScript runs, then print the rendered HTML, text, or JSON — with an optional HAR alongside.
+- [churl behind a proxy](docs/churl-proxy.html): Route churl through HTTP, HTTPS, or SOCKS5 proxies, with authentication for HTTP and HTTPS and bypass rules for all three.
+
+## Test with cdpscripttest
+
+- [cdpscripttest](docs/cdpscripttest.html): Run browser scripts under go test — as cdpscript archives through RunCDPScript, or as rsc.io/script fixtures through Test.
+- [Adopting cdpscripttest](docs/cdpscripttest/adopting.html): Import path, what the dependency costs your module graph, version pinning, and the build-tag arrangement that keeps browsers out of a default go test.
+- [Writing fixtures](docs/cdpscripttest/fixtures.html): The two script dialects side by side, txtar structure, commands, conditions, and the environment variables a fixture can read.
+- [Visual testing](docs/cdpscripttest/visual.html): Screenshot comparison against baselines, masking dynamic content with blur, where baselines live, and screen recording.
+- [Extending the engine](docs/cdpscripttest/extending.html): Add app-specific commands, let fixtures own the server they test, and run scripts sequentially when they share mutable state.
+- [Reports and artifacts](docs/cdpscripttest/reports.html): Per-script and combined Markdown reports pairing each script with its log and images, rendering them to HTML, and redacting the environment first.
+- [Agentic workflows](docs/cdpscripttest/agentic.html): Why the fixture format suits agent-driven product development, and the loop that turns live browser exploration into a committed regression suite.
+
+## Understand the model
+
+- [How cdp works](docs/how-cdp-works.html): Why this repository has several browser commands, how capture and authentication actually work, and which design choices are deliberate.
+
+## Capture and inspect traffic
+
+- [Capture network traffic](docs/capturing-traffic.html): Record HAR and streaming captures, including authenticated sessions and full request and response bodies.
+- [Differential capture](docs/differential-capture.html): Record named captures of the same page and compare them to see which requests appeared, disappeared, or changed between runs.
+
+## Automate the browser
+
+- [Use cdp as an MCP server](docs/plugins.html): Expose the browser to Claude Code, Claude Desktop, and Codex through the cdp MCP server.
+- [Electron debugging](docs/electron-mcp.html): Attach to and debug Electron applications over the DevTools Protocol.
+
+## Work on this repository
+
+- [Testing](docs/testing.html): Run the test suites in this repository, including browser-dependent and script fixture tests.
+
+## Reference
+
+- [Command reference](docs/commands.html): Where every command's flags and subcommands are documented, and how that documentation is kept in sync with the code.
+- [Known issues](docs/known-issues.html): Open bugs and current limitations across the cdp tools, with workarounds where they exist.
+
+## Other
+
+- [cdp](README.html): ![Go Reference](https://pkg.go.dev/github.com/tmc/cdp)
+- [cua](cmd/cua/README.html): cua presents browser and native computer use through seven MCP tools. It starts an exclusive backend process for each configured backend and client connection....
+- [Browser observations and actions](docs/browser-observations.html): Use browser_observe and browser_act when an action must refer to the page state you inspected. Both are MCP tools provided by cdp.
+- [Internal chromedp runtime](internal/chromedp/README.html): This directory carries the runtime sources and embedded JavaScript from chromedp v0.16.0 (commit 7963c203ed5458147d27dc39a5c06d2b12e81664). The upstream...
