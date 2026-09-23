@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"io"
+	"os"
 	"strconv"
 	"strings"
 	"testing"
@@ -342,4 +344,70 @@ func TestBodyDedupKey(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestLoadingFailed checks that a failed request is streamed only when
+// streaming is enabled and always reaches the assembled HAR.
+func TestLoadingFailed(t *testing.T) {
+	tests := []struct {
+		name       string
+		streaming  bool
+		wantStdout bool
+	}{
+		{name: "not streaming", streaming: false, wantStdout: false},
+		{name: "streaming", streaming: true, wantStdout: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r, err := New(WithStreaming(tt.streaming))
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer r.Close()
+
+			stdout := captureStdout(t, func() {
+				handler := r.HandleNetworkEvent(context.Background())
+				handler(&network.EventRequestWillBeSent{
+					RequestID: "fail-1",
+					Request:   &network.Request{Method: "GET", URL: "https://tracker.example.com/pixel"},
+				})
+				handler(&network.EventLoadingFailed{RequestID: "fail-1", ErrorText: "net::ERR_FAILED"})
+			})
+			if got := strings.Contains(stdout, "net::ERR_FAILED"); got != tt.wantStdout {
+				t.Errorf("stdout contains failed entry = %v, want %v; stdout:\n%s", got, tt.wantStdout, stdout)
+			}
+
+			h, err := r.HAR()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(h.Log.Entries) != 1 {
+				t.Fatalf("HAR has %d entries, want 1", len(h.Log.Entries))
+			}
+			e := h.Log.Entries[0]
+			if e.Request.URL != "https://tracker.example.com/pixel" || e.Response.Status != 0 || !strings.Contains(e.Comment, "net::ERR_FAILED") {
+				t.Fatalf("HAR entry = %+v, want failed request", e)
+			}
+		})
+	}
+}
+
+// captureStdout returns what f writes to os.Stdout.
+func captureStdout(t *testing.T, f func()) string {
+	t.Helper()
+	pr, pw, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	old := os.Stdout
+	os.Stdout = pw
+	defer func() { os.Stdout = old }()
+	out := make(chan string)
+	go func() {
+		b, _ := io.ReadAll(pr)
+		out <- string(b)
+	}()
+	f()
+	pw.Close()
+	return <-out
 }

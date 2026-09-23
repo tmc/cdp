@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // captureFileFor runs a set of injected WebRTC console payloads through a
@@ -87,6 +88,42 @@ func TestWebRTCCaptureGating(t *testing.T) {
 				if strings.Contains(got, m) {
 					t.Errorf("capture should not contain %q\ngot:\n%s", m, got)
 				}
+			}
+		})
+	}
+}
+
+// TestStreamingCaptureDoesNotDeadlock checks that injected gRPC-Web and WebRTC
+// captures stream entries without re-acquiring the recorder lock the capture
+// handlers already hold.
+func TestStreamingCaptureDoesNotDeadlock(t *testing.T) {
+	tests := []struct {
+		name    string
+		payload string
+		handle  func(*Recorder, string)
+	}{
+		{"grpc complete", `{"type":"complete","url":"https://api.example.com/rpc","method":"POST","status":200,"full":"GRPC-MARKER"}`, (*Recorder).handleGRPCCapture},
+		{"sdp", `{"type":"sdp-local","sdpType":"offer","sdp":"v=0 SDP-MARKER"}`, (*Recorder).handleDataChannelCapture},
+		{"datachannel", `{"type":"message","label":"chat","dir":"outgoing","data":"DC-MARKER"}`, (*Recorder).handleDataChannelCapture},
+		{"ice", `{"type":"ice-local","candidate":"candidate ICE-MARKER","sdpMid":"0"}`, (*Recorder).handleDataChannelCapture},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r, err := New(WithStreaming(true), WithOutputDir(t.TempDir()),
+				WithWebRTCStreams(WebRTCStreams{SDP: true, DataChannel: true, ICE: true}))
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer r.Close()
+			done := make(chan struct{})
+			go func() {
+				tt.handle(r, tt.payload)
+				close(done)
+			}()
+			select {
+			case <-done:
+			case <-time.After(5 * time.Second):
+				t.Fatal("capture handler deadlocked in streaming mode")
 			}
 		})
 	}

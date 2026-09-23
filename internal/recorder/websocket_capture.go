@@ -355,6 +355,9 @@ func (r *Recorder) scrubWSEntry(entry *wsHAREntry) {
 	}
 	for i, m := range entry.WebSocketMessages {
 		if m.Opcode == 1 {
+			if r.verbose && r.scrubber.SkipsText(m.Data) {
+				log.Printf("scrub: skipped %d-byte WebSocket message: over size cap", len(m.Data))
+			}
 			entry.WebSocketMessages[i].Data, _ = r.scrubber.ScrubText(m.Data)
 		}
 	}

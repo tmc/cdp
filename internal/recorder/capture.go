@@ -171,7 +171,7 @@ func (r *Recorder) handleGRPCCapture(payload string) {
 				}
 			}
 			r.scrubEntry(entry)
-			r.streamEntry(entry)
+			r.streamEntryAtPage(entry, r.pageDomain, r.outputDir)
 		}
 	}
 }
@@ -245,7 +245,7 @@ func (r *Recorder) handleDataChannelCapture(payload string) {
 				},
 			}
 			r.scrubEntry(entry)
-			r.streamEntry(entry)
+			r.streamEntryAtPage(entry, r.pageDomain, r.outputDir)
 		}
 
 	case "sdp-local", "sdp-remote":
@@ -284,7 +284,7 @@ func (r *Recorder) handleDataChannelCapture(payload string) {
 					},
 				},
 			}
-			r.streamEntry(entry)
+			r.streamEntryAtPage(entry, r.pageDomain, r.outputDir)
 		}
 
 	case "ice-local", "ice-remote":
@@ -324,7 +324,7 @@ func (r *Recorder) handleDataChannelCapture(payload string) {
 					},
 				},
 			}
-			r.streamEntry(entry)
+			r.streamEntryAtPage(entry, r.pageDomain, r.outputDir)
 		}
 	}
 }

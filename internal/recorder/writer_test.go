@@ -17,7 +17,7 @@ import (
 )
 
 // TestWriterDoesNotBlockOnRecorderLock verifies that disk I/O is decoupled
-// from r.Mutex. If writeRawToDomainFile took the lock and ran synchronous
+// from r.Mutex. If writeRawToDomainFileAtPage took the lock and ran synchronous
 // os.OpenFile/Fprintln inside it, a slow disk would freeze the chromedp
 // event loop. This test holds r.Lock() from a side goroutine while
 // dispatching events; the writer goroutine must still write to disk because
@@ -47,8 +47,8 @@ func TestWriterDoesNotBlockOnRecorderLock(t *testing.T) {
 	// block on r.Lock().
 	done := make(chan struct{})
 	go func() {
-		_ = r.writeRawToDomainFile("https://example.com/a", dir, []byte(`{"x":1}`))
-		_ = r.writeRawToDomainFile("https://example.com/b", dir, []byte(`{"x":2}`))
+		_ = r.writeRawToDomainFileAtPage("https://example.com/a", "", dir, []byte(`{"x":1}`))
+		_ = r.writeRawToDomainFileAtPage("https://example.com/b", "", dir, []byte(`{"x":2}`))
 		close(done)
 	}()
 
@@ -85,10 +85,10 @@ func TestWriterGroupsRequestsByPageDomain(t *testing.T) {
 	}
 	handler := r.HandleNetworkEvent(context.Background())
 	handler(&page.EventFrameNavigated{Frame: &cdp.Frame{URL: "https://www.lesswrong.com/posts/test"}})
-	if err := r.writeRawToDomainFile("https://res.cloudinary.com/image", dir, []byte(`{"url":"cloudinary"}`)); err != nil {
+	if err := r.writeRawToDomainFileAtPage("https://res.cloudinary.com/image", r.pageDomain, dir, []byte(`{"url":"cloudinary"}`)); err != nil {
 		t.Fatal(err)
 	}
-	if err := r.writeRawToDomainFile("https://p.typekit.net/font", dir, []byte(`{"url":"typekit"}`)); err != nil {
+	if err := r.writeRawToDomainFileAtPage("https://p.typekit.net/font", r.pageDomain, dir, []byte(`{"url":"typekit"}`)); err != nil {
 		t.Fatal(err)
 	}
 	r.Close()
@@ -112,7 +112,7 @@ func TestWriterCanUseRequestDomainLayout(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := r.writeRawToDomainFile("https://res.cloudinary.com/image", dir, []byte(`{"url":"cloudinary"}`)); err != nil {
+	if err := r.writeRawToDomainFileAtPage("https://res.cloudinary.com/image", "", dir, []byte(`{"url":"cloudinary"}`)); err != nil {
 		t.Fatal(err)
 	}
 	r.Close()
@@ -173,13 +173,13 @@ func TestStreamingWritesOutputFile(t *testing.T) {
 	}
 	defer r.Close()
 
-	r.streamEntry(&har.Entry{
+	r.streamEntryAtPage(&har.Entry{
 		Request: &har.Request{
 			Method: "GET",
 			URL:    "https://example.com/",
 		},
 		Response: &har.Response{Status: 200},
-	})
+	}, "", "")
 
 	got, err := os.ReadFile(file)
 	if err != nil {
@@ -214,7 +214,7 @@ func TestWriterDropsOnSaturation(t *testing.T) {
 	const overflow = 4096
 	dir := t.TempDir()
 	for i := 0; i < writeQueueSize+overflow; i++ {
-		_ = r.writeRawToDomainFile("https://saturate.example.com/", dir, []byte(`{}`))
+		_ = r.writeRawToDomainFileAtPage("https://saturate.example.com/", "", dir, []byte(`{}`))
 	}
 	r.CloseDomainWriters()
 
@@ -249,7 +249,7 @@ func TestWriterCloseIsIdempotent(t *testing.T) {
 	dir := t.TempDir()
 	done := make(chan struct{})
 	go func() {
-		_ = r.writeRawToDomainFile("https://post-close.example.com/", dir, []byte(`{}`))
+		_ = r.writeRawToDomainFileAtPage("https://post-close.example.com/", "", dir, []byte(`{}`))
 		r.CloseDomainWriters()
 		r.SetOutputDir(dir)
 		close(done)

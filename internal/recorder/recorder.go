@@ -73,6 +73,7 @@ type Recorder struct {
 	bodies       map[network.RequestID]capturedBody
 	postData     map[network.RequestID]string
 	timings      map[network.RequestID]*network.EventLoadingFinished
+	failures     map[network.RequestID]*network.EventLoadingFailed
 	requestTags  map[network.RequestID]string // Tag for each request
 	requestPages map[network.RequestID]string // Page domain for each request
 	annotations  []*Annotation                // Manual annotations from shell commands
@@ -199,7 +200,7 @@ func WithMaxBodyBytes(n int64) Option {
 }
 
 // WithGroupByPage selects whether output directories use the navigated page's
-// registrable domain. The default is enabled.
+// hostname. The default is enabled.
 func WithGroupByPage(enabled bool) Option {
 	return func(r *Recorder) error {
 		r.groupByPage = enabled
@@ -245,6 +246,7 @@ func New(opts ...Option) (*Recorder, error) {
 		bodies:          make(map[network.RequestID]capturedBody),
 		postData:        make(map[network.RequestID]string),
 		timings:         make(map[network.RequestID]*network.EventLoadingFinished),
+		failures:        make(map[network.RequestID]*network.EventLoadingFailed),
 		requestTags:     make(map[network.RequestID]string),
 		requestPages:    make(map[network.RequestID]string),
 		annotations:     make([]*Annotation, 0),
@@ -269,14 +271,6 @@ func New(opts ...Option) (*Recorder, error) {
 }
 
 func pageDomain(rawURL string) string {
-	u, err := url.Parse(rawURL)
-	if err != nil {
-		return "unknown_domain"
-	}
-	return sitegroup.Host(u.Hostname())
-}
-
-func requestDomain(rawURL string) string {
 	u, err := url.Parse(rawURL)
 	if err != nil {
 		return "unknown_domain"
@@ -421,9 +415,19 @@ func (r *Recorder) HandleNetworkEvent(ctx context.Context) func(interface{}) {
 		case *network.EventLoadingFailed:
 			// A failed request (connection reset/refused, blocked, aborted,
 			// CORS failure) never reaches LoadingFinished, so it would otherwise
-			// be dropped from the capture entirely. Write a request-only entry
-			// with the error recorded so outgoing requests are not lost.
+			// be dropped from the capture entirely. Record it so HAR includes
+			// a request-only entry with the error, and stream that entry when
+			// streaming so outgoing requests are not lost.
 			if _, ok := r.fetchBodies[e.RequestID]; ok {
+				break
+			}
+			r.failures[e.RequestID] = e
+			if r.verbose {
+				if req := r.requests[e.RequestID]; req != nil {
+					log.Printf("Loading failed: %s %s (%s)", req.Method, req.URL, e.ErrorText)
+				}
+			}
+			if !r.streaming {
 				break
 			}
 			if entry := r.buildFailedEntry(e.RequestID, e); entry != nil {
@@ -494,11 +498,8 @@ func (r *Recorder) HandleNetworkEvent(ctx context.Context) func(interface{}) {
 						if snapTag != "" {
 							r.requestTags[reqID] = snapTag
 						}
-						savedDir := r.outputDir
-						r.outputDir = snapDir
 						entry := r.buildStreamEntry(reqID, dedupResp, nil)
 						r.streamEntryAtPage(entry, snapPage, snapDir)
-						r.outputDir = savedDir
 						r.Unlock()
 					}
 					return
@@ -520,11 +521,8 @@ func (r *Recorder) HandleNetworkEvent(ctx context.Context) func(interface{}) {
 							if snapTag != "" {
 								r.requestTags[reqID] = snapTag
 							}
-							savedDir := r.outputDir
-							r.outputDir = snapDir
 							entry := r.buildStreamEntry(reqID, resp, nil)
 							r.streamEntryAtPage(entry, snapPage, snapDir)
-							r.outputDir = savedDir
 						}
 						r.Unlock()
 					}
@@ -547,11 +545,8 @@ func (r *Recorder) HandleNetworkEvent(ctx context.Context) func(interface{}) {
 						if snapTag != "" {
 							r.requestTags[reqID] = snapTag
 						}
-						savedDir := r.outputDir
-						r.outputDir = snapDir
 						entry := r.buildStreamEntry(reqID, resp, &captured)
 						r.streamEntryAtPage(entry, snapPage, snapDir)
-						r.outputDir = savedDir
 					}
 				}
 				r.Unlock()
@@ -752,10 +747,7 @@ func (r *Recorder) HandleFetchEvent(ctx context.Context) func(interface{}) {
 					entry := r.buildStreamEntry(netID, resp, captured)
 					// Use the snapshotted outputDir so the entry goes to
 					// the correct push-context subdirectory.
-					savedDir := r.outputDir
-					r.outputDir = snapshotDir
 					r.streamEntryAtPage(entry, snapshotPage, snapshotDir)
-					r.outputDir = savedDir
 				}
 			}
 
@@ -821,9 +813,6 @@ func (r *Recorder) buildFailedEntry(reqID network.RequestID, e *network.EventLoa
 	if !ok || req == nil {
 		return nil
 	}
-	if r.verbose {
-		log.Printf("Loading failed: %s %s (%s)", req.Method, req.URL, e.ErrorText)
-	}
 	harReq := &har.Request{
 		Method:      req.Method,
 		URL:         req.URL,
@@ -875,6 +864,9 @@ func (r *Recorder) scrubEntry(entry *har.Entry) {
 			// Request bodies carry credentials directly: form logins, OAuth
 			// token exchanges, GraphQL mutations holding an API key.
 			if entry.Request.PostData.Text != "" {
+				if r.verbose && r.scrubber.SkipsText(entry.Request.PostData.Text) {
+					log.Printf("scrub: skipped %d-byte request body of %s: over size cap", len(entry.Request.PostData.Text), entry.Request.URL)
+				}
 				entry.Request.PostData.Text, _ = r.scrubber.ScrubText(entry.Request.PostData.Text)
 			}
 			for _, p := range entry.Request.PostData.Params {
@@ -890,6 +882,13 @@ func (r *Recorder) scrubEntry(entry *har.Entry) {
 				entry.Response.Headers[i].Name, entry.Response.Headers[i].Value)
 		}
 		if entry.Response.Content != nil && entry.Response.Content.Text != "" {
+			if r.verbose && r.scrubber.SkipsText(entry.Response.Content.Text) {
+				var u string
+				if entry.Request != nil {
+					u = entry.Request.URL
+				}
+				log.Printf("scrub: skipped %d-byte response body of %s: over size cap", len(entry.Response.Content.Text), u)
+			}
 			entry.Response.Content.Text, _ = r.scrubber.ScrubText(entry.Response.Content.Text)
 		}
 	}
@@ -917,14 +916,6 @@ func scrubURL(s *scrub.Scrubber, rawURL string) string {
 	}
 	u.RawQuery = q.Encode()
 	return u.String()
-}
-
-func (r *Recorder) streamEntry(entry *har.Entry) {
-	r.Lock()
-	page := r.pageDomain
-	dir := r.outputDir
-	r.Unlock()
-	r.streamEntryAtPage(entry, page, dir)
 }
 
 // transformEntry applies the configured filter and template to entry. It
@@ -1012,14 +1003,6 @@ func appendJSONL(file string, data []byte) error {
 	return err
 }
 
-// writeToDomainFile streams entry to a domain-specific file via the writer
-// goroutine. Returns immediately; disk I/O happens asynchronously.
-func (r *Recorder) writeToDomainFile(entry *har.Entry, data []byte) error {
-	page := r.pageDomain
-	dir := r.outputDir
-	return r.writeToDomainFileAtPage(entry, page, dir, data)
-}
-
 func (r *Recorder) writeToDomainFileAtPage(entry *har.Entry, page, dir string, data []byte) error {
 	var uStr string
 	if entry.Request != nil && entry.Request.URL != "" {
@@ -1031,18 +1014,13 @@ func (r *Recorder) writeToDomainFileAtPage(entry *har.Entry, page, dir string, d
 	return r.writeRawToDomainFileAtPage(uStr, page, dir, data)
 }
 
-// writeRawToDomainFile enqueues a pre-marshaled JSON line for the writer
-// goroutine to deliver to the per-host JSONL file. Used by both HTTP and
-// WebSocket streaming paths. Non-blocking: under sustained backpressure the
+// writeRawToDomainFileAtPage enqueues a pre-marshaled JSON line for the writer
+// goroutine to deliver to the per-host JSONL file under page. Used by both HTTP
+// and WebSocket streaming paths. Non-blocking: under sustained backpressure the
 // write is dropped and Recorder.dropped is incremented (see writer.go).
-func (r *Recorder) writeRawToDomainFile(rawURL, dir string, data []byte) error {
-	page := r.pageDomain
-	return r.writeRawToDomainFileAtPage(rawURL, page, dir, data)
-}
-
 func (r *Recorder) writeRawToDomainFileAtPage(rawURL, page, dir string, data []byte) error {
 	if !r.groupByPage {
-		page = requestDomain(rawURL)
+		page = pageDomain(rawURL)
 	}
 	return r.enqueueWrite(rawURL, page, dir, data)
 }
@@ -1065,6 +1043,19 @@ func (r *Recorder) HAR() (*har.HAR, error) {
 	}
 
 	for reqID, req := range r.requests {
+		if failure, ok := r.failures[reqID]; ok {
+			entry := r.buildFailedEntry(reqID, failure)
+			if entry == nil {
+				continue
+			}
+			if tag := r.requestTags[reqID]; tag != "" {
+				entry.Comment = fmt.Sprintf("tag:%s %s", tag, entry.Comment)
+			}
+			if entry = r.transformEntry(entry); entry != nil {
+				h.Log.Entries = append(h.Log.Entries, entry)
+			}
+			continue
+		}
 		resp := r.responses[reqID]
 		if resp == nil {
 			continue
