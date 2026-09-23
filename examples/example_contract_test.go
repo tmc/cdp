@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/tmc/cdp/cdpscript"
 	"golang.org/x/tools/txtar"
 )
 
@@ -39,6 +40,25 @@ func TestLiveDomainExamplesHaveRunnableContract(t *testing.T) {
 				if !files[name] {
 					t.Fatalf("%s references missing jsfile %s", path, name)
 				}
+			}
+		})
+	}
+}
+
+func TestTopLevelExamplesValidate(t *testing.T) {
+	paths, err := filepath.Glob("*.txtar")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range paths {
+		t.Run(path, func(t *testing.T) {
+			f, err := os.Open(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer f.Close()
+			if err := cdpscript.ValidateReader(path, f); err != nil {
+				t.Error(err)
 			}
 		})
 	}
