@@ -40,6 +40,22 @@ log hello ${ARG1}
 	}
 }
 
+func TestSourceReadsEmbeddedFile(t *testing.T) {
+	var stdout bytes.Buffer
+	engine := New(WithStdout(&stdout))
+	script := `-- main.cdp --
+source helper.cdp
+-- helper.cdp --
+log from helper
+`
+	if err := engine.ExecuteReader(context.Background(), "stdin", strings.NewReader(script), nil); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := stdout.String(), "from helper\n"; got != want {
+		t.Fatalf("stdout = %q, want %q", got, want)
+	}
+}
+
 func TestValidateReaderRejectsUnknownCommand(t *testing.T) {
 	script := `-- main.cdp --
 not-a-command

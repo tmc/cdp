@@ -1047,8 +1047,7 @@ func (e *Engine) cmdSource() script.Cmd {
 				return nil, fmt.Errorf("source: path required")
 			}
 
-			// Read the script file
-			data, err := os.ReadFile(scriptPath)
+			data, err := os.ReadFile(s.Path(scriptPath))
 			if err != nil {
 				return nil, fmt.Errorf("source: failed to read %s: %w", scriptPath, err)
 			}
