@@ -1,9 +1,7 @@
 package main
 
 import (
-	"fmt"
 	"log"
-	"os"
 
 	"github.com/spf13/cobra"
 )
@@ -12,24 +10,6 @@ var profileCmd = &cobra.Command{
 	Use:   "profile",
 	Short: "Performance profiling",
 	Long:  "CPU and heap profiling for both Node.js and Chrome",
-}
-
-var profileStartCmd = &cobra.Command{
-	Use:   "start",
-	Short: "Start CPU profiling",
-	Run: func(cmd *cobra.Command, args []string) {
-		callCmd.Run(cmd, []string{"Profiler.start", "{}"})
-		fmt.Fprintln(os.Stderr, "Profiler started")
-	},
-}
-
-var profileStopCmd = &cobra.Command{
-	Use:   "stop",
-	Short: "Stop CPU profiling and save",
-	Run: func(cmd *cobra.Command, args []string) {
-		// The profile is printed as raw JSON; it is not saved to a file.
-		callCmd.Run(cmd, []string{"Profiler.stop", "{}"})
-	},
 }
 
 var profileCPUCmd = &cobra.Command{
@@ -73,8 +53,6 @@ var profileHeapCmd = &cobra.Command{
 func init() {
 	rootCmd.AddCommand(profileCmd)
 
-	profileCmd.AddCommand(profileStartCmd)
-	profileCmd.AddCommand(profileStopCmd)
 	profileCmd.AddCommand(profileCPUCmd)
 	profileCmd.AddCommand(profileHeapCmd)
 

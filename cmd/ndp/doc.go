@@ -53,8 +53,11 @@ Every command has its own flags and help text:
 
 # Profiling and raw access
 
-	profile start                Start profiling
-	profile stop                 Stop profiling and write the result
+	profile cpu [duration]       Profile the CPU for a duration (default 10s)
+	                             and write the profile to -o
+	                             (default cpu-profile.json)
+	profile heap                 Take a heap snapshot and write it to -o
+	                             (default heap-snapshot.json)
 	call <method> [json]         Execute a raw CDP method, for anything the
 	                             commands above do not cover
 	proxy                        Start a WebSocket proxy between a CDP client
