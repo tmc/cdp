@@ -11,7 +11,7 @@ import (
 	"github.com/BurntSushi/toml"
 )
 
-//go:generate sh -c "curl -sL https://raw.githubusercontent.com/gitleaks/gitleaks/145400593c178304246371bc45290588bc72f43e/config/gitleaks.toml > gitleaks.toml"
+//go:generate sh -c "curl -fsSL -o gitleaks.toml.tmp https://raw.githubusercontent.com/gitleaks/gitleaks/09242ce9c8a60d9b051fc2d166f9e849b88c7ac0/config/gitleaks.toml && mv gitleaks.toml.tmp gitleaks.toml"
 
 //go:embed gitleaks.toml
 var gitleaksConfig string
@@ -119,6 +119,12 @@ func (s *Scrubber) Enabled() bool {
 // parameters — where secrets actually appear — are scrubbed separately and are
 // never subject to this cap.
 const maxScrubBytes = 512 << 10 // 512 KiB
+
+// SkipsText reports whether ScrubText would return text unscrubbed because it
+// exceeds the scan size cap. Callers use it to log the skip.
+func (s *Scrubber) SkipsText(text string) bool {
+	return s.enabled && len(text) > maxScrubBytes
+}
 
 // ScrubText redacts secrets from source text. Returns scrubbed text and count of redactions.
 func (s *Scrubber) ScrubText(text string) (string, int) {

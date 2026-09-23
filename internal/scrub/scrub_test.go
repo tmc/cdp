@@ -164,6 +164,12 @@ func TestScrubTextSizeGuard(t *testing.T) {
 	if _, count := s.ScrubText(under); count == 0 {
 		t.Errorf("secret in text under the size cap should be redacted")
 	}
+	if s.SkipsText(under) {
+		t.Errorf("SkipsText(under cap) = true, want false")
+	}
+	if !s.SkipsText(secret + strings.Repeat(" ", maxScrubBytes)) {
+		t.Errorf("SkipsText(over cap) = false, want true")
+	}
 
 	over := secret + strings.Repeat(" ", maxScrubBytes)
 	out, count := s.ScrubText(over)
