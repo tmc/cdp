@@ -162,7 +162,7 @@ cdpscript login.txtar
 cdpscripttest --url http://localhost:8090 testdata/login.txt
 ```
 
-## Command Summary
+## What `chrome-to-har` Does
 
 `chrome-to-har` is the focused capture entry point. It is useful when you want HAR output, streaming entry logs, profile-based browsing, or differential capture that compares two runs of the same page.
 
@@ -174,7 +174,7 @@ The main `cdp` command is the broader general-purpose entry point. It goes beyon
 - navigate, evaluate JavaScript, and extract page state
 - record HAR output and stream HARL JSONL capture data to a file, or to
   stdout when `--harl-file -` is explicit
-- inject extra capture logic for traffic CDP does not expose directly, including gRPC-Web streams and WebRTC SDP, DataChannel, and ICE candidates (select the WebRTC streams to capture with `--webrtc-capture`, e.g. `--webrtc-capture=sdp,datachannel` (default), `=all`, or `=none`)
+- inject extra capture logic for traffic CDP does not expose directly, including gRPC-Web streams and WebRTC SDP, DataChannel, and ICE candidates (under `--full-capture`, select the WebRTC streams with `--webrtc-capture`, e.g. `--webrtc-capture=sdp,datachannel` (default), `=all`, or `=none`)
 - run in interactive and MCP-oriented modes
 
 ## What `churl` Does
@@ -213,7 +213,7 @@ The module is pre-v1, so nothing here carries a v1 compatibility promise yet. Th
 
 **MCP tool set** (`cdp --mcp`). The least stable surface. Tool names, input schemas, and result shapes follow what the hosts need and may change without notice. Pin a commit if you depend on a specific schema.
 
-Anything reached only under the `cdp` build tag — the screen recorder, the WebRTC shim, screenshot-comparison thresholds — is test-harness machinery and tracks the browser behavior it wraps. Baseline images and pixel thresholds are not a compatibility contract.
+The screen recorder, the WebRTC shim, and screenshot-comparison thresholds are test-harness machinery and track the browser behavior they wrap, even where their Go API is exported. Baseline images and pixel thresholds are not a compatibility contract.
 
 ## Trust Model
 

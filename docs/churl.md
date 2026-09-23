@@ -150,10 +150,10 @@ before or after load (`--script-before`, `--script-after`, and their
 
 ## What does not work
 
-The wget-style recursion and mirroring flags — `-r`, `-m`, `-l`, `-np`, `-P`
-and the rest — are parsed and ignored. `churl` exits 0 and writes nothing. Use
-it for single-URL fetches and drive a crawl from a shell loop.
-See [Known issues](/docs/known-issues).
+`churl` fetches one page per run. It does not implement `wget`'s recursion and
+mirroring flags — `-r`, `-m`, `-l`, `-np`, `-P` and the rest — and rejects
+them as undefined, exiting `2`. To crawl, drive `churl` from a shell loop over
+URLs you enumerate yourself.
 
 ## Exit status
 

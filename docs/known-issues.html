@@ -2215,15 +2215,14 @@
             
 <h1 id="known-issues">Known issues</h1>
 <p>Open bugs and current limitations across the cdp tools, with workarounds where they exist.</p>
-<p>Open bugs across the repository: the MCP tools, plus <code>churl</code>&rsquo;s recursion and
-mirroring flags, which are accepted but do nothing.</p>
+<p>Open bugs across the repository, currently all in the MCP tools.</p>
 <h2 id="resolved-issues">Resolved Issues</h2>
 <h3 id="click/type_text/hover/focus/press_key-timeout-units-ambiguous">click/type_text/hover/focus/press_key timeout units ambiguous</h3>
 <p>Resolved by <code>interactionCtx</code>: timeout values from 1 through 60 are seconds;
 values greater than 60 are treated as milliseconds. This preserves the
 documented seconds API while handling common agent inputs such as <code>5000</code> for
 5 seconds.</p>
-<p><strong>Observed</strong>: 2026-04-05, A998 session. <code>click(selector: &quot;a[href='/explore']&quot;, timeout: 5000)</code> hung for 6+ minutes on github.com.</p>
+<p><strong>Observed</strong>: 2026-04-05. <code>click(selector: &quot;a[href='/explore']&quot;, timeout: 5000)</code> hung for 6+ minutes on github.com.</p>
 <p><strong>Files</strong>: <code>cmd/cdp/mcp_tools.go</code>, <code>cmd/cdp/mcp_click_test.go</code></p>
 <h3 id="extensions-domain-pipe-requirement-for-list/install/uninstall">Extensions domain pipe requirement for list/install/uninstall</h3>
 <p>CDP Extensions-domain methods still require <code>--remote-debugging-pipe</code> and
@@ -2263,33 +2262,27 @@ into one <code>-diff-work-dir</code> both reached <code>Status: completed</code>
 and the comparison wrote a report — <code>0 added, 0 removed, 1 modified requests</code>.</p>
 <p><strong>Files</strong>: <code>cmd/chrome-to-har/main.go</code>, <code>internal/differential/controller.go</code>
 (<code>TestCaptureDifferentialCompletesCapture</code>)</p>
+<h3 id="churl-accepted-mirroring-flags-and-ignored-them">churl accepted mirroring flags and ignored them</h3>
+<p><code>churl -r</code>, <code>-m</code>, <code>-l</code>, <code>-np</code>, and <code>-P</code> parsed into fields nothing read, so
+churl printed a single page and exited 0 while the mirror directory stayed
+empty.</p>
+<p>churl now defines none of those flags: it fetches one page per run and an
+attempt to mirror fails as a usage error, exiting 2. Verified: <code>churl -r https://example.com</code> prints <code>flag provided but not defined: -r</code> and exits 2.</p>
+<p><strong>Files</strong>: <code>cmd/churl/main.go</code>, <code>cmd/churl/main_test.go</code>
+(<code>TestChurl_MirrorFlagsRejected</code>)</p>
 <h2 id="active-issues">Active Issues</h2>
-<h3 id="1-churl-recursion-and-mirroring-flags-do-nothing">1. churl recursion and mirroring flags do nothing</h3>
-<p><strong>Symptom</strong>: <code>churl -r</code>, <code>-m</code>, <code>-l</code>, <code>-np</code>, and <code>-P</code> are accepted, and churl
-exits 0, but no files are written — the page is printed to stdout as though
-none of the flags were given.</p>
-<div class="md-code">
-<pre><code>churl -r -np -l 1 -P ./mirror http://localhost:8099/   # exit 0, ./mirror stays empty
-</code></pre>
-</div>
-<p><strong>Root cause</strong>: the options are parsed into fields that nothing reads;
-<code>cmd/churl/main.go</code> declares <code>recursive bool</code> and never consults it.</p>
-<p><strong>Workaround</strong>: none for mirroring. For a single page, churl works as
-documented; for a crawl, drive it from a shell loop over URLs you enumerate
-yourself.</p>
-<p><strong>Observed</strong>: 2026-08-04, against this tree.</p>
-<h3 id="2-click-can-hang-on-elements-that-trigger-navigation">2. click can hang on elements that trigger navigation</h3>
+<h3 id="1-click-can-hang-on-elements-that-trigger-navigation">1. click can hang on elements that trigger navigation</h3>
 <p><strong>Symptom</strong>: <code>click</code> on a link that navigates the page may hang if the navigation changes the DOM before chromedp&rsquo;s click action completes. The element becomes stale mid-action.</p>
 <p><strong>Workaround</strong>: Use <code>evaluate</code> with <code>document.querySelector('a').click()</code> for navigation-triggering clicks, or use <code>navigate</code> directly if the URL is known.</p>
 <p><strong>Files</strong>: the <code>click</code> tool in <code>cmd/cdp/mcp_tools.go</code></p>
-<h3 id="3-coverage-snapshot-on-minimal-js-pages-returns-empty">3. Coverage snapshot on minimal-JS pages returns empty</h3>
+<h3 id="2-coverage-snapshot-on-minimal-js-pages-returns-empty">2. Coverage snapshot on minimal-JS pages returns empty</h3>
 <p><strong>Symptom</strong>: <code>get_coverage</code> after <code>start_coverage</code> on server-rendered pages (e.g., Hacker News) returns 0 files because there&rsquo;s little/no JS to profile.</p>
-<p><strong>Not a bug</strong>: Expected behavior — V8 coverage only tracks JavaScript execution. Document this in tool description.</p>
-<p><strong>Observed</strong>: 2026-04-05, A998 session on news.ycombinator.com.</p>
-<h3 id="4-extension_console/extension_evaluate-fail-for-devtools-only-extensions">4. extension_console/extension_evaluate fail for devtools-only extensions</h3>
-<p><strong>Symptom</strong>: &ldquo;no target found for extension&rdquo; when calling <code>extension_console</code> or <code>extension_evaluate</code> on a DevTools panel extension (like our coverage extension).</p>
+<p><strong>Not a bug</strong>: V8 coverage only tracks JavaScript execution.</p>
+<p><strong>Observed</strong>: 2026-04-05 on news.ycombinator.com.</p>
+<h3 id="3-extension_console/extension_evaluate-fail-for-devtools-only-extensions">3. extension_console/extension_evaluate fail for devtools-only extensions</h3>
+<p><strong>Symptom</strong>: &ldquo;no target found for extension&rdquo; when calling <code>extension_console</code> or <code>extension_evaluate</code> on a DevTools panel extension (such as <code>extension/coverage</code>).</p>
 <p><strong>Root cause</strong>: DevTools-only extensions (with <code>devtools_page</code> but no <code>background</code> service worker) don&rsquo;t create CDP-visible targets. There&rsquo;s no <code>chrome-extension://</code> target to attach to.</p>
-<p><strong>Workaround</strong>: None currently. DevTools panel extensions run in the DevTools process, not as separate targets.</p>
+<p><strong>Workaround</strong>: Run a headed browser and open DevTools; the extension&rsquo;s target exists only while a DevTools window is open. The error now says so when the extension is installed but has no target.</p>
 <p><strong>Observed</strong>: 2026-04-05, A998 extension test. Extension ID agmhhbefggjmejggmflmppmacnbmhnne.</p>
 <h2 id="next-steps">Next steps</h2>
 <ul>
@@ -2304,7 +2297,7 @@ from.</li>
             
 
 <footer class="page-footer">
-    <div class="last-updated">Last updated: 2026-09-22</div>
+    <div class="last-updated">Last updated: 2026-09-23</div>
     
 </footer>
 
@@ -2349,7 +2342,7 @@ from.</li>
                 document.body.insertBefore(box, document.body.firstChild);
             }
             var p = document.createElement('p');
-            p.textContent = name + ' could not be loaded (offline?) — ' + consequence + '.';
+            p.textContent = name + ' could not be loaded (offline?): ' + consequence + '.';
             box.appendChild(p);
         };
     </script>

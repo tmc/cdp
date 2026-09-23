@@ -41,8 +41,7 @@ absolute path (a GUI app does not inherit your shell `PATH`), defaulting to
 
 ## Claude Code
 
-The repository is itself a Claude Code plugin and a single-plugin marketplace.
-Once the repository is published to its default branch on GitHub:
+The repository is itself a Claude Code plugin and a single-plugin marketplace:
 
 ```bash
 /plugin marketplace add tmc/cdp
@@ -53,8 +52,7 @@ These two commands were not executed for this revision; the plugin files they
 read are present on `main`.
 
 `/plugin marketplace add` reads `marketplace.json` from the repository's default
-branch, so this flow works only after these files land on `main`. Until then —
-or for local development — load the plugin directly from a checkout:
+branch. For local development, load the plugin directly from a checkout:
 
 ```bash
 claude --plugin-dir .

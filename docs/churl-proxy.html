@@ -2235,7 +2235,7 @@
 <pre class="chroma"><code><span class="line"><span class="cl"><span class="c1"># Basic SOCKS5 proxy</span>
 </span></span><span class="line"><span class="cl">churl --socks5-proxy socks5://proxy.example.com:1080 https://example.com
 </span></span></code></pre></div>
-<h2 id="advanced-options">Advanced Options</h2>
+<h2 id="options">Options</h2>
 <h3 id="proxy-bypass-list">Proxy Bypass List</h3>
 <p>Skip the proxy for specific hosts:</p>
 <div class="md-code" data-language="Bash">
@@ -2379,7 +2379,7 @@ tool-wide, not proxy-specific. See <a href="churl.html#exit-status">churl</a>.</
             
 
 <footer class="page-footer">
-    <div class="last-updated">Last updated: 2026-09-22</div>
+    <div class="last-updated">Last updated: 2026-09-23</div>
     
 </footer>
 
@@ -2429,7 +2429,7 @@ tool-wide, not proxy-specific. See <a href="churl.html#exit-status">churl</a>.</
                 document.body.insertBefore(box, document.body.firstChild);
             }
             var p = document.createElement('p');
-            p.textContent = name + ' could not be loaded (offline?) — ' + consequence + '.';
+            p.textContent = name + ' could not be loaded (offline?): ' + consequence + '.';
             box.appendChild(p);
         };
     </script>

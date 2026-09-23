@@ -2249,6 +2249,11 @@ subtests.</p>
 <pre class="chroma"><code><span class="line"><span class="cl">go <span class="nb">test</span> -p <span class="m">1</span> ./cmd/churl/... ./internal/browser/...
 </span></span><span class="line"><span class="cl">go <span class="nb">test</span> -p <span class="m">1</span> ./cmd/cdp/...
 </span></span></code></pre></div>
+<p>Browser-backed <code>cdpscripttest</code> fixtures are behind the <code>cdp</code> build tag:</p>
+<div class="md-code" data-language="Bash">
+<span class="md-code-lang" aria-hidden="true">Bash</span>
+<pre class="chroma"><code><span class="line"><span class="cl">go <span class="nb">test</span> -tags cdp -p <span class="m">1</span> -parallel <span class="m">1</span> ./cdpscripttest
+</span></span></code></pre></div>
 <p>If Chrome is not installed or discoverable, many of these tests call <code>testutil.SkipIfNoChrome(t)</code> and skip.</p>
 <h3 id="script-fixtures">Script fixtures</h3>
 <p>The <code>cdpscripttest</code> fixtures are txtar scripts rather than Go tests, and are
@@ -2277,7 +2282,7 @@ no browser:</p>
 </span></span><span class="line"><span class="cl">go <span class="nb">test</span> -list . ./cmd/churl
 </span></span><span class="line"><span class="cl">
 </span></span><span class="line"><span class="cl"><span class="c1"># Run one test</span>
-</span></span><span class="line"><span class="cl">go <span class="nb">test</span> -run TestBasicRun ./cmd/churl
+</span></span><span class="line"><span class="cl">go <span class="nb">test</span> -run TestChurl_ShowHelp ./cmd/churl
 </span></span><span class="line"><span class="cl">
 </span></span><span class="line"><span class="cl"><span class="c1"># Run with verbose output</span>
 </span></span><span class="line"><span class="cl">go <span class="nb">test</span> -v ./cmd/churl
@@ -2290,7 +2295,7 @@ no browser:</p>
 <p>Browser-facing tests share helpers in <code>internal/testutil/chrome.go</code>.</p>
 <p>Useful helpers:</p>
 <ul>
-<li><code>testutil.SkipIfNoChrome(t)</code>: skip when Chrome is unavailable or <code>go test -short</code> is in use</li>
+<li><code>testutil.SkipIfNoChrome(t)</code>: skip in <code>-short</code> mode, when <code>CI</code> or <code>SKIP_BROWSER_TESTS</code> is set, or when no Chromium-based browser is found</li>
 <li><code>testutil.MustStartChrome(t, ctx, headless)</code>: launch Chrome for a test and fail immediately on setup errors</li>
 <li><code>testutil.TestServer(t, handler)</code>: start a local HTTP server for integration tests</li>
 </ul>
@@ -2310,16 +2315,16 @@ no browser:</p>
 <h2 id="environment">Environment</h2>
 <p>Recognized environment variables include:</p>
 <ul>
-<li><code>CHROME_PATH</code>: explicit path to a Chrome or Chromium executable</li>
-<li><code>CI</code>: commonly used to signal non-interactive test environments</li>
+<li><code>CHROME_EXECUTABLE_PATH</code>: explicit path to a Chrome or Chromium executable</li>
+<li><code>CI</code>, <code>SKIP_BROWSER_TESTS</code>: skip browser-dependent tests</li>
 </ul>
 <p>In practice, the most important control is whether Chrome is installed and discoverable.</p>
 <h2 id="common-failure-modes">Common Failure Modes</h2>
 <h3 id="chrome-not-found">Chrome not found</h3>
-<p>Install Chrome, Chromium, or another supported Chromium-based browser, or set <code>CHROME_PATH</code>.</p>
+<p>Install Chrome, Chromium, or another supported Chromium-based browser, or set <code>CHROME_EXECUTABLE_PATH</code>.</p>
 <div class="md-code" data-language="Bash">
 <span class="md-code-lang" aria-hidden="true">Bash</span>
-<pre class="chroma"><code><span class="line"><span class="cl"><span class="nb">export</span> <span class="nv">CHROME_PATH</span><span class="o">=</span><span class="s2">&#34;/path/to/chrome&#34;</span>
+<pre class="chroma"><code><span class="line"><span class="cl"><span class="nb">export</span> <span class="nv">CHROME_EXECUTABLE_PATH</span><span class="o">=</span><span class="s2">&#34;/path/to/chrome&#34;</span>
 </span></span><span class="line"><span class="cl">go <span class="nb">test</span> ./cmd/churl/...
 </span></span></code></pre></div>
 <h3 id="slow-or-flaky-browser-startup">Slow or flaky browser startup</h3>
@@ -2402,7 +2407,7 @@ failures.</li>
             
 
 <footer class="page-footer">
-    <div class="last-updated">Last updated: 2026-09-22</div>
+    <div class="last-updated">Last updated: 2026-09-23</div>
     
 </footer>
 
@@ -2452,7 +2457,7 @@ failures.</li>
                 document.body.insertBefore(box, document.body.firstChild);
             }
             var p = document.createElement('p');
-            p.textContent = name + ' could not be loaded (offline?) — ' + consequence + '.';
+            p.textContent = name + ' could not be loaded (offline?): ' + consequence + '.';
             box.appendChild(p);
         };
     </script>

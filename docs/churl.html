@@ -2362,10 +2362,10 @@ before or after load (<code>--script-before</code>, <code>--script-after</code>,
 <code>--script-file-*</code> forms), and watch WebSocket traffic (<code>--ws-enabled</code>,
 <code>--ws-send</code>, <code>--ws-wait-for</code>). These are documented flag-by-flag in <code>go doc ./cmd/churl</code>; no page here has verified their workflows end to end.</p>
 <h2 id="what-does-not-work">What does not work</h2>
-<p>The wget-style recursion and mirroring flags — <code>-r</code>, <code>-m</code>, <code>-l</code>, <code>-np</code>, <code>-P</code>
-and the rest — are parsed and ignored. <code>churl</code> exits 0 and writes nothing. Use
-it for single-URL fetches and drive a crawl from a shell loop.
-See <a href="known-issues.html">Known issues</a>.</p>
+<p><code>churl</code> fetches one page per run. It does not implement <code>wget</code>&rsquo;s recursion and
+mirroring flags — <code>-r</code>, <code>-m</code>, <code>-l</code>, <code>-np</code>, <code>-P</code> and the rest — and rejects
+them as undefined, exiting <code>2</code>. To crawl, drive <code>churl</code> from a shell loop over
+URLs you enumerate yourself.</p>
 <h2 id="exit-status">Exit status</h2>
 <ul>
 <li><code>0</code> success</li>
@@ -2393,7 +2393,7 @@ and an unknown flag exits <code>2</code>.</p>
             
 
 <footer class="page-footer">
-    <div class="last-updated">Last updated: 2026-09-22</div>
+    <div class="last-updated">Last updated: 2026-09-23</div>
     
 </footer>
 
@@ -2443,7 +2443,7 @@ and an unknown flag exits <code>2</code>.</p>
                 document.body.insertBefore(box, document.body.firstChild);
             }
             var p = document.createElement('p');
-            p.textContent = name + ' could not be loaded (offline?) — ' + consequence + '.';
+            p.textContent = name + ' could not be loaded (offline?): ' + consequence + '.';
             box.appendChild(p);
         };
     </script>

@@ -48,6 +48,12 @@ go test -p 1 ./cmd/churl/... ./internal/browser/...
 go test -p 1 ./cmd/cdp/...
 ```
 
+Browser-backed `cdpscripttest` fixtures are behind the `cdp` build tag:
+
+```bash
+go test -tags cdp -p 1 -parallel 1 ./cdpscripttest
+```
+
 If Chrome is not installed or discoverable, many of these tests call `testutil.SkipIfNoChrome(t)` and skip.
 
 ### Script fixtures
@@ -83,7 +89,7 @@ If you add a flag, this is the test that will tell you to document it.
 go test -list . ./cmd/churl
 
 # Run one test
-go test -run TestBasicRun ./cmd/churl
+go test -run TestChurl_ShowHelp ./cmd/churl
 
 # Run with verbose output
 go test -v ./cmd/churl
@@ -99,7 +105,7 @@ Browser-facing tests share helpers in `internal/testutil/chrome.go`.
 
 Useful helpers:
 
-- `testutil.SkipIfNoChrome(t)`: skip when Chrome is unavailable or `go test -short` is in use
+- `testutil.SkipIfNoChrome(t)`: skip in `-short` mode, when `CI` or `SKIP_BROWSER_TESTS` is set, or when no Chromium-based browser is found
 - `testutil.MustStartChrome(t, ctx, headless)`: launch Chrome for a test and fail immediately on setup errors
 - `testutil.TestServer(t, handler)`: start a local HTTP server for integration tests
 
@@ -121,8 +127,8 @@ func TestWithChrome(t *testing.T) {
 
 Recognized environment variables include:
 
-- `CHROME_PATH`: explicit path to a Chrome or Chromium executable
-- `CI`: commonly used to signal non-interactive test environments
+- `CHROME_EXECUTABLE_PATH`: explicit path to a Chrome or Chromium executable
+- `CI`, `SKIP_BROWSER_TESTS`: skip browser-dependent tests
 
 In practice, the most important control is whether Chrome is installed and discoverable.
 
@@ -130,10 +136,10 @@ In practice, the most important control is whether Chrome is installed and disco
 
 ### Chrome not found
 
-Install Chrome, Chromium, or another supported Chromium-based browser, or set `CHROME_PATH`.
+Install Chrome, Chromium, or another supported Chromium-based browser, or set `CHROME_EXECUTABLE_PATH`.
 
 ```bash
-export CHROME_PATH="/path/to/chrome"
+export CHROME_EXECUTABLE_PATH="/path/to/chrome"
 go test ./cmd/churl/...
 ```
 

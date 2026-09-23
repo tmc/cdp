@@ -6,8 +6,7 @@ icon: triangle-exclamation
 
 # Known issues
 
-Open bugs across the repository: the MCP tools, plus `churl`'s recursion and
-mirroring flags, which are accepted but do nothing.
+Open bugs across the repository, currently all in the MCP tools.
 
 ## Resolved Issues
 
@@ -18,7 +17,7 @@ values greater than 60 are treated as milliseconds. This preserves the
 documented seconds API while handling common agent inputs such as `5000` for
 5 seconds.
 
-**Observed**: 2026-04-05, A998 session. `click(selector: "a[href='/explore']", timeout: 5000)` hung for 6+ minutes on github.com.
+**Observed**: 2026-04-05. `click(selector: "a[href='/explore']", timeout: 5000)` hung for 6+ minutes on github.com.
 
 **Files**: `cmd/cdp/mcp_tools.go`, `cmd/cdp/mcp_click_test.go`
 
@@ -77,28 +76,22 @@ and the comparison wrote a report — `0 added, 0 removed, 1 modified requests`.
 **Files**: `cmd/chrome-to-har/main.go`, `internal/differential/controller.go`
 (`TestCaptureDifferentialCompletesCapture`)
 
+### churl accepted mirroring flags and ignored them
+
+`churl -r`, `-m`, `-l`, `-np`, and `-P` parsed into fields nothing read, so
+churl printed a single page and exited 0 while the mirror directory stayed
+empty.
+
+churl now defines none of those flags: it fetches one page per run and an
+attempt to mirror fails as a usage error, exiting 2. Verified: `churl -r
+https://example.com` prints `flag provided but not defined: -r` and exits 2.
+
+**Files**: `cmd/churl/main.go`, `cmd/churl/main_test.go`
+(`TestChurl_MirrorFlagsRejected`)
+
 ## Active Issues
 
-### 1. churl recursion and mirroring flags do nothing
-
-**Symptom**: `churl -r`, `-m`, `-l`, `-np`, and `-P` are accepted, and churl
-exits 0, but no files are written — the page is printed to stdout as though
-none of the flags were given.
-
-```
-churl -r -np -l 1 -P ./mirror http://localhost:8099/   # exit 0, ./mirror stays empty
-```
-
-**Root cause**: the options are parsed into fields that nothing reads;
-`cmd/churl/main.go` declares `recursive bool` and never consults it.
-
-**Workaround**: none for mirroring. For a single page, churl works as
-documented; for a crawl, drive it from a shell loop over URLs you enumerate
-yourself.
-
-**Observed**: 2026-08-04, against this tree.
-
-### 2. click can hang on elements that trigger navigation
+### 1. click can hang on elements that trigger navigation
 
 **Symptom**: `click` on a link that navigates the page may hang if the navigation changes the DOM before chromedp's click action completes. The element becomes stale mid-action.
 
@@ -106,21 +99,21 @@ yourself.
 
 **Files**: the `click` tool in `cmd/cdp/mcp_tools.go`
 
-### 3. Coverage snapshot on minimal-JS pages returns empty
+### 2. Coverage snapshot on minimal-JS pages returns empty
 
 **Symptom**: `get_coverage` after `start_coverage` on server-rendered pages (e.g., Hacker News) returns 0 files because there's little/no JS to profile.
 
-**Not a bug**: Expected behavior — V8 coverage only tracks JavaScript execution. Document this in tool description.
+**Not a bug**: V8 coverage only tracks JavaScript execution.
 
-**Observed**: 2026-04-05, A998 session on news.ycombinator.com.
+**Observed**: 2026-04-05 on news.ycombinator.com.
 
-### 4. extension_console/extension_evaluate fail for devtools-only extensions
+### 3. extension_console/extension_evaluate fail for devtools-only extensions
 
-**Symptom**: "no target found for extension" when calling `extension_console` or `extension_evaluate` on a DevTools panel extension (like our coverage extension).
+**Symptom**: "no target found for extension" when calling `extension_console` or `extension_evaluate` on a DevTools panel extension (such as `extension/coverage`).
 
 **Root cause**: DevTools-only extensions (with `devtools_page` but no `background` service worker) don't create CDP-visible targets. There's no `chrome-extension://` target to attach to.
 
-**Workaround**: None currently. DevTools panel extensions run in the DevTools process, not as separate targets.
+**Workaround**: Run a headed browser and open DevTools; the extension's target exists only while a DevTools window is open. The error now says so when the extension is installed but has no target.
 
 **Observed**: 2026-04-05, A998 extension test. Extension ID agmhhbefggjmejggmflmppmacnbmhnne.
 

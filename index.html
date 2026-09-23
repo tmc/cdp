@@ -1,23 +1,40 @@
 
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
     <!-- Font Awesome Free 7.2.0 by Fonticons, Inc. (https://fontawesome.com), licensed under CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/) -->
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Index of /</title>
+    <title>cdp</title>
     
+<meta name="description" content="![Go Reference](https://pkg.go.dev/github.com/tmc/cdp)">
 
-
-<meta property="og:title" content="Index of /">
-
+<meta property="og:title" content="cdp">
+<meta property="og:description" content="![Go Reference](https://pkg.go.dev/github.com/tmc/cdp)">
 <meta property="og:type" content="article">
 <meta property="og:site_name" content="cdp">
 
 
 <meta name="twitter:card" content="summary">
 
+    <link rel="alternate" type="text/markdown" href="./README.md">
     
+<script>
+    
+    
+    
+    (function() {
+        try {
+            var t = localStorage.getItem('md2html:theme');
+            if (t === 'light' || t === 'dark') {
+                document.documentElement.dataset.theme = t;
+            }
+        } catch (e) {
+            
+        }
+    })();
+</script>
+
     
     
 <style>
@@ -1139,56 +1156,1288 @@
 
 </style>
 
+<style>
+     
+    :root {
+        --accent: #4F46E5;
+        --accent-hover: #4F46E5;
+        --accent-soft: color-mix(in srgb, #4F46E5 10%, transparent);
+        --accent-line: color-mix(in srgb, #4F46E5 40%, transparent);
+    }
+    @media (prefers-color-scheme: dark) {
+        :root:not([data-theme="light"]) {
+            --accent: #818CF8;
+            --accent-hover: #818CF8;
+            --accent-soft: color-mix(in srgb, #818CF8 14%, transparent);
+            --accent-line: color-mix(in srgb, #818CF8 45%, transparent);
+        }
+    }
+    :root[data-theme="dark"] {
+        --accent: #818CF8;
+        --accent-hover: #818CF8;
+        --accent-soft: color-mix(in srgb, #818CF8 14%, transparent);
+        --accent-line: color-mix(in srgb, #818CF8 45%, transparent);
+    }
+</style>
+
+
+    
+<style>
+     
+     
+    .top-nav {
+        display: grid;
+        grid-template-columns: 1fr minmax(0, 26rem) 1fr;
+        align-items: center;
+        gap: 1rem;
+        height: var(--topbar-height);
+         
+        padding-left: calc(max(0px, (100% - 100rem) / 2) + 2.1rem);
+        padding-right: calc(max(0px, (100% - 100rem) / 2) + 0.9rem);
+         
+        background: color-mix(in srgb, var(--bg) 93%, transparent);
+        backdrop-filter: saturate(130%) blur(6px);
+        -webkit-backdrop-filter: saturate(130%) blur(6px);
+        border-bottom: 1px solid var(--line);
+        font-size: 0.875rem;
+        position: sticky;
+        top: 0;
+        z-index: 100;
+    }
+
+    .top-nav-left,
+    .top-nav-right {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        min-width: 0;
+    }
+
+    .top-nav-right { justify-self: end; }
+
+    .top-nav-center {
+        display: flex;
+        justify-content: center;
+        min-width: 0;
+    }
+
+    .top-nav-title {
+        font-size: 1.05rem;
+        font-weight: 700;
+        letter-spacing: -0.02em;
+        color: var(--text-1);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        text-decoration: none;
+    }
+
+    .top-nav-title:hover { color: var(--text-1); }
+
+    .top-nav-link {
+        font-size: 0.86rem;
+        font-weight: 500;
+        color: var(--text-2);
+        text-decoration: none;
+        white-space: nowrap;
+    }
+
+    .top-nav-link:hover { color: var(--text-1); }
+
+    .theme-toggle {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 2rem;
+        height: 2rem;
+        padding: 0;
+        border: none;
+        border-radius: var(--radius-sm);
+        background: none;
+        color: var(--text-2);
+        cursor: pointer;
+    }
+
+    .theme-toggle:hover {
+        color: var(--text-1);
+        background: var(--surface-2);
+    }
+
+    .theme-toggle svg { width: 1.1rem; height: 1.1rem; }
+
+     
+    .theme-toggle-sun { display: none; }
+    @media (prefers-color-scheme: dark) {
+        :root:not([data-theme="light"]) .theme-toggle-sun { display: block; }
+        :root:not([data-theme="light"]) .theme-toggle-moon { display: none; }
+    }
+    :root[data-theme="dark"] .theme-toggle-sun { display: block; }
+    :root[data-theme="dark"] .theme-toggle-moon { display: none; }
+
+     
+    .repo-link-stars:has(.repo-link-count:empty) { display: none; }
+
+     
+    .nav-toggle {
+        display: none;
+        align-items: center;
+        justify-content: center;
+        width: 2rem;
+        height: 2rem;
+        padding: 0;
+        background: transparent;
+        border: 1px solid var(--line);
+        border-radius: var(--radius-sm);
+        color: var(--text-2);
+        cursor: pointer;
+    }
+
+    .nav-toggle:hover { color: var(--text-1); border-color: var(--line-strong); }
+
+    .nav-toggle-bars,
+    .nav-toggle-bars::before,
+    .nav-toggle-bars::after {
+        display: block;
+        width: 0.85rem;
+        height: 1.5px;
+        background: currentColor;
+        border-radius: 1px;
+    }
+
+    .nav-toggle-bars {
+        position: relative;
+    }
+
+    .nav-toggle-bars::before,
+    .nav-toggle-bars::after {
+        content: "";
+        position: absolute;
+    }
+
+    .nav-toggle-bars::before { top: -4px; }
+    .nav-toggle-bars::after { top: 4px; }
+
+     
+    .search-trigger {
+        display: flex;
+        align-items: center;
+        gap: 0.6rem;
+        width: 100%;
+        height: 2.25rem;
+        padding: 0 0.6rem 0 0.75rem;
+        font: inherit;
+        font-size: 0.85rem;
+        color: var(--text-3);
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        cursor: pointer;
+        text-align: left;
+        transition: border-color 0.12s ease, color 0.12s ease;
+    }
+
+    .search-trigger-icon {
+        width: 0.95rem;
+        height: 0.95rem;
+        flex: none;
+    }
+
+    .search-trigger-label { flex: 1; min-width: 0; }
+
+    .search-trigger:hover {
+        color: var(--text-1);
+        border-color: var(--line-strong);
+    }
+
+    .search-trigger kbd {
+        font-size: 0.68rem;
+        padding: 0.05em 0.35em;
+        border-bottom-width: 1px;
+        color: var(--text-3);
+    }
+
+    .skip-link {
+        position: absolute;
+        left: 0.5rem;
+        top: -3rem;
+        z-index: 200;
+        padding: 0.5rem 0.9rem;
+        background: var(--bg);
+        border: 1px solid var(--line-strong);
+        border-radius: var(--radius-sm);
+        box-shadow: var(--shadow-2);
+        transition: top 0.15s ease;
+    }
+
+    .skip-link:focus {
+        top: 0.5rem;
+    }
+
+     
+    .repo-link {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.35rem 0.6rem;
+        color: var(--text-2);
+        border-radius: var(--radius-sm);
+        font-size: 0.8rem;
+        font-weight: 500;
+        min-width: 0;
+    }
+
+    .repo-link:hover { color: var(--text-1); background: var(--surface-2); }
+
+    .repo-link-mark {
+        width: 1rem;
+        height: 1rem;
+        flex: none;
+    }
+
+    .repo-link-stars {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.25rem;
+        color: var(--text-3);
+        font-variant-numeric: tabular-nums;
+    }
+
+    .repo-link-star {
+        width: 0.85rem;
+        height: 0.85rem;
+        flex: none;
+    }
+
+    .repo-link-name {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .top-nav-link {
+        padding: 0.35rem 0.6rem;
+        color: var(--text-2);
+        border-radius: var(--radius-sm);
+        font-weight: 500;
+    }
+
+    .top-nav-link:hover {
+        color: var(--text-1);
+        background: var(--surface-2);
+    }
+
+     
+    .docs-layout {
+        display: grid;
+        grid-template-columns: var(--sidebar-width) minmax(0, 1fr) var(--toc-width);
+        --toc-width: 14rem;
+        align-items: start;
+        max-width: 100rem;
+        margin: 0 auto;
+    }
+
+    .sidebar {
+        position: sticky;
+        top: var(--topbar-height);
+        height: calc(100vh - var(--topbar-height));
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        padding: 1.75rem 1rem 3rem 1.5rem;
+        border-right: 1px solid var(--line);
+    }
+
+    .sidebar-header {
+        margin-bottom: 1.25rem;
+    }
+
+    .sidebar-header h1 {
+        font-size: 0.95rem;
+        font-weight: 600;
+        letter-spacing: -0.01em;
+        margin: 0;
+    }
+
+     
+    .top-nav ~ .docs-layout .sidebar-header {
+        display: none;
+    }
+
+    .site-nav {
+        font-size: 0.875rem;
+    }
+
+    .nav-list {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+    }
+
+    .nav-group {
+        font-weight: 600;
+        font-size: 0.7rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--text-3);
+        margin: 1.75rem 0 0.4rem;
+        padding: 0 0.6rem;
+    }
+
+    .nav-group:first-child { margin-top: 0; }
+
+    .nav-sep hr {
+        border: none;
+        border-top: 1px solid var(--line);
+        margin: 1rem 0;
+        background: none;
+        height: 0;
+    }
+
+    .nav-item { margin: 0; }
+
+    .nav-item a {
+        display: flex;
+        align-items: center;
+        gap: 0.5em;
+        padding: 0.32rem 0.6rem;
+        color: var(--text-2);
+        border-radius: var(--radius-sm);
+        line-height: 1.45;
+        transition: color 0.12s ease, background 0.12s ease;
+    }
+
+     
+    .nav-icon {
+        display: inline-flex;
+        flex: none;
+        width: 1em;
+        height: 1em;
+         
+        color: inherit;
+    }
+
+    .nav-icon svg {
+        width: 100%;
+        height: 100%;
+        stroke-width: 2;
+    }
+
+    .nav-item a:hover {
+        color: var(--text-1);
+        background: var(--surface-2);
+    }
+
+    .nav-item a.active {
+        color: var(--accent);
+        background: var(--accent-soft);
+        font-weight: 550;
+    }
+
+     
+    .nav-item .nav-list {
+        margin: 0.15rem 0 0.15rem 0.6rem;
+        border-left: 1px solid var(--line);
+        padding-left: 0.4rem;
+    }
+
+     
+    .main-content {
+        min-width: 0;
+         
+        width: 100%;
+        max-width: calc(var(--measure) + 18rem);
+        margin-inline: auto;
+        padding: 3rem 3rem 6rem;
+    }
+
+    .main-content > * {
+        max-width: var(--measure);
+        margin-inline: 0;
+    }
+
+    .main-content > .md-code,
+    .main-content > pre,
+    .main-content > table,
+    .main-content > figure,
+    .main-content > .mermaid,
+    .main-content > .table-wrapper {
+        max-width: 100%;
+    }
+
+    .breadcrumb {
+        font-size: 0.78rem;
+        margin-bottom: 0.75rem;
+        color: var(--text-3);
+    }
+
+    .breadcrumb ol {
+        display: flex;
+        flex-wrap: wrap;
+        list-style: none;
+        padding: 0;
+        margin: 0;
+        gap: 0.35rem;
+    }
+
+    .breadcrumb li {
+        display: flex;
+        align-items: center;
+    }
+
+    .breadcrumb li:not(:last-child)::after {
+        content: '/';
+        margin-left: 0.35rem;
+        color: var(--line-strong);
+    }
+
+    .breadcrumb a { color: var(--text-3); }
+    .breadcrumb a:hover { color: var(--text-1); }
+
+    .breadcrumb li[aria-current="page"] {
+        color: var(--text-2);
+    }
+
+     
+    .page-nav {
+        display: flex;
+        justify-content: space-between;
+        gap: 1rem;
+        margin-top: 4rem;
+        padding-top: 2rem;
+        border-top: 1px solid var(--line);
+    }
+
+    .page-nav a {
+        display: flex;
+        flex-direction: column;
+        gap: 0.15rem;
+        padding: 0.85rem 1.1rem;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        min-width: 0;
+        max-width: 48%;
+        transition: border-color 0.15s ease, box-shadow 0.15s ease;
+    }
+
+    .page-nav a:hover {
+        border-color: var(--line-strong);
+        box-shadow: var(--shadow-1);
+    }
+
+    .nav-prev { align-items: flex-start; }
+    .nav-next { align-items: flex-end; margin-left: auto; text-align: right; }
+    .nav-prev-empty { flex: 1; }
+
+    .nav-label {
+        font-size: 0.68rem;
+        color: var(--text-3);
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+    }
+
+     
+    .nav-title {
+        font-size: 0.94rem;
+        font-weight: 500;
+        color: var(--text-2);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        max-width: 100%;
+    }
+
+    .page-nav a:hover .nav-title { color: var(--accent); }
+
+     
+    .page-footer {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 1rem;
+        margin-top: 2.5rem;
+        font-size: 0.82rem;
+        color: var(--text-3);
+    }
+
+    .edit-link a, .edit-link {
+        color: var(--text-3);
+    }
+
+    .edit-link a:hover, .edit-link:hover {
+        color: var(--accent);
+    }
+
+     
+    .sidebar-toc {
+        position: sticky;
+        top: var(--topbar-height);
+        height: calc(100vh - var(--topbar-height));
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        padding: 3rem 1.5rem 3rem 0.5rem;
+        font-size: 0.8rem;
+    }
+
+    .sidebar-toc-header {
+        font-weight: 600;
+        font-size: 0.7rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--text-3);
+        margin-bottom: 0.6rem;
+        padding-left: 0.75rem;
+    }
+
+    .sidebar-toc ul {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+        border-left: 1px solid var(--line);
+    }
+
+    .sidebar-toc li { margin: 0; }
+
+    .sidebar-toc a {
+        display: block;
+        padding: 0.25rem 0 0.25rem 0.75rem;
+        margin-left: -1px;
+        color: var(--text-2);
+        border-left: 1px solid transparent;
+        line-height: 1.45;
+        transition: color 0.12s ease, border-color 0.12s ease;
+    }
+
+    .sidebar-toc a:hover { color: var(--text-1); }
+
+    .sidebar-toc a.active {
+        color: var(--accent);
+        border-left-color: var(--accent);
+    }
+
+    .sidebar-toc a.level-1 { padding-left: 0.75rem; }
+    .sidebar-toc a.level-2 { padding-left: 0.75rem; }
+    .sidebar-toc a.level-3 { padding-left: 1.6rem; color: var(--text-3); }
+
+     
+    .docs-layout:has(.sidebar-toc[hidden]),
+    .docs-layout:has(.sidebar-toc[style*="display: none"]) {
+        grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
+    }
+
+    .sidebar-toc[hidden] { display: none; }
+
+     
+    .docs-layout .main-content #toc-title,
+    .docs-layout .main-content #toc {
+        display: none;
+    }
+
+    @media (max-width: 1120px) {
+        .docs-layout {
+            grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
+        }
+        .sidebar-toc { display: none; }
+        .main-content { padding: 2.5rem 2.5rem 5rem; }
+    }
+
+     
+    @media (max-width: 900px) {
+        .docs-layout,
+        .docs-layout:has(.sidebar-toc[hidden]) {
+            grid-template-columns: minmax(0, 1fr);
+        }
+
+        .nav-toggle { display: inline-flex; }
+
+         
+        .top-nav {
+            padding-left: 1.25rem;
+            padding-right: 1.25rem;
+        }
+
+        .sidebar {
+            position: fixed;
+            top: var(--topbar-height);
+            left: 0;
+            z-index: 90;
+            width: min(20rem, 84vw);
+            height: calc(100vh - var(--topbar-height));
+            background: var(--bg);
+            border-right: 1px solid var(--line);
+            box-shadow: var(--shadow-2);
+            transform: translateX(-102%);
+            transition: transform 0.18s ease;
+        }
+
+        .sidebar.open { transform: translateX(0); }
+
+        .nav-backdrop {
+            position: fixed;
+            inset: var(--topbar-height) 0 0;
+            z-index: 80;
+            background: rgba(0, 0, 0, 0.35);
+        }
+
+        .main-content { padding: 2rem 1.25rem 4rem; }
+    }
+
+    @media (max-width: 600px) {
+        .page-nav { flex-direction: column; }
+        .page-nav a { max-width: 100%; }
+        .nav-next { align-items: flex-start; text-align: left; }
+    }
+
+     
+    @media (max-width: 60rem) {
+        .top-nav {
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .top-nav-center { flex: 1; justify-content: flex-end; }
+        .search-trigger { width: auto; max-width: 12rem; }
+        .search-trigger-label { display: none; }
+    }
+
+     
+    @media (max-width: 40rem) {
+        .top-nav { gap: 0.4rem; }
+
+        .search-trigger {
+            flex: none;
+            width: 2.25rem;
+            justify-content: center;
+            padding: 0;
+        }
+
+        .search-trigger kbd { display: none; }
+
+         
+        .connection-status { display: none; }
+
+        .repo-link { padding: 0.35rem; }
+        .repo-link-name,
+        .repo-link-stars { display: none; }
+    }
+</style>
 
 </head>
 <body>
+    <a class="skip-link" href="#main-content">Skip to content</a>
     
 
-<div class="header-bar">
-    
-    
-</div>
-
-
-    
-    <main class="page">
+<nav class="top-nav">
+    <div class="top-nav-left">
+        <button type="button" class="nav-toggle" aria-controls="site-sidebar" aria-expanded="false" aria-label="Show navigation">
+            <span class="nav-toggle-bars" aria-hidden="true"></span>
+        </button>
         
-<h1 id="index-of-/">Index of /</h1>
-<ul>
-<li><a href="README.html">README.md</a> (10946 bytes, 2026-09-22 19:27)</li>
-<li><a href="cmd/cua/README.html">cmd/cua/README.md</a> (3928 bytes, 2026-09-22 19:27)</li>
-<li><a href="docs/browser-observations.html">docs/browser-observations.md</a> (4575 bytes, 2026-09-22 10:29)</li>
-<li><a href="docs/capturing-traffic.html">docs/capturing-traffic.md</a> (6391 bytes, 2026-09-22 19:27)</li>
-<li><a href="docs/cdp.html">docs/cdp.md</a> (4198 bytes, 2026-09-22 19:27)</li>
-<li><a href="docs/cdpscripttest/adopting.html">docs/cdpscripttest/adopting.md</a> (3867 bytes, 2026-09-22 19:27)</li>
-<li><a href="docs/cdpscripttest/agentic.html">docs/cdpscripttest/agentic.md</a> (4817 bytes, 2026-09-22 19:27)</li>
-<li><a href="docs/cdpscripttest/extending.html">docs/cdpscripttest/extending.md</a> (6488 bytes, 2026-09-22 19:27)</li>
-<li><a href="docs/cdpscripttest/fixtures.html">docs/cdpscripttest/fixtures.md</a> (4862 bytes, 2026-09-22 19:27)</li>
-<li><a href="docs/cdpscripttest/reports.html">docs/cdpscripttest/reports.md</a> (4727 bytes, 2026-09-22 19:27)</li>
-<li><a href="docs/cdpscripttest/visual.html">docs/cdpscripttest/visual.md</a> (4828 bytes, 2026-09-22 19:27)</li>
-<li><a href="docs/cdpscripttest.html">docs/cdpscripttest.md</a> (3588 bytes, 2026-09-22 19:27)</li>
-<li><a href="docs/churl-proxy.html">docs/churl-proxy.md</a> (5769 bytes, 2026-09-22 19:27)</li>
-<li><a href="docs/churl.html">docs/churl.md</a> (7042 bytes, 2026-09-22 19:27)</li>
-<li><a href="docs/commands.html">docs/commands.md</a> (2653 bytes, 2026-09-22 19:27)</li>
-<li><a href="docs/differential-capture.html">docs/differential-capture.md</a> (3922 bytes, 2026-09-22 19:27)</li>
-<li><a href="docs/electron-mcp.html">docs/electron-mcp.md</a> (3385 bytes, 2026-09-22 19:27)</li>
-<li><a href="docs/how-cdp-works.html">docs/how-cdp-works.md</a> (6890 bytes, 2026-09-22 19:27)</li>
-<li><a href="docs/index.html">docs/index.md</a> (4790 bytes, 2026-09-22 19:27)</li>
-<li><a href="docs/known-issues.html">docs/known-issues.md</a> (5895 bytes, 2026-09-22 19:27)</li>
-<li><a href="docs/plugins.html">docs/plugins.md</a> (4356 bytes, 2026-09-22 19:27)</li>
-<li><a href="docs/quickstart.html">docs/quickstart.md</a> (3474 bytes, 2026-09-22 19:27)</li>
-<li><a href="docs/scripting.html">docs/scripting.md</a> (8138 bytes, 2026-09-22 19:27)</li>
-<li><a href="docs/testing.html">docs/testing.md</a> (6712 bytes, 2026-09-22 19:27)</li>
-<li><a href="docs/troubleshooting.html">docs/troubleshooting.md</a> (5305 bytes, 2026-09-22 19:27)</li>
-<li><a href="docs/tutorial-first-script.html">docs/tutorial-first-script.md</a> (5294 bytes, 2026-09-22 19:27)</li>
-<li><a href="internal/chromedp/README.html">internal/chromedp/README.md</a> (1912 bytes, 2026-09-22 19:27)</li>
+        <a class="top-nav-title" href="./">cdp</a>
+    </div>
+    <div class="top-nav-center">
+        
+    </div>
+    <div class="top-nav-right">
+        
+        
+<button type="button" class="theme-toggle" aria-label="Change theme" title="Change theme">
+    <svg class="theme-toggle-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>
+    <svg class="theme-toggle-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
+</button>
+
+        
+
+<a class="repo-link" href="https://github.com/tmc/cdp" target="_blank" rel="noreferrer noopener" title="tmc/cdp">
+    <svg class="repo-link-mark" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true" focusable="false"><path fill-rule="evenodd" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.42 7.42 0 0 1 2-.27c.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.012 8.012 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
+    <span class="repo-link-name">tmc/cdp</span>
+    
+</a>
+
+
+        
+        
+    </div>
+</nav>
+
+
+    
+
+    
+    <div class="docs-layout">
+        <aside class="sidebar" id="site-sidebar">
+            <div class="sidebar-header">
+                <h1>cdp</h1>
+            </div>
+            
+
+<nav class="site-nav" aria-label="Site navigation">
+  
+<ul class="nav-list">
+
+  
+    <li class="nav-group">Start here</li>
+    
+      
+<ul class="nav-list">
+
+  
+    <li class="nav-item level-1">
+      <a href="docs/index.html">
+        <span class="nav-icon" data-icon="book-open" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><path fill="currentColor" d="M256 141.3l0 309.3 .5-.2C311.1 427.7 369.7 416 428.8 416l19.2 0 0-320-19.2 0c-42.2 0-84.1 8.4-123.1 24.6-16.8 7-33.4 13.9-49.7 20.7zM230.9 61.5L256 72 281.1 61.5C327.9 42 378.1 32 428.8 32L464 32c26.5 0 48 21.5 48 48l0 352c0 26.5-21.5 48-48 48l-35.2 0c-50.7 0-100.9 10-147.7 29.5l-12.8 5.3c-7.9 3.3-16.7 3.3-24.6 0l-12.8-5.3C184.1 490 133.9 480 83.2 480L48 480c-26.5 0-48-21.5-48-48L0 80C0 53.5 21.5 32 48 32l35.2 0c50.7 0 100.9 10 147.7 29.5z"/></svg></span>
+        cdp documentation
+      </a>
+      
+    </li>
+  
+
+  
+    <li class="nav-item level-1">
+      <a href="docs/quickstart.html">
+        <span class="nav-icon" data-icon="rocket" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><path fill="currentColor" d="M128 320L24.5 320c-24.9 0-40.2-27.1-27.4-48.5L50 183.3C58.7 168.8 74.3 160 91.2 160l95 0c76.1-128.9 189.6-135.4 265.5-124.3 12.8 1.9 22.8 11.9 24.6 24.6 11.1 75.9 4.6 189.4-124.3 265.5l0 95c0 16.9-8.8 32.5-23.3 41.2l-88.2 52.9c-21.3 12.8-48.5-2.6-48.5-27.4L192 384c0-35.3-28.7-64-64-64l-.1 0zM400 160a48 48 0 1 0 -96 0 48 48 0 1 0 96 0z"/></svg></span>
+        Quickstart
+      </a>
+      
+    </li>
+  
+
+  
+    <li class="nav-item level-1">
+      <a href="docs/tutorial-first-script.html">
+        <span class="nav-icon" data-icon="graduation-cap" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><path fill="currentColor" d="M48 195.8l209.2 86.1c9.8 4 20.2 6.1 30.8 6.1s21-2.1 30.8-6.1l242.4-99.8c9-3.7 14.8-12.4 14.8-22.1s-5.8-18.4-14.8-22.1L318.8 38.1C309 34.1 298.6 32 288 32s-21 2.1-30.8 6.1L14.8 137.9C5.8 141.6 0 150.3 0 160L0 456c0 13.3 10.7 24 24 24s24-10.7 24-24l0-260.2zm48 71.7L96 384c0 53 86 96 192 96s192-43 192-96l0-116.6-142.9 58.9c-15.6 6.4-32.2 9.7-49.1 9.7s-33.5-3.3-49.1-9.7L96 267.4z"/></svg></span>
+        Tutorial: your first script
+      </a>
+      
+    </li>
+  
+
+  
+    <li class="nav-item level-1">
+      <a href="docs/troubleshooting.html">
+        <span class="nav-icon" data-icon="circle-question" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><path fill="currentColor" d="M256 512a256 256 0 1 0 0-512 256 256 0 1 0 0 512zm0-336c-17.7 0-32 14.3-32 32 0 13.3-10.7 24-24 24s-24-10.7-24-24c0-44.2 35.8-80 80-80s80 35.8 80 80c0 47.2-36 67.2-56 74.5l0 3.8c0 13.3-10.7 24-24 24s-24-10.7-24-24l0-8.1c0-20.5 14.8-35.2 30.1-40.2 6.4-2.1 13.2-5.5 18.2-10.3 4.3-4.2 7.7-10 7.7-19.6 0-17.7-14.3-32-32-32zM224 368a32 32 0 1 1 64 0 32 32 0 1 1 -64 0z"/></svg></span>
+        Troubleshooting
+      </a>
+      
+    </li>
+  
+
 </ul>
 
+    
+  
 
-        
+  
+    <li class="nav-group">Learn a tool end to end</li>
+    
+      
+<ul class="nav-list">
+
+  
+    <li class="nav-item level-1">
+      <a href="docs/cdp.html">
+        <span class="nav-icon" data-icon="terminal" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><path fill="currentColor" d="M9.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L146.7 256 9.4 118.6zM224 384l256 0c17.7 0 32 14.3 32 32s-14.3 32-32 32l-256 0c-17.7 0-32-14.3-32-32s14.3-32 32-32z"/></svg></span>
+        cdp
+      </a>
+      
+    </li>
+  
+
+  
+    <li class="nav-item level-1">
+      <a href="docs/scripting.html">
+        <span class="nav-icon" data-icon="file-code" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512"><path fill="currentColor" d="M0 64C0 28.7 28.7 0 64 0L213.5 0c17 0 33.3 6.7 45.3 18.7L365.3 125.3c12 12 18.7 28.3 18.7 45.3L384 448c0 35.3-28.7 64-64 64L64 512c-35.3 0-64-28.7-64-64L0 64zm208-5.5l0 93.5c0 13.3 10.7 24 24 24L325.5 176 208 58.5zM154.2 295.6c8.6-10.1 7.5-25.2-2.6-33.8s-25.2-7.5-33.8 2.6l-48 56c-7.7 9-7.7 22.2 0 31.2l48 56c8.6 10.1 23.8 11.2 33.8 2.6s11.2-23.8 2.6-33.8l-34.6-40.4 34.6-40.4zm112-31.2c-8.6-10.1-23.8-11.2-33.8-2.6s-11.2 23.8-2.6 33.8l34.6 40.4-34.6 40.4c-8.6 10.1-7.5 25.2 2.6 33.8s25.2 7.5 33.8-2.6l48-56c7.7-9 7.7-22.2 0-31.2l-48-56z"/></svg></span>
+        cdpscript
+      </a>
+      
+    </li>
+  
+
+  
+    <li class="nav-item level-1">
+      <a href="docs/churl.html">
+        <span class="nav-icon" data-icon="download" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><path fill="currentColor" d="M256 32c0-17.7-14.3-32-32-32s-32 14.3-32 32l0 210.7-41.4-41.4c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3l96 96c12.5 12.5 32.8 12.5 45.3 0l96-96c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0L256 242.7 256 32zM64 320c-35.3 0-64 28.7-64 64l0 32c0 35.3 28.7 64 64 64l320 0c35.3 0 64-28.7 64-64l0-32c0-35.3-28.7-64-64-64l-46.9 0-56.6 56.6c-31.2 31.2-81.9 31.2-113.1 0L110.9 320 64 320zm304 56a24 24 0 1 1 0 48 24 24 0 1 1 0-48z"/></svg></span>
+        churl
+      </a>
+      
+    </li>
+  
+
+  
+    <li class="nav-item level-1">
+      <a href="docs/churl-proxy.html">
+        <span class="nav-icon" data-icon="shield-halved" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><path fill="currentColor" d="M256 0c4.6 0 9.2 1 13.4 2.9L457.8 82.8c22 9.3 38.4 31 38.3 57.2-.5 99.2-41.3 280.7-213.6 363.2-16.7 8-36.1 8-52.8 0-172.4-82.5-213.1-264-213.6-363.2-.1-26.2 16.3-47.9 38.3-57.2L242.7 2.9C246.9 1 251.4 0 256 0zm0 66.8l0 378.1c138-66.8 175.1-214.8 176-303.4l-176-74.6 0 0z"/></svg></span>
+        churl behind a proxy
+      </a>
+      
+    </li>
+  
+
+</ul>
+
+    
+  
+
+  
+    <li class="nav-group">Test with cdpscripttest</li>
+    
+      
+<ul class="nav-list">
+
+  
+    <li class="nav-item level-1">
+      <a href="docs/cdpscripttest.html">
+        <span class="nav-icon" data-icon="flask" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><path fill="currentColor" d="M288 0L128 0C110.3 0 96 14.3 96 32s14.3 32 32 32L128 215.5 7.5 426.3C2.6 435 0 444.7 0 454.7 0 486.4 25.6 512 57.3 512l333.4 0c31.6 0 57.3-25.6 57.3-57.3 0-10-2.6-19.8-7.5-28.4L320 215.5 320 64c17.7 0 32-14.3 32-32S337.7 0 320 0L288 0zM192 215.5l0-151.5 64 0 0 151.5c0 11.1 2.9 22.1 8.4 31.8l41.6 72.7-164 0 41.6-72.7c5.5-9.7 8.4-20.6 8.4-31.8z"/></svg></span>
+        cdpscripttest
+      </a>
+      
+    </li>
+  
+
+  
+    <li class="nav-item level-1">
+      <a href="docs/cdpscripttest/adopting.html">
+        <span class="nav-icon" data-icon="download" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><path fill="currentColor" d="M256 32c0-17.7-14.3-32-32-32s-32 14.3-32 32l0 210.7-41.4-41.4c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3l96 96c12.5 12.5 32.8 12.5 45.3 0l96-96c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0L256 242.7 256 32zM64 320c-35.3 0-64 28.7-64 64l0 32c0 35.3 28.7 64 64 64l320 0c35.3 0 64-28.7 64-64l0-32c0-35.3-28.7-64-64-64l-46.9 0-56.6 56.6c-31.2 31.2-81.9 31.2-113.1 0L110.9 320 64 320zm304 56a24 24 0 1 1 0 48 24 24 0 1 1 0-48z"/></svg></span>
+        Adopting cdpscripttest
+      </a>
+      
+    </li>
+  
+
+  
+    <li class="nav-item level-1">
+      <a href="docs/cdpscripttest/fixtures.html">
+        <span class="nav-icon" data-icon="file-code" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512"><path fill="currentColor" d="M0 64C0 28.7 28.7 0 64 0L213.5 0c17 0 33.3 6.7 45.3 18.7L365.3 125.3c12 12 18.7 28.3 18.7 45.3L384 448c0 35.3-28.7 64-64 64L64 512c-35.3 0-64-28.7-64-64L0 64zm208-5.5l0 93.5c0 13.3 10.7 24 24 24L325.5 176 208 58.5zM154.2 295.6c8.6-10.1 7.5-25.2-2.6-33.8s-25.2-7.5-33.8 2.6l-48 56c-7.7 9-7.7 22.2 0 31.2l48 56c8.6 10.1 23.8 11.2 33.8 2.6s11.2-23.8 2.6-33.8l-34.6-40.4 34.6-40.4zm112-31.2c-8.6-10.1-23.8-11.2-33.8-2.6s-11.2 23.8-2.6 33.8l34.6 40.4-34.6 40.4c-8.6 10.1-7.5 25.2 2.6 33.8s25.2 7.5 33.8-2.6l48-56c7.7-9 7.7-22.2 0-31.2l-48-56z"/></svg></span>
+        Writing fixtures
+      </a>
+      
+    </li>
+  
+
+  
+    <li class="nav-item level-1">
+      <a href="docs/cdpscripttest/visual.html">
+        <span class="nav-icon" data-icon="image" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><path fill="currentColor" d="M64 32C28.7 32 0 60.7 0 96L0 416c0 35.3 28.7 64 64 64l320 0c35.3 0 64-28.7 64-64l0-320c0-35.3-28.7-64-64-64L64 32zm64 80a48 48 0 1 1 0 96 48 48 0 1 1 0-96zM272 224c8.4 0 16.1 4.4 20.5 11.5l88 144c4.5 7.4 4.7 16.7 .5 24.3S368.7 416 360 416L88 416c-8.9 0-17.2-5-21.3-12.9s-3.5-17.5 1.6-24.8l56-80c4.5-6.4 11.8-10.2 19.7-10.2s15.2 3.8 19.7 10.2l26.4 37.8 61.4-100.5c4.4-7.1 12.1-11.5 20.5-11.5z"/></svg></span>
+        Visual testing
+      </a>
+      
+    </li>
+  
+
+  
+    <li class="nav-item level-1">
+      <a href="docs/cdpscripttest/extending.html">
+        <span class="nav-icon" data-icon="puzzle-piece" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><path fill="currentColor" d="M224 0c35.3 0 64 21.5 64 48 0 10.4-4.4 20-12 27.9-6.6 6.9-12 15.3-12 24.9 0 15 12.2 27.2 27.2 27.2l44.8 0c26.5 0 48 21.5 48 48l0 44.8c0 15 12.2 27.2 27.2 27.2 9.5 0 18-5.4 24.9-12 7.9-7.5 17.5-12 27.9-12 26.5 0 48 28.7 48 64s-21.5 64-48 64c-10.4 0-20.1-4.4-27.9-12-6.9-6.6-15.3-12-24.9-12-15 0-27.2 12.2-27.2 27.2L384 464c0 26.5-21.5 48-48 48l-56.8 0c-12.8 0-23.2-10.4-23.2-23.2 0-9.2 5.8-17.3 13.2-22.8 11.6-8.7 18.8-20.7 18.8-34 0-26.5-28.7-48-64-48s-64 21.5-64 48c0 13.3 7.2 25.3 18.8 34 7.4 5.5 13.2 13.5 13.2 22.8 0 12.8-10.4 23.2-23.2 23.2L48 512c-26.5 0-48-21.5-48-48L0 343.2c0-12.8 10.4-23.2 23.2-23.2 9.2 0 17.3 5.8 22.8 13.2 8.7 11.6 20.7 18.8 34 18.8 26.5 0 48-28.7 48-64s-21.5-64-48-64c-13.3 0-25.3 7.2-34 18.8-5.5 7.4-13.5 13.2-22.8 13.2-12.8 0-23.2-10.4-23.2-23.2L0 176c0-26.5 21.5-48 48-48l108.8 0c15 0 27.2-12.2 27.2-27.2 0-9.5-5.4-18-12-24.9-7.5-7.9-12-17.5-12-27.9 0-26.5 28.7-48 64-48z"/></svg></span>
+        Extending the engine
+      </a>
+      
+    </li>
+  
+
+  
+    <li class="nav-item level-1">
+      <a href="docs/cdpscripttest/reports.html">
+        <span class="nav-icon" data-icon="file-lines" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512"><path fill="currentColor" d="M0 64C0 28.7 28.7 0 64 0L213.5 0c17 0 33.3 6.7 45.3 18.7L365.3 125.3c12 12 18.7 28.3 18.7 45.3L384 448c0 35.3-28.7 64-64 64L64 512c-35.3 0-64-28.7-64-64L0 64zm208-5.5l0 93.5c0 13.3 10.7 24 24 24L325.5 176 208 58.5zM120 256c-13.3 0-24 10.7-24 24s10.7 24 24 24l144 0c13.3 0 24-10.7 24-24s-10.7-24-24-24l-144 0zm0 96c-13.3 0-24 10.7-24 24s10.7 24 24 24l144 0c13.3 0 24-10.7 24-24s-10.7-24-24-24l-144 0z"/></svg></span>
+        Reports and artifacts
+      </a>
+      
+    </li>
+  
+
+  
+    <li class="nav-item level-1">
+      <a href="docs/cdpscripttest/agentic.html">
+        <span class="nav-icon" data-icon="robot" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512"><path fill="currentColor" d="M352 0c0-17.7-14.3-32-32-32S288-17.7 288 0l0 64-96 0c-53 0-96 43-96 96l0 224c0 53 43 96 96 96l256 0c53 0 96-43 96-96l0-224c0-53-43-96-96-96l-96 0 0-64zM160 368c0-13.3 10.7-24 24-24l32 0c13.3 0 24 10.7 24 24s-10.7 24-24 24l-32 0c-13.3 0-24-10.7-24-24zm120 0c0-13.3 10.7-24 24-24l32 0c13.3 0 24 10.7 24 24s-10.7 24-24 24l-32 0c-13.3 0-24-10.7-24-24zm120 0c0-13.3 10.7-24 24-24l32 0c13.3 0 24 10.7 24 24s-10.7 24-24 24l-32 0c-13.3 0-24-10.7-24-24zM224 176a48 48 0 1 1 0 96 48 48 0 1 1 0-96zm144 48a48 48 0 1 1 96 0 48 48 0 1 1 -96 0zM64 224c0-17.7-14.3-32-32-32S0 206.3 0 224l0 96c0 17.7 14.3 32 32 32s32-14.3 32-32l0-96zm544-32c-17.7 0-32 14.3-32 32l0 96c0 17.7 14.3 32 32 32s32-14.3 32-32l0-96c0-17.7-14.3-32-32-32z"/></svg></span>
+        Agentic workflows
+      </a>
+      
+    </li>
+  
+
+</ul>
+
+    
+  
+
+  
+    <li class="nav-group">Understand the model</li>
+    
+      
+<ul class="nav-list">
+
+  
+    <li class="nav-item level-1">
+      <a href="docs/how-cdp-works.html">
+        <span class="nav-icon" data-icon="diagram-project" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><path fill="currentColor" d="M0 80C0 53.5 21.5 32 48 32l96 0c26.5 0 48 21.5 48 48l0 16 128 0 0-16c0-26.5 21.5-48 48-48l96 0c26.5 0 48 21.5 48 48l0 96c0 26.5-21.5 48-48 48l-96 0c-26.5 0-48-21.5-48-48l0-16-128 0 0 16c0 7.3-1.7 14.3-4.6 20.5l68.6 91.5 80 0c26.5 0 48 21.5 48 48l0 96c0 26.5-21.5 48-48 48l-96 0c-26.5 0-48-21.5-48-48l0-96c0-7.3 1.7-14.3 4.6-20.5L128 224 48 224c-26.5 0-48-21.5-48-48L0 80z"/></svg></span>
+        How cdp works
+      </a>
+      
+    </li>
+  
+
+</ul>
+
+    
+  
+
+  
+    <li class="nav-group">Capture and inspect traffic</li>
+    
+      
+<ul class="nav-list">
+
+  
+    <li class="nav-item level-1">
+      <a href="docs/capturing-traffic.html">
+        <span class="nav-icon" data-icon="network-wired" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><path fill="currentColor" d="M248 88l80 0 0 48-80 0 0-48zm-8-56c-26.5 0-48 21.5-48 48l0 64c0 26.5 21.5 48 48 48l16 0 0 32-224 0c-17.7 0-32 14.3-32 32s14.3 32 32 32l96 0 0 32-16 0c-26.5 0-48 21.5-48 48l0 64c0 26.5 21.5 48 48 48l96 0c26.5 0 48-21.5 48-48l0-64c0-26.5-21.5-48-48-48l-16 0 0-32 192 0 0 32-16 0c-26.5 0-48 21.5-48 48l0 64c0 26.5 21.5 48 48 48l96 0c26.5 0 48-21.5 48-48l0-64c0-26.5-21.5-48-48-48l-16 0 0-32 96 0c17.7 0 32-14.3 32-32s-14.3-32-32-32l-224 0 0-32 16 0c26.5 0 48-21.5 48-48l0-64c0-26.5-21.5-48-48-48l-96 0zM448 376l8 0 0 48-80 0 0-48 72 0zm-256 0l8 0 0 48-80 0 0-48 72 0z"/></svg></span>
+        Capture network traffic
+      </a>
+      
+    </li>
+  
+
+  
+    <li class="nav-item level-1">
+      <a href="docs/differential-capture.html">
+        <span class="nav-icon" data-icon="code-compare" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><path fill="currentColor" d="M198.8 1.8c9-3.7 19.3-1.7 26.2 5.2l56 56c9.4 9.4 9.4 24.6 0 33.9l-56 56c-6.9 6.9-17.2 8.9-26.2 5.2S184 145.7 184 136l0-24-24 0c-17.7 0-32 14.3-32 32l0 214.7c28.3 12.3 48 40.5 48 73.3 0 44.2-35.8 80-80 80s-80-35.8-80-80c0-32.8 19.7-61 48-73.3L64 144c0-53 43-96 96-96l24 0 0-24c0-9.7 5.8-18.5 14.8-22.2zM392 80a24 24 0 1 0 48 0 24 24 0 1 0 -48 0zm-8 73.3c-28.3-12.3-48-40.5-48-73.3 0-44.2 35.8-80 80-80s80 35.8 80 80c0 32.8-19.7 61-48 73.3L448 368c0 53-43 96-96 96l-24 0 0 24c0 9.7-5.8 18.5-14.8 22.2s-19.3 1.7-26.2-5.2l-56-56c-9.4-9.4-9.4-24.6 0-33.9l56-56c6.9-6.9 17.2-8.9 26.2-5.2S328 366.3 328 376l0 24 24 0c17.7 0 32-14.3 32-32l0-214.7zM72 432a24 24 0 1 0 48 0 24 24 0 1 0 -48 0z"/></svg></span>
+        Differential capture
+      </a>
+      
+    </li>
+  
+
+</ul>
+
+    
+  
+
+  
+    <li class="nav-group">Automate the browser</li>
+    
+      
+<ul class="nav-list">
+
+  
+    <li class="nav-item level-1">
+      <a href="docs/plugins.html">
+        <span class="nav-icon" data-icon="plug" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><path fill="currentColor" d="M128-32c17.7 0 32 14.3 32 32l0 96 128 0 0-96c0-17.7 14.3-32 32-32s32 14.3 32 32l0 96 64 0c17.7 0 32 14.3 32 32s-14.3 32-32 32l0 64c0 95.1-69.2 174.1-160 189.3l0 66.7c0 17.7-14.3 32-32 32s-32-14.3-32-32l0-66.7C101.2 398.1 32 319.1 32 224l0-64c-17.7 0-32-14.3-32-32S14.3 96 32 96l64 0 0-96c0-17.7 14.3-32 32-32z"/></svg></span>
+        Use cdp as an MCP server
+      </a>
+      
+    </li>
+  
+
+  
+    <li class="nav-item level-1">
+      <a href="docs/electron-mcp.html">
+        <span class="nav-icon" data-icon="atom" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><path fill="currentColor" d="M224 398.8c-11.8 5.1-23.4 9.7-34.9 13.5 16.7 33.8 31 35.7 34.9 35.7s18.1-1.9 34.9-35.7c-11.4-3.9-23.1-8.4-34.9-13.5zM414 256c33 45.2 44.3 90.9 23.6 128-20.2 36.3-62.5 49.3-115.2 43.2-22 52.1-55.7 84.8-98.4 84.8s-76.4-32.7-98.4-84.8C72.9 433.3 30.6 420.3 10.4 384-10.3 346.9 1 301.2 34 256 1 210.8-10.3 165.1 10.4 128 30.6 91.7 72.9 78.7 125.6 84.8 147.6 32.7 181.2 0 224 0s76.4 32.7 98.4 84.8c52.7-6.1 95 6.8 115.2 43.2 20.7 37.1 9.4 82.8-23.6 128zm-65.8 67.4c-1.7 14.2-3.9 28-6.7 41.2 31.8 1.4 38.6-8.7 40.2-11.7 2.3-4.2 7-17.9-11.9-48.1-6.8 6.3-14 12.5-21.6 18.6zm-6.7-175.9c2.8 13.1 5 26.9 6.7 41.2 7.6 6.1 14.8 12.3 21.6 18.6 18.9-30.2 14.2-44 11.9-48.1-1.6-2.9-8.4-13-40.2-11.7zM258.9 99.7C242.1 65.9 227.9 64 224 64s-18.1 1.9-34.9 35.7c11.4 3.9 23.1 8.4 34.9 13.5 11.8-5.1 23.4-9.7 34.9-13.5zm-159 88.9c1.7-14.3 3.9-28 6.7-41.2-31.8-1.4-38.6 8.7-40.2 11.7-2.3 4.2-7 17.9 11.9 48.1 6.8-6.3 14-12.5 21.6-18.6zM78.2 304.8c-18.9 30.2-14.2 44-11.9 48.1 1.6 2.9 8.4 13 40.2 11.7-2.8-13.1-5-26.9-6.7-41.2-7.6-6.1-14.8-12.3-21.6-18.6zM304 256a80 80 0 1 0 -160 0 80 80 0 1 0 160 0zm-80-32a32 32 0 1 1 0 64 32 32 0 1 1 0-64z"/></svg></span>
+        Electron debugging
+      </a>
+      
+    </li>
+  
+
+</ul>
+
+    
+  
+
+  
+    <li class="nav-group">Work on this repository</li>
+    
+      
+<ul class="nav-list">
+
+  
+    <li class="nav-item level-1">
+      <a href="docs/testing.html">
+        <span class="nav-icon" data-icon="vial" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><path fill="currentColor" d="M342.6 9.4c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3L306.7 64 28.1 342.6C10.1 360.6 0 385 0 410.5L0 416c0 53 43 96 96 96l5.5 0c25.5 0 49.9-10.1 67.9-28.1l278.6-278.6 9.4 9.4c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3l-160-160zM205.3 256l146.7-146.7 50.7 50.7-96 96-101.5 0z"/></svg></span>
+        Testing
+      </a>
+      
+    </li>
+  
+
+</ul>
+
+    
+  
+
+  
+    <li class="nav-group">Reference</li>
+    
+      
+<ul class="nav-list">
+
+  
+    <li class="nav-item level-1">
+      <a href="docs/commands.html">
+        <span class="nav-icon" data-icon="terminal" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><path fill="currentColor" d="M9.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L146.7 256 9.4 118.6zM224 384l256 0c17.7 0 32 14.3 32 32s-14.3 32-32 32l-256 0c-17.7 0-32-14.3-32-32s14.3-32 32-32z"/></svg></span>
+        Command reference
+      </a>
+      
+    </li>
+  
+
+  
+    <li class="nav-item level-1">
+      <a href="docs/known-issues.html">
+        <span class="nav-icon" data-icon="triangle-exclamation" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><path fill="currentColor" d="M256 0c14.7 0 28.2 8.1 35.2 21l216 400c6.7 12.4 6.4 27.4-.8 39.5S486.1 480 472 480L40 480c-14.1 0-27.2-7.4-34.4-19.5s-7.5-27.1-.8-39.5l216-400c7-12.9 20.5-21 35.2-21zm0 352a32 32 0 1 0 0 64 32 32 0 1 0 0-64zm0-192c-18.2 0-32.7 15.5-31.4 33.7l7.4 104c.9 12.5 11.4 22.3 23.9 22.3 12.6 0 23-9.7 23.9-22.3l7.4-104c1.3-18.2-13.1-33.7-31.4-33.7z"/></svg></span>
+        Known issues
+      </a>
+      
+    </li>
+  
+
+</ul>
+
+    
+  
+
+</ul>
+
+</nav>
 
 
-    </main>
+        </aside>
+        <main class="main-content" id="main-content">
+            
+
+
+            
+<h1 id="cdp">cdp</h1>
+<p><a href="https://pkg.go.dev/github.com/tmc/cdp"><img src="https://pkg.go.dev/badge/github.com/tmc/cdp.svg" alt="Go Reference" /></a></p>
+<p><code>cdp</code> is a Go module for Chrome DevTools Protocol automation. It includes a live browser CLI, a txtar script runner, and a Go test harness for repeatable browser workflows.</p>
+<p>The browser-automation stack has three primary layers:</p>
+<ul>
+<li><code>cmd/cdp</code>: live CDP operation, MCP tools, browser attach, screenshots, HAR, raw CDP, and page artifacts.</li>
+<li><code>cdpscript</code>: executable txtar scripts that turn browser interactions into Unix-style tools.</li>
+<li><code>cdpscripttest</code>: <code>rsc.io/script</code>-style browser fixtures for Go tests, including a bridge that runs real <code>cdpscript</code> archives.</li>
+</ul>
+<p>For MCP actions tied to an inspected page, see <a href="docs/browser-observations.html">browser observations and actions</a>.</p>
+<h2 id="commands">Commands</h2>
+<ul>
+<li><code>chrome-to-har</code>: focused HAR capture CLI</li>
+<li><code>cdp</code>: the main Chrome/CDP CLI</li>
+<li><code>churl</code>: browser-backed fetch and page extraction</li>
+<li><code>chdb</code>: Chrome-focused debugger workflow</li>
+<li><code>ndp</code>: Node/V8 debugger workflow</li>
+<li><code>cdpscript</code>: run CDP scripts</li>
+<li><code>cdpscripttest</code>: test CDP scripts</li>
+</ul>
+<h2 id="install">Install</h2>
+<p>The module requires Go 1.26 or newer.</p>
+<p>Install the broad CDP CLI:</p>
+<div class="md-code" data-language="Bash">
+<span class="md-code-lang" aria-hidden="true">Bash</span>
+<pre class="chroma"><code><span class="line"><span class="cl">go install github.com/tmc/cdp/cmd/cdp@latest
+</span></span></code></pre></div>
+<p>Install individual tools:</p>
+<div class="md-code" data-language="Bash">
+<span class="md-code-lang" aria-hidden="true">Bash</span>
+<pre class="chroma"><code><span class="line"><span class="cl">go install github.com/tmc/cdp/cmd/chrome-to-har@latest
+</span></span><span class="line"><span class="cl">go install github.com/tmc/cdp/cmd/cdp@latest
+</span></span><span class="line"><span class="cl">go install github.com/tmc/cdp/cmd/churl@latest
+</span></span><span class="line"><span class="cl">go install github.com/tmc/cdp/cmd/chdb@latest
+</span></span><span class="line"><span class="cl">go install github.com/tmc/cdp/cmd/ndp@latest
+</span></span><span class="line"><span class="cl">go install github.com/tmc/cdp/cmd/cdpscript@latest
+</span></span><span class="line"><span class="cl">go install github.com/tmc/cdp/cmd/cdpscripttest@latest
+</span></span></code></pre></div>
+<h2 id="quick-start">Quick Start</h2>
+<p>Attach to a browser the user is already using:</p>
+<div class="md-code" data-language="Bash">
+<span class="md-code-lang" aria-hidden="true">Bash</span>
+<pre class="chroma"><code><span class="line"><span class="cl">cdp attach --port <span class="m">9222</span>
+</span></span><span class="line"><span class="cl">cdp --remote-host localhost --remote-port <span class="m">9222</span> --tab &lt;target-id&gt; --shell
+</span></span><span class="line"><span class="cl">cdp --remote-host localhost --remote-port <span class="m">9222</span> --tab &lt;target-id&gt; --await --format json --js <span class="s1">&#39;document.title&#39;</span>
+</span></span></code></pre></div>
+<p>Run a repeatable browser script:</p>
+<div class="md-code" data-language="Bash">
+<span class="md-code-lang" aria-hidden="true">Bash</span>
+<pre class="chroma"><code><span class="line"><span class="cl">cdpscript script.txtar
+</span></span><span class="line"><span class="cl">cdpscript --tab &lt;target-id&gt; --port <span class="m">9222</span> script.txtar
+</span></span><span class="line"><span class="cl">cdp run --tab &lt;target-id&gt; --port <span class="m">9222</span> script.txtar
+</span></span></code></pre></div>
+<p>Test browser behavior from Go:</p>
+<div class="md-code" data-language="Go">
+<span class="md-code-lang" aria-hidden="true">Go</span>
+<pre class="chroma"><code><span class="line"><span class="cl"><span class="nx">e</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">cdpscripttest</span><span class="p">.</span><span class="nf">NewEngine</span><span class="p">()</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="nx">cdpscripttest</span><span class="p">.</span><span class="nf">Test</span><span class="p">(</span><span class="nx">t</span><span class="p">,</span><span class="w"> </span><span class="nx">e</span><span class="p">,</span><span class="w"> </span><span class="nx">allocCtx</span><span class="p">,</span><span class="w"> </span><span class="s">&#34;http://localhost:8080&#34;</span><span class="p">,</span><span class="w"> </span><span class="s">&#34;testdata/*.txt&#34;</span><span class="p">,</span><span class="w"> </span><span class="kc">nil</span><span class="p">)</span><span class="w">
+</span></span></span></code></pre></div>
+<p>For <code>cdpscript</code>-format txtars, use <code>cdpscripttest.RunCDPScript</code> so tests run the same runtime used by <code>cdpscript</code> and <code>cdp run</code>.</p>
+<div class="md-code" data-language="Go">
+<span class="md-code-lang" aria-hidden="true">Go</span>
+<pre class="chroma"><code><span class="line"><span class="cl"><span class="nx">err</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">cdpscripttest</span><span class="p">.</span><span class="nf">RunCDPScript</span><span class="p">(</span><span class="nx">ctx</span><span class="p">,</span><span class="w"> </span><span class="s">&#34;testdata/login.txtar&#34;</span><span class="p">,</span><span class="w"> </span><span class="nx">cdpscripttest</span><span class="p">.</span><span class="nx">CDPScriptRunOptions</span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nx">Headless</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nx">Env</span><span class="p">:</span><span class="w">      </span><span class="p">[]</span><span class="kt">string</span><span class="p">{</span><span class="s">&#34;BASE_URL=http://localhost:8080&#34;</span><span class="p">},</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="p">})</span><span class="w">
+</span></span></span></code></pre></div>
+<p>Capture network activity with <code>chrome-to-har</code>:</p>
+<div class="md-code" data-language="Bash">
+<span class="md-code-lang" aria-hidden="true">Bash</span>
+<pre class="chroma"><code><span class="line"><span class="cl">go install github.com/tmc/cdp/cmd/chrome-to-har@latest
+</span></span><span class="line"><span class="cl">chrome-to-har --url https://example.com --output out.har
+</span></span></code></pre></div>
+<p>Use <code>--shell</code> when you want to browse interactively while recording:</p>
+<div class="md-code" data-language="Bash">
+<span class="md-code-lang" aria-hidden="true">Bash</span>
+<pre class="chroma"><code><span class="line"><span class="cl">cdp --url https://example.com --har out.har --shell
+</span></span></code></pre></div>
+<p>Evaluate JavaScript in a page:</p>
+<div class="md-code" data-language="Bash">
+<span class="md-code-lang" aria-hidden="true">Bash</span>
+<pre class="chroma"><code><span class="line"><span class="cl">cdp --headless --url https://example.com --js <span class="s1">&#39;document.title&#39;</span>
+</span></span></code></pre></div>
+<p>Fetch a page with browser execution:</p>
+<div class="md-code" data-language="Bash">
+<span class="md-code-lang" aria-hidden="true">Bash</span>
+<pre class="chroma"><code><span class="line"><span class="cl">churl https://example.com
+</span></span></code></pre></div>
+<p>Attach to a Node inspector target:</p>
+<div class="md-code" data-language="Bash">
+<span class="md-code-lang" aria-hidden="true">Bash</span>
+<pre class="chroma"><code><span class="line"><span class="cl">ndp node attach <span class="m">9229</span>
+</span></span></code></pre></div>
+<h2 id="common-tasks">Common Tasks</h2>
+<p>Capture authenticated browser traffic with an existing profile:</p>
+<div class="md-code" data-language="Bash">
+<span class="md-code-lang" aria-hidden="true">Bash</span>
+<pre class="chroma"><code><span class="line"><span class="cl">chrome-to-har --profile <span class="s2">&#34;Default&#34;</span> <span class="se">\
+</span></span></span><span class="line"><span class="cl"><span class="se"></span>  --url https://app.example.com <span class="se">\
+</span></span></span><span class="line"><span class="cl"><span class="se"></span>  --wait-for <span class="s1">&#39;#app-root&#39;</span> <span class="se">\
+</span></span></span><span class="line"><span class="cl"><span class="se"></span>  --output app.har
+</span></span></code></pre></div>
+<p>Render a JavaScript-heavy page to text:</p>
+<div class="md-code" data-language="Bash">
+<span class="md-code-lang" aria-hidden="true">Bash</span>
+<pre class="chroma"><code><span class="line"><span class="cl">churl --output-format<span class="o">=</span>text --wait-for <span class="s2">&#34;.loaded&#34;</span> https://example.com
+</span></span></code></pre></div>
+<p>Take a screenshot or extract content from a page:</p>
+<div class="md-code" data-language="Bash">
+<span class="md-code-lang" aria-hidden="true">Bash</span>
+<pre class="chroma"><code><span class="line"><span class="cl">cdp --url https://example.com --screenshot <span class="s1">&#39;full page.png&#39;</span>
+</span></span><span class="line"><span class="cl">cdp --url https://example.com --extract <span class="s1">&#39;h1&#39;</span>
+</span></span><span class="line"><span class="cl">cdp --url https://example.com --render body
+</span></span></code></pre></div>
+<p>Connect to an existing Chrome instance:</p>
+<div class="md-code" data-language="Bash">
+<span class="md-code-lang" aria-hidden="true">Bash</span>
+<pre class="chroma"><code><span class="line"><span class="cl">cdp attach --port <span class="m">9222</span>
+</span></span><span class="line"><span class="cl">cdp --remote-host localhost --remote-port <span class="m">9222</span> --tab &lt;tab-id&gt; --js <span class="s1">&#39;document.title&#39;</span>
+</span></span></code></pre></div>
+<p>Connect to a remote browser:</p>
+<div class="md-code" data-language="Bash">
+<span class="md-code-lang" aria-hidden="true">Bash</span>
+<pre class="chroma"><code><span class="line"><span class="cl">cdp --remote-host 10.0.0.5 --remote-port <span class="m">9222</span> --list-tabs
+</span></span><span class="line"><span class="cl">churl --remote-host 10.0.0.5 --remote-port <span class="m">9222</span> https://example.com
+</span></span></code></pre></div>
+<p>Use <code>ndp</code> against a Node inspector:</p>
+<div class="md-code" data-language="Bash">
+<span class="md-code-lang" aria-hidden="true">Bash</span>
+<pre class="chroma"><code><span class="line"><span class="cl">node --inspect<span class="o">=</span><span class="m">9229</span> app.js
+</span></span><span class="line"><span class="cl">ndp node attach <span class="m">9229</span>
+</span></span></code></pre></div>
+<p>Run and test CDP scripts:</p>
+<div class="md-code" data-language="Bash">
+<span class="md-code-lang" aria-hidden="true">Bash</span>
+<pre class="chroma"><code><span class="line"><span class="cl">cdpscript login.txtar
+</span></span><span class="line"><span class="cl">cdpscripttest --url http://localhost:8090 testdata/login.txt
+</span></span></code></pre></div>
+<h2 id="what-chrome-to-har-does">What <code>chrome-to-har</code> Does</h2>
+<p><code>chrome-to-har</code> is the focused capture entry point. It is useful when you want HAR output, streaming entry logs, profile-based browsing, or differential capture that compares two runs of the same page.</p>
+<h2 id="what-cdp-does">What <code>cdp</code> Does</h2>
+<p>The main <code>cdp</code> command is the broader general-purpose entry point. It goes beyond <code>chrome-to-har</code> and can:</p>
+<ul>
+<li>connect to Chrome or Chromium locally or remotely</li>
+<li>navigate, evaluate JavaScript, and extract page state</li>
+<li>record HAR output and stream HARL JSONL capture data to a file, or to
+stdout when <code>--harl-file -</code> is explicit</li>
+<li>inject extra capture logic for traffic CDP does not expose directly, including gRPC-Web streams and WebRTC SDP, DataChannel, and ICE candidates (under <code>--full-capture</code>, select the WebRTC streams with <code>--webrtc-capture</code>, e.g. <code>--webrtc-capture=sdp,datachannel</code> (default), <code>=all</code>, or <code>=none</code>)</li>
+<li>run in interactive and MCP-oriented modes</li>
+</ul>
+<h2 id="what-churl-does">What <code>churl</code> Does</h2>
+<p><code>churl</code> is a browser-powered fetch tool for pages that need JavaScript execution. It is useful for:</p>
+<ul>
+<li>SPA-aware page fetches</li>
+<li>extracting rendered HTML or text</li>
+<li>saving HAR alongside fetch output</li>
+<li>scripted page interaction</li>
+</ul>
+<h2 id="what-ndp-and-chdb-do">What <code>ndp</code> and <code>chdb</code> Do</h2>
+<p><code>ndp</code> focuses on Node/V8 debugging flows. <code>chdb</code> focuses on Chrome-oriented debugging flows. Both are still evolving, but they are intended to expose debugger-oriented workflows rather than generic browser automation.</p>
+<h2 id="automation-stack">Automation Stack</h2>
+<p><code>cdp</code> is generalized browser scripting — the live operator surface. Use it when you need to attach to an existing browser, inspect tabs, observe with screenshots, act with coordinates or element refs, capture HAR/PDF/screenshots, or fall back to raw CDP.</p>
+<p><code>cdpscript</code> is Unix-like tooling for browser operations — the durable automation surface. Scripts are txtar archives with <code>main.cdp</code>, optional embedded helper files, argv via <code>ARG1..ARGN</code>/<code>ARGC</code>, environment variables, output artifacts, and distinct exit codes for usage and assertion failures. A script with a <code>#!/usr/bin/env cdpscript</code> line and the executable bit is a command in its own right — its comment section becomes <code>--help</code> text:</p>
+<div class="md-code" data-language="Bash">
+<span class="md-code-lang" aria-hidden="true">Bash</span>
+<pre class="chroma"><code><span class="line"><span class="cl">chmod +x greet.cdpscript
+</span></span><span class="line"><span class="cl">./greet.cdpscript https://example.com
+</span></span></code></pre></div>
+<p><code>cdpscripttest</code> is Go-native browser testing — the testing surface. It runs local browser fixtures, screenshot comparisons, network/WebRTC tests, and real <code>cdpscript</code> archives under <code>go test</code>. Fixtures should avoid third-party network dependencies; authenticated site workflows should live as explicitly live-only examples.</p>
+<h2 id="stability-and-compatibility">Stability and Compatibility</h2>
+<p>The module is pre-v1, so nothing here carries a v1 compatibility promise yet. The three surfaces are not equally settled, and the script DSL is deliberately the most stable of them.</p>
+<p><strong>Script DSL</strong> (<code>main.cdp</code> commands, exit codes). Treated as a contract. Command names and argument order do not change meaning, a renamed command keeps its old name as an alias, and new behavior arrives as optional flags. Scripts written today are expected to keep running. <code>cdpscripttest</code> canonical names are hyphenated (<code>navigate</code>, <code>wait-visible</code>) and also register the shell spellings (<code>goto</code>, <code>wait</code>) as aliases; both are kept working.</p>
+<p><strong>Go API</strong> (<code>cdpscript</code>, <code>cdpscripttest</code>). Stable in shape, not frozen. The engine types, the <code>Execute</code> methods, and the option constructors are unlikely to move; options are added over time. An exported option taking a type from an <code>internal/</code> package may be removed outright, since no code outside this module can call it. Other deprecations are marked in godoc for at least one release before removal.</p>
+<p><strong>MCP tool set</strong> (<code>cdp --mcp</code>). The least stable surface. Tool names, input schemas, and result shapes follow what the hosts need and may change without notice. Pin a commit if you depend on a specific schema.</p>
+<p>The screen recorder, the WebRTC shim, and screenshot-comparison thresholds are test-harness machinery and track the browser behavior they wrap, even where their Go API is exported. Baseline images and pixel thresholds are not a compatibility contract.</p>
+<h2 id="trust-model">Trust Model</h2>
+<p><code>cdp</code> drives a real browser with the privileges of the user who starts it. It is not a sandbox.</p>
+<p><strong>On the command line and in <code>.cdp</code> scripts, the operator is the author.</strong> <code>js</code>/<code>jsfile</code>/<code>eval</code> run arbitrary JavaScript in the page, <code>goto</code> reaches any URL the host can reach including <code>file://</code> and localhost, and <code>screenshot</code>/<code>pdf</code>/<code>har</code>/<code>download-dir</code> write where they are pointed — absolute paths verbatim, relative paths under <code>-output-dir</code>, unconfined either way. That is the intended power of a browser automation tool. A <code>.cdp</code> script is not a shell: the engine registers only its own commands, not <code>rsc.io/script</code>&rsquo;s defaults, so there is no <code>exec</code>, <code>rm</code>, or <code>cp</code>.</p>
+<p><strong>Under <code>--mcp</code> the author changes.</strong> The caller is an agent, and everything above reaches it. Three tools are stronger than &ldquo;run JavaScript in a page&rdquo;: <code>evaluate</code> and <code>raw_cdp</code> expose the full page-JS and CDP surfaces, <code>upload_file</code> reads any absolute path on the host and can hand it to a page the same agent navigated to, and <code>run_cdpscript</code> runs agent-supplied script text with the server&rsquo;s own environment — credentials included — exposed as <code>${NAME}</code>. Tool and context names are validated so <code>define_tool</code> and <code>push_context</code> stay inside their directories, but artifact paths are not confined. Run the server with an environment and working directory you would hand to whatever is on the other end.</p>
+<p><strong>Captures are redacted by default</strong> — request headers and query parameters, request and response bodies, WebSocket frames, and saved sources, unless <code>--no-scrub</code> is set. Text over 512 KiB passes through unscrubbed (a deliberate trade for capture speed on large bundles), and scrubbing covers captured artifacts rather than tool results: <code>get_cookies</code> returns cookie values as they are, and <code>save_state</code> writes them to disk in cleartext.</p>
+<p>Full statement: <code>go doc github.com/tmc/cdp/cmd/cdp</code>, section &ldquo;Trust model&rdquo;.</p>
+<h2 id="documentation">Documentation</h2>
+<p>Each command documents its own flags and subcommands, checked by a test:</p>
+<div class="md-code" data-language="Bash">
+<span class="md-code-lang" aria-hidden="true">Bash</span>
+<pre class="chroma"><code><span class="line"><span class="cl">go doc ./cmd/cdp
+</span></span><span class="line"><span class="cl">go doc ./cmd/churl
+</span></span><span class="line"><span class="cl">go doc ./cmd/chrome-to-har
+</span></span></code></pre></div>
+<p>The guides live in <a href="docs/index.html">docs/</a>, which opens with an &ldquo;I want to…&rdquo;
+table covering every page. The usual entry points:</p>
+<ul>
+<li><a href="docs/quickstart.html">Quickstart</a> — install and see a tool work</li>
+<li><a href="docs/tutorial-first-script.html">Tutorial: your first script</a> — build a
+script, make it fail, run it as a Go test</li>
+<li><a href="docs/how-cdp-works.html">How cdp works</a> — why there are several commands, and
+what is stable</li>
+<li><a href="docs/troubleshooting.html">Troubleshooting</a> — when something goes wrong</li>
+</ul>
+<p>For command-level help, use:</p>
+<div class="md-code" data-language="Bash">
+<span class="md-code-lang" aria-hidden="true">Bash</span>
+<pre class="chroma"><code><span class="line"><span class="cl">cdp --help
+</span></span><span class="line"><span class="cl">churl --help
+</span></span><span class="line"><span class="cl">chdb --help
+</span></span><span class="line"><span class="cl">ndp --help
+</span></span><span class="line"><span class="cl">cdpscript --help
+</span></span><span class="line"><span class="cl">cdpscripttest --help
+</span></span></code></pre></div>
+
+
+            
+
+<footer class="page-footer">
+    <div class="last-updated">Last updated: 2026-09-23</div>
+    
+</footer>
+
+
+            
+
+<nav class="page-nav" aria-label="Page navigation">
+  
+  <span class="nav-prev-empty"></span>
+  
+  
+</nav>
+
+
+        </main>
+        <aside class="sidebar-toc" id="sidebar-toc">
+            <div class="sidebar-toc-header">On this page</div>
+        </aside>
+    </div>
+    
+
     
     
 
@@ -1209,7 +2458,7 @@
                 document.body.insertBefore(box, document.body.firstChild);
             }
             var p = document.createElement('p');
-            p.textContent = name + ' could not be loaded (offline?) — ' + consequence + '.';
+            p.textContent = name + ' could not be loaded (offline?): ' + consequence + '.';
             box.appendChild(p);
         };
     </script>
@@ -1583,6 +2832,145 @@
 
 
 
+
+    
+    <script>
+        (function() {
+            const container = document.getElementById('sidebar-toc');
+            if (!container) return;
+
+            function build() {
+                const headings = document.querySelectorAll('.main-content h1, .main-content h2, .main-content h3');
+
+                
+                
+                
+                if (headings.length < 3) {
+                    container.hidden = true;
+                    return;
+                }
+
+                const list = document.createElement('ul');
+                const links = new Map();
+
+                headings.forEach((heading, index) => {
+                    if (!heading.id) {
+                        heading.id = `heading-${index}`;
+                    }
+                    const link = document.createElement('a');
+                    link.href = `#${heading.id}`;
+                    
+                    
+                    const label = heading.cloneNode(true);
+                    label.querySelectorAll('.heading-anchor').forEach(el => el.remove());
+                    link.textContent = label.textContent.trim();
+                    link.className = `level-${heading.tagName.charAt(1)}`;
+
+                    const item = document.createElement('li');
+                    item.appendChild(link);
+                    list.appendChild(item);
+                    links.set(heading.id, link);
+                });
+
+                container.appendChild(list);
+
+                function activate(id) {
+                    links.forEach((link, key) => link.classList.toggle('active', key === id));
+                }
+
+                
+                
+                
+                const visible = new Set();
+                const observer = new IntersectionObserver(function(entries) {
+                    entries.forEach(function(entry) {
+                        if (entry.isIntersecting) {
+                            visible.add(entry.target.id);
+                        } else {
+                            visible.delete(entry.target.id);
+                        }
+                    });
+                    for (const heading of headings) {
+                        if (visible.has(heading.id)) {
+                            activate(heading.id);
+                            return;
+                        }
+                    }
+                }, {
+                    
+                    
+                    
+                    rootMargin: '-10% 0px -70% 0px',
+                    threshold: 0,
+                });
+                headings.forEach(heading => observer.observe(heading));
+
+                activate(headings[0].id);
+            }
+
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', build);
+            } else {
+                build();
+            }
+        })();
+    </script>
+
+    
+<script>
+    (function() {
+        var sidebar = document.getElementById('site-sidebar');
+        var toggle = document.querySelector('.nav-toggle');
+        if (!sidebar) return;
+
+        
+        var active = sidebar.querySelector('.nav-item a.active');
+        if (active) {
+            var top = active.offsetTop;
+            if (top > sidebar.clientHeight - 80) {
+                sidebar.scrollTop = top - sidebar.clientHeight / 2;
+            }
+        }
+
+        if (!toggle) return;
+
+        var backdrop = null;
+
+        function close() {
+            sidebar.classList.remove('open');
+            toggle.setAttribute('aria-expanded', 'false');
+            toggle.setAttribute('aria-label', 'Show navigation');
+            if (backdrop) {
+                backdrop.remove();
+                backdrop = null;
+            }
+        }
+
+        function open() {
+            sidebar.classList.add('open');
+            toggle.setAttribute('aria-expanded', 'true');
+            toggle.setAttribute('aria-label', 'Hide navigation');
+            backdrop = document.createElement('div');
+            backdrop.className = 'nav-backdrop';
+            backdrop.addEventListener('click', close);
+            document.body.appendChild(backdrop);
+        }
+
+        toggle.addEventListener('click', function() {
+            if (sidebar.classList.contains('open')) close(); else open();
+        });
+
+        
+        
+        sidebar.addEventListener('click', function(e) {
+            if (e.target.closest('a')) close();
+        });
+
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') close();
+        });
+    })();
+</script>
 
 </body>
 </html>

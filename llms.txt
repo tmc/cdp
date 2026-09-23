@@ -52,6 +52,5 @@
 ## Other
 
 - [cdp](README.html): ![Go Reference](https://pkg.go.dev/github.com/tmc/cdp)
-- [cua](cmd/cua/README.html): cua presents browser and native computer use through seven MCP tools. It starts an exclusive backend process for each configured backend and client connection....
 - [Browser observations and actions](docs/browser-observations.html): Use browser_observe and browser_act when an action must refer to the page state you inspected. Both are MCP tools provided by cdp.
 - [Internal chromedp runtime](internal/chromedp/README.html): This directory carries the runtime sources and embedded JavaScript from chromedp v0.16.0 (commit 7963c203ed5458147d27dc39a5c06d2b12e81664). The upstream...

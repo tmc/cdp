@@ -2207,11 +2207,28 @@
 chromedp v0.16.0 (commit <code>7963c203ed5458147d27dc39a5c06d2b12e81664</code>). The upstream
 license is retained in LICENSE. The upstream module checksum is
 <code>h1:rOO4deOm4CbZgBCa8mD9g2rDyIoNs0BkgvNrlbp5ouk=</code>.</p>
-<p>The local change adds <code>WithExistingTarget</code>: canceling a borrowed attachment
-releases its session without closing the browser&rsquo;s target. <code>WithTargetID</code> and
-newly allocated targets retain their existing close-on-cancel behavior. Invalid
-borrowed-target options fail during <code>Run</code>, before allocation. Browser-context
-option validation runs after option collection to handle both option orders.</p>
+<p>Local changes, all to be re-applied when updating the copy:</p>
+<ul>
+<li>Import paths are rewritten from <code>github.com/chromedp/chromedp</code> to
+<code>github.com/tmc/cdp/internal/chromedp</code>.</li>
+<li>chromedp.go adds <code>WithExistingTarget</code>: canceling a borrowed attachment
+releases its session without closing the browser&rsquo;s target. <code>WithTargetID</code>
+and newly allocated targets retain their existing close-on-cancel behavior.
+Invalid borrowed-target options, including conflicting target options and a
+browser-context option on a borrowed target, fail during <code>Run</code>, before
+allocation.</li>
+<li>chromedp.go moves the &ldquo;can not be used before Browser is initialized&rdquo;
+panics of <code>WithNewBrowserContext</code> and <code>WithExistingBrowserContext</code> from the
+options into <code>NewContext</code>, after option collection, so they apply in either
+option order.</li>
+<li>chromedp.go makes a failed browser allocation sticky: <code>Run</code> records the
+error and returns it on later calls instead of allocating again, which
+would close the allocator&rsquo;s one-shot channel twice and panic.</li>
+<li>The <code>//go:generate go run gen.go</code> directives are removed from kb/kb.go,
+device/device.go, and the templates in kb/gen.go and device/gen.go, so
+<code>go generate ./...</code> does not regenerate those files from live sources and
+drift from the pinned version. Run gen.go by hand only as part of an update.</li>
+</ul>
 <p>The MCP/browser implementation imports this package. The public <code>cdpscripttest</code>
 package and its CLI still use upstream chromedp, preserving their exported
 allocator options and action types. Contexts, options and concrete runtime types
@@ -2233,7 +2250,7 @@ attachment contract, after qualifying the same lifecycle tests.</p>
             
 
 <footer class="page-footer">
-    <div class="last-updated">Last updated: 2026-09-07</div>
+    <div class="last-updated">Last updated: 2026-09-23</div>
     
 </footer>
 
@@ -2275,7 +2292,7 @@ attachment contract, after qualifying the same lifecycle tests.</p>
                 document.body.insertBefore(box, document.body.firstChild);
             }
             var p = document.createElement('p');
-            p.textContent = name + ' could not be loaded (offline?) — ' + consequence + '.';
+            p.textContent = name + ' could not be loaded (offline?): ' + consequence + '.';
             box.appendChild(p);
         };
     </script>

@@ -2263,8 +2263,7 @@ directory to <code>PATH</code>. The Claude Desktop bundle instead launches the b
 absolute path (a GUI app does not inherit your shell <code>PATH</code>), defaulting to
 <code>~/go/bin/cdp</code>.</p>
 <h2 id="claude-code">Claude Code</h2>
-<p>The repository is itself a Claude Code plugin and a single-plugin marketplace.
-Once the repository is published to its default branch on GitHub:</p>
+<p>The repository is itself a Claude Code plugin and a single-plugin marketplace:</p>
 <div class="md-code" data-language="Bash">
 <span class="md-code-lang" aria-hidden="true">Bash</span>
 <pre class="chroma"><code><span class="line"><span class="cl">/plugin marketplace add tmc/cdp
@@ -2273,8 +2272,7 @@ Once the repository is published to its default branch on GitHub:</p>
 <p>These two commands were not executed for this revision; the plugin files they
 read are present on <code>main</code>.</p>
 <p><code>/plugin marketplace add</code> reads <code>marketplace.json</code> from the repository&rsquo;s default
-branch, so this flow works only after these files land on <code>main</code>. Until then —
-or for local development — load the plugin directly from a checkout:</p>
+branch. For local development, load the plugin directly from a checkout:</p>
 <div class="md-code" data-language="Bash">
 <span class="md-code-lang" aria-hidden="true">Bash</span>
 <pre class="chroma"><code><span class="line"><span class="cl">claude --plugin-dir .
@@ -2325,7 +2323,7 @@ flag.</li>
             
 
 <footer class="page-footer">
-    <div class="last-updated">Last updated: 2026-09-22</div>
+    <div class="last-updated">Last updated: 2026-09-23</div>
     
 </footer>
 
@@ -2375,7 +2373,7 @@ flag.</li>
                 document.body.insertBefore(box, document.body.firstChild);
             }
             var p = document.createElement('p');
-            p.textContent = name + ' could not be loaded (offline?) — ' + consequence + '.';
+            p.textContent = name + ' could not be loaded (offline?): ' + consequence + '.';
             box.appendChild(p);
         };
     </script>

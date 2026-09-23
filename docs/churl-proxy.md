@@ -30,7 +30,7 @@ churl --proxy https://proxy.example.com:8080 https://example.com
 churl --socks5-proxy socks5://proxy.example.com:1080 https://example.com
 ```
 
-## Advanced Options
+## Options
 
 ### Proxy Bypass List
 

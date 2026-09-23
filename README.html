@@ -2340,7 +2340,7 @@
 <pre class="chroma"><code><span class="line"><span class="cl">cdpscript login.txtar
 </span></span><span class="line"><span class="cl">cdpscripttest --url http://localhost:8090 testdata/login.txt
 </span></span></code></pre></div>
-<h2 id="command-summary">Command Summary</h2>
+<h2 id="what-chrome-to-har-does">What <code>chrome-to-har</code> Does</h2>
 <p><code>chrome-to-har</code> is the focused capture entry point. It is useful when you want HAR output, streaming entry logs, profile-based browsing, or differential capture that compares two runs of the same page.</p>
 <h2 id="what-cdp-does">What <code>cdp</code> Does</h2>
 <p>The main <code>cdp</code> command is the broader general-purpose entry point. It goes beyond <code>chrome-to-har</code> and can:</p>
@@ -2349,7 +2349,7 @@
 <li>navigate, evaluate JavaScript, and extract page state</li>
 <li>record HAR output and stream HARL JSONL capture data to a file, or to
 stdout when <code>--harl-file -</code> is explicit</li>
-<li>inject extra capture logic for traffic CDP does not expose directly, including gRPC-Web streams and WebRTC SDP, DataChannel, and ICE candidates (select the WebRTC streams to capture with <code>--webrtc-capture</code>, e.g. <code>--webrtc-capture=sdp,datachannel</code> (default), <code>=all</code>, or <code>=none</code>)</li>
+<li>inject extra capture logic for traffic CDP does not expose directly, including gRPC-Web streams and WebRTC SDP, DataChannel, and ICE candidates (under <code>--full-capture</code>, select the WebRTC streams with <code>--webrtc-capture</code>, e.g. <code>--webrtc-capture=sdp,datachannel</code> (default), <code>=all</code>, or <code>=none</code>)</li>
 <li>run in interactive and MCP-oriented modes</li>
 </ul>
 <h2 id="what-churl-does">What <code>churl</code> Does</h2>
@@ -2376,7 +2376,7 @@ stdout when <code>--harl-file -</code> is explicit</li>
 <p><strong>Script DSL</strong> (<code>main.cdp</code> commands, exit codes). Treated as a contract. Command names and argument order do not change meaning, a renamed command keeps its old name as an alias, and new behavior arrives as optional flags. Scripts written today are expected to keep running. <code>cdpscripttest</code> canonical names are hyphenated (<code>navigate</code>, <code>wait-visible</code>) and also register the shell spellings (<code>goto</code>, <code>wait</code>) as aliases; both are kept working.</p>
 <p><strong>Go API</strong> (<code>cdpscript</code>, <code>cdpscripttest</code>). Stable in shape, not frozen. The engine types, the <code>Execute</code> methods, and the option constructors are unlikely to move; options are added over time. An exported option taking a type from an <code>internal/</code> package may be removed outright, since no code outside this module can call it. Other deprecations are marked in godoc for at least one release before removal.</p>
 <p><strong>MCP tool set</strong> (<code>cdp --mcp</code>). The least stable surface. Tool names, input schemas, and result shapes follow what the hosts need and may change without notice. Pin a commit if you depend on a specific schema.</p>
-<p>Anything reached only under the <code>cdp</code> build tag — the screen recorder, the WebRTC shim, screenshot-comparison thresholds — is test-harness machinery and tracks the browser behavior it wraps. Baseline images and pixel thresholds are not a compatibility contract.</p>
+<p>The screen recorder, the WebRTC shim, and screenshot-comparison thresholds are test-harness machinery and track the browser behavior they wrap, even where their Go API is exported. Baseline images and pixel thresholds are not a compatibility contract.</p>
 <h2 id="trust-model">Trust Model</h2>
 <p><code>cdp</code> drives a real browser with the privileges of the user who starts it. It is not a sandbox.</p>
 <p><strong>On the command line and in <code>.cdp</code> scripts, the operator is the author.</strong> <code>js</code>/<code>jsfile</code>/<code>eval</code> run arbitrary JavaScript in the page, <code>goto</code> reaches any URL the host can reach including <code>file://</code> and localhost, and <code>screenshot</code>/<code>pdf</code>/<code>har</code>/<code>download-dir</code> write where they are pointed — absolute paths verbatim, relative paths under <code>-output-dir</code>, unconfined either way. That is the intended power of a browser automation tool. A <code>.cdp</code> script is not a shell: the engine registers only its own commands, not <code>rsc.io/script</code>&rsquo;s defaults, so there is no <code>exec</code>, <code>rm</code>, or <code>cp</code>.</p>
@@ -2416,7 +2416,7 @@ what is stable</li>
             
 
 <footer class="page-footer">
-    <div class="last-updated">Last updated: 2026-09-22</div>
+    <div class="last-updated">Last updated: 2026-09-23</div>
     
 </footer>
 
@@ -2458,7 +2458,7 @@ what is stable</li>
                 document.body.insertBefore(box, document.body.firstChild);
             }
             var p = document.createElement('p');
-            p.textContent = name + ' could not be loaded (offline?) — ' + consequence + '.';
+            p.textContent = name + ' could not be loaded (offline?): ' + consequence + '.';
             box.appendChild(p);
         };
     </script>

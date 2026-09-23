@@ -2233,10 +2233,9 @@ as light as <code>curl</code>.</p>
 writes a HAR, exits. Best when the capture is fully described by a URL and
 some waiting rules.</li>
 <li><strong><code>churl</code></strong> owns the session too, but the deliverable is the page, not the
-traffic. It is shaped like <code>curl</code> and <code>wget</code>, and fetching a single URL with
-JavaScript executed works well. Its <code>wget</code>-style recursion and mirroring
-flags are accepted but not implemented — see
-<a href="known-issues.html">Known issues</a>.</li>
+traffic. It is shaped like <code>curl</code>, and fetches one URL per run with
+JavaScript executed. It does not implement <code>wget</code>-style recursion or
+mirroring.</li>
 <li><strong><code>cdp</code></strong> does not assume it owns the session. It can attach to a browser you
 logged into by hand, keep running while you click, and expose the browser to
 an agent over MCP. This is what you reach for when getting to the interesting
@@ -2301,8 +2300,6 @@ and every flag is covered by a documentation test.</li>
 <li><strong>Moving:</strong> the MCP tool surface, including the inspection tools behind
 <code>-enable-inspect</code>. Tool names and arguments have changed and may change
 again.</li>
-<li><strong>Accepted but not implemented:</strong> <code>churl</code>&rsquo;s recursion and mirroring flags.
-They parse, churl exits 0, and nothing is written.</li>
 <li><strong>Known-broken in places:</strong> see <a href="known-issues.html">Known issues</a>, which
 lists open bugs with workarounds rather than pretending they are fixed.</li>
 </ul>
@@ -2330,7 +2327,7 @@ ideas above, applied.</li>
             
 
 <footer class="page-footer">
-    <div class="last-updated">Last updated: 2026-09-22</div>
+    <div class="last-updated">Last updated: 2026-09-23</div>
     
 </footer>
 
@@ -2380,7 +2377,7 @@ ideas above, applied.</li>
                 document.body.insertBefore(box, document.body.firstChild);
             }
             var p = document.createElement('p');
-            p.textContent = name + ' could not be loaded (offline?) — ' + consequence + '.';
+            p.textContent = name + ' could not be loaded (offline?): ' + consequence + '.';
             box.appendChild(p);
         };
     </script>

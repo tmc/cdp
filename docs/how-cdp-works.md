@@ -29,10 +29,9 @@ They differ in who is in control of the session.
   writes a HAR, exits. Best when the capture is fully described by a URL and
   some waiting rules.
 - **`churl`** owns the session too, but the deliverable is the page, not the
-  traffic. It is shaped like `curl` and `wget`, and fetching a single URL with
-  JavaScript executed works well. Its `wget`-style recursion and mirroring
-  flags are accepted but not implemented — see
-  [Known issues](/docs/known-issues).
+  traffic. It is shaped like `curl`, and fetches one URL per run with
+  JavaScript executed. It does not implement `wget`-style recursion or
+  mirroring.
 - **`cdp`** does not assume it owns the session. It can attach to a browser you
   logged into by hand, keep running while you click, and expose the browser to
   an agent over MCP. This is what you reach for when getting to the interesting
@@ -113,8 +112,6 @@ Within that, the surfaces differ in how settled they are:
 - **Moving:** the MCP tool surface, including the inspection tools behind
   `-enable-inspect`. Tool names and arguments have changed and may change
   again.
-- **Accepted but not implemented:** `churl`'s recursion and mirroring flags.
-  They parse, churl exits 0, and nothing is written.
 - **Known-broken in places:** see [Known issues](/docs/known-issues), which
   lists open bugs with workarounds rather than pretending they are fixed.
 
