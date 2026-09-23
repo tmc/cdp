@@ -103,33 +103,6 @@ type options struct {
 	webSocketStats       bool        // Show WebSocket statistics
 }
 
-// unimplemented is the flag.Value of an option churl documents and parses but
-// does not act on. Rejecting such an option is better than ignoring it: wget's
-// mirroring flags ask for files on disk, and a command that asks for them and
-// exits successfully having written none is a silent failure.
-type unimplemented struct{ isBool bool }
-
-func (*unimplemented) String() string     { return "" }
-func (*unimplemented) Set(string) error   { return nil }
-func (u *unimplemented) IsBoolFlag() bool { return u.isBool }
-
-var (
-	notImplemented     = &unimplemented{}
-	notImplementedBool = &unimplemented{isBool: true}
-)
-
-// unimplementedFlags returns the names of the unimplemented flags that the
-// command line set, in lexicographical order.
-func unimplementedFlags() []string {
-	var names []string
-	flag.Visit(func(f *flag.Flag) {
-		if _, ok := f.Value.(*unimplemented); ok {
-			names = append(names, f.Name)
-		}
-	})
-	return names
-}
-
 // headerSlice allows multiple -H flags
 type headerSlice []string
 
@@ -180,6 +153,23 @@ func pdfOptions(opts options) ([]browser.PDFOption, error) {
 		out = append(out, browser.WithPDFFooter(opts.pdfFooter))
 	}
 	return out, nil
+}
+
+// checkPDFOutput reports a PDF usage error before any browser starts, so a
+// bad -pdf value or a terminal stdout does not cost a page load. It does
+// nothing for other output formats.
+func checkPDFOutput(opts options, stdoutIsTerminal func() bool) error {
+	if opts.outputFormat != "pdf" {
+		return nil
+	}
+	if _, err := pdfOptions(opts); err != nil {
+		return err
+	}
+	// PDF is binary, so refuse to spray it at a terminal.
+	if opts.outputFile == "" && stdoutIsTerminal() {
+		return fmt.Errorf("%w: use -o file or redirect stdout", errBinaryToTerminal)
+	}
+	return nil
 }
 
 // stdoutIsTerminal reports whether stdout is attached to a terminal, which is
@@ -326,55 +316,6 @@ func main() {
 	flag.StringVar(&opts.webSocketOutputFile, "ws-output", "", "Output file for WebSocket data")
 	flag.BoolVar(&opts.webSocketStats, "ws-stats", false, "Show WebSocket statistics")
 
-	// Mirror options (wget-compatible). Mirroring is not implemented, so
-	// churl parses these only to reject them below: a mirroring command
-	// must fail rather than quietly fetch a single page.
-	flag.Var(notImplementedBool, "m", "Mirror mode (shortcut for -r -k) (not implemented)")
-	flag.Var(notImplementedBool, "mirror", "Mirror mode (shortcut for -r -k) (not implemented)")
-	flag.Var(notImplementedBool, "r", "Recursive download (not implemented)")
-	flag.Var(notImplementedBool, "recursive", "Recursive download (not implemented)")
-	flag.Var(notImplemented, "l", "Maximum recursion depth (0 = infinite) (not implemented)")
-	flag.Var(notImplemented, "level", "Maximum recursion depth (0 = infinite) (not implemented)")
-	flag.Var(notImplementedBool, "k", "Convert links to relative paths (not implemented)")
-	flag.Var(notImplementedBool, "convert-links", "Convert links to relative paths (not implemented)")
-	flag.Var(notImplementedBool, "p", "Download all assets needed to display page (not implemented)")
-	flag.Var(notImplementedBool, "page-requisites", "Download all assets needed to display page (not implemented)")
-	flag.Var(notImplementedBool, "np", "Don't ascend to parent directory (not implemented)")
-	flag.Var(notImplementedBool, "no-parent", "Don't ascend to parent directory (not implemented)")
-	flag.Var(notImplementedBool, "span-hosts", "Follow links to other domains (not implemented)")
-	flag.Var(notImplemented, "A", "Accept file extensions (comma-separated) (not implemented)")
-	flag.Var(notImplemented, "accept", "Accept file extensions (comma-separated) (not implemented)")
-	flag.Var(notImplemented, "R", "Reject file extensions (comma-separated) (not implemented)")
-	flag.Var(notImplemented, "reject", "Reject file extensions (comma-separated) (not implemented)")
-	flag.Var(notImplemented, "D", "Accept only these domains (comma-separated) (not implemented)")
-	flag.Var(notImplemented, "domains", "Accept only these domains (comma-separated) (not implemented)")
-	flag.Var(notImplemented, "exclude-domains", "Reject these domains (comma-separated) (not implemented)")
-	flag.Var(notImplemented, "I", "Include only these directories (comma-separated) (not implemented)")
-	flag.Var(notImplemented, "include-directories", "Include only these directories (comma-separated) (not implemented)")
-	flag.Var(notImplemented, "exclude-directories", "Exclude these directories (comma-separated) (not implemented)")
-	flag.Var(notImplemented, "accept-regex", "Accept URLs matching regex (not implemented)")
-	flag.Var(notImplemented, "reject-regex", "Reject URLs matching regex (not implemented)")
-	flag.Var(notImplemented, "w", "Wait seconds between downloads (not implemented)")
-	flag.Var(notImplemented, "wait", "Wait seconds between downloads (not implemented)")
-	flag.Var(notImplementedBool, "nc", "Don't re-download existing files (not implemented)")
-	flag.Var(notImplementedBool, "no-clobber", "Don't re-download existing files (not implemented)")
-	flag.Var(notImplementedBool, "N", "Only download newer files (not implemented)")
-	flag.Var(notImplementedBool, "timestamping", "Only download newer files (not implemented)")
-	flag.Var(notImplementedBool, "c", "Resume partial downloads (not implemented)")
-	flag.Var(notImplementedBool, "continue", "Resume partial downloads (not implemented)")
-	flag.Var(notImplemented, "limit-rate", "Limit download speed (bytes/sec) (not implemented)")
-	flag.Var(notImplemented, "Q", "Maximum total download size (bytes) (not implemented)")
-	flag.Var(notImplemented, "quota", "Maximum total download size (bytes) (not implemented)")
-	flag.Var(notImplemented, "P", "Save files to this directory (not implemented)")
-	flag.Var(notImplemented, "directory-prefix", "Save files to this directory (not implemented)")
-	flag.Var(notImplementedBool, "nd", "Don't create directory hierarchy (not implemented)")
-	flag.Var(notImplementedBool, "no-directories", "Don't create directory hierarchy (not implemented)")
-	flag.Var(notImplementedBool, "x", "Force creation of directories (not implemented)")
-	flag.Var(notImplementedBool, "force-directories", "Force creation of directories (not implemented)")
-	flag.Var(notImplemented, "cut-dirs", "Ignore N remote directory components (not implemented)")
-	flag.Var(notImplementedBool, "nH", "Don't create host-based directories (not implemented)")
-	flag.Var(notImplementedBool, "no-host-directories", "Don't create host-based directories (not implemented)")
-
 	// Custom usage message
 	flag.Usage = func() {
 		w := tabwriter.NewWriter(os.Stderr, 0, 0, 2, ' ', 0)
@@ -386,12 +327,6 @@ func main() {
 		fmt.Fprintf(w, "Options:\n")
 
 		flag.VisitAll(func(f *flag.Flag) {
-			// An unimplemented flag has no meaningful type or default.
-			if _, ok := f.Value.(*unimplemented); ok {
-				fmt.Fprintf(w, "  -%s\t\t%s\n", f.Name, f.Usage)
-				return
-			}
-
 			def := f.DefValue
 			if def != "" {
 				def = fmt.Sprintf(" (default: %s)", def)
@@ -415,14 +350,14 @@ func main() {
 
 	flag.Parse()
 
-	if names := unimplementedFlags(); len(names) > 0 {
-		fmt.Fprintf(os.Stderr, "churl: mirroring is not implemented: -%s\n", strings.Join(names, ", -"))
-		os.Exit(1)
-	}
-
 	// The browser follows redirects on its own; churl cannot turn that off.
 	if !opts.followRedirect {
 		fmt.Fprintln(os.Stderr, "churl: -L=false is not implemented: the browser always follows redirects")
+		os.Exit(1)
+	}
+
+	if err := checkPDFOutput(opts, stdoutIsTerminal); err != nil {
+		printRunError(err, opts.verbose)
 		os.Exit(1)
 	}
 
@@ -749,54 +684,12 @@ func run(ctx context.Context, pm browserprofile.ProfileManager, url string, opts
 
 	// Create recorder for HAR output if needed (either for stdout or file)
 	var rec *recorder.Recorder
-	if opts.outputFormat == "har" || opts.harFile != "" {
-		var recOpts []recorder.Option
-		if opts.verbose {
-			recOpts = append(recOpts, recorder.WithVerbose(true))
-		}
-
-		rec, err = recorder.New(recOpts...)
+	recordHAR := opts.outputFormat == "har" || opts.harFile != ""
+	if recordHAR {
+		rec, err = startRecorder(b, opts.verbose)
 		if err != nil {
-			return fmt.Errorf("%w: failed to create network recorder: %w", recorder.ErrNetworkRecord, err)
+			return err
 		}
-
-		// Enable network monitoring with proper timeout handling
-		if opts.verbose {
-			log.Printf("Enabling network monitoring for HAR output...")
-		}
-
-		// Check if browser context is working
-		select {
-		case <-b.Context().Done():
-			return fmt.Errorf("%w: browser context ended before enabling network monitoring: %w", browser.ErrNetwork, b.Context().Err())
-		default:
-			// Context is active
-		}
-
-		enableCtx, enableCancel := context.WithTimeout(b.Context(), 30*time.Second)
-		defer enableCancel()
-
-		if opts.verbose {
-			log.Printf("About to enable network monitoring...")
-			log.Printf("Browser context error: %v", b.Context().Err())
-			log.Printf("Enable context deadline: %v", enableCtx.Done())
-		}
-
-		if err := chromedp.Run(enableCtx, network.Enable()); err != nil {
-			if opts.verbose {
-				log.Printf("Network enable failed: %v", err)
-				log.Printf("Enable context error: %v", enableCtx.Err())
-				log.Printf("Browser context error after failure: %v", b.Context().Err())
-			}
-			return fmt.Errorf("%w: failed to enable network monitoring: %w", browser.ErrNetwork, err)
-		}
-
-		if opts.verbose {
-			log.Printf("Successfully enabled network monitoring")
-		}
-
-		// Set up event listener for network events
-		chromedp.ListenTarget(b.Context(), rec.HandleNetworkEvent(b.Context()))
 	}
 
 	// Navigate to the URL or make custom HTTP request
@@ -814,14 +707,13 @@ func run(ctx context.Context, pm browserprofile.ProfileManager, url string, opts
 		// Headless Chrome rarely passes anti-bot interstitials (e.g. Cloudflare
 		// Turnstile). If we're headless and stuck on one, relaunch a headed
 		// browser and try again: a real window solves the challenge, so the
-		// bare command still returns the real content.
-		if opts.headless && opts.waitForChallenge && b.IsChallengePage() {
+		// bare command still returns the real content. A remote browser
+		// cannot be relaunched, so it is left on the challenge.
+		if opts.headless && opts.waitForChallenge && opts.remoteHost == "" && b.IsChallengePage() {
 			fmt.Fprintf(os.Stderr, "churl: %s is behind an anti-bot challenge; retrying with a headed browser.\n", url)
 			b.Close()
 
-			// WithHeadless(false) must come last so it overrides the headless
-			// setting already present in browserOpts (options apply in order).
-			headedOpts := append(append([]browser.Option{}, browserOpts...), browser.WithHeadless(false))
+			headedOpts := append(append([]browser.Option{}, browserOpts...), challengeRetryOptions...)
 			hb, err := browser.New(launchCtx, pm, headedOpts...)
 			if err != nil {
 				return fmt.Errorf("%w: failed to create headed browser instance: %w", errChromeLaunch, err)
@@ -839,6 +731,14 @@ func run(ctx context.Context, pm browserprofile.ProfileManager, url string, opts
 			if opts.username != "" && opts.password != "" {
 				if err := b.SetBasicAuth(opts.username, opts.password); err != nil {
 					return fmt.Errorf("%w: failed to set basic authentication: %w", errAuthentication, err)
+				}
+			}
+			// The HAR describes the page churl returns, so record the
+			// retry afresh rather than the challenge that preceded it.
+			if recordHAR {
+				rec, err = startRecorder(b, opts.verbose)
+				if err != nil {
+					return err
 				}
 			}
 
@@ -890,7 +790,9 @@ func run(ctx context.Context, pm browserprofile.ProfileManager, url string, opts
 		var html string
 		html, outputErr = b.GetHTML()
 		if outputErr == nil {
-			// Text is the page's innerText, not a full HTML-to-text conversion.
+			// Text strips the tags from the page's HTML and prints the
+			// runs of text between them, one per line, script and style
+			// bodies included. It is not the page's innerText.
 			text := strings.ReplaceAll(html, "\n", " ")
 			text = strings.ReplaceAll(text, "<script", "\n<script")
 			text = strings.ReplaceAll(text, "</script>", "</script>\n")
@@ -997,11 +899,7 @@ func run(ctx context.Context, pm browserprofile.ProfileManager, url string, opts
 		}
 	}
 
-	// Write the output. PDF is binary, so refuse to spray it at a terminal.
-	if opts.outputFormat == "pdf" && opts.outputFile == "" && stdoutIsTerminal() {
-		return fmt.Errorf("%w: use -o file or redirect stdout", errBinaryToTerminal)
-	}
-
+	// Write the output.
 	var outWriter io.Writer = os.Stdout
 	if opts.outputFile != "" {
 		file, err := os.Create(opts.outputFile)
@@ -1014,6 +912,44 @@ func run(ctx context.Context, pm browserprofile.ProfileManager, url string, opts
 
 	_, err = outWriter.Write(output)
 	return err
+}
+
+// challengeRetryOptions are appended to the browser options to relaunch
+// after a headless navigation hits an anti-bot challenge. They come last so
+// they override the headless setting (options apply in order). Tests
+// replace them to keep the retry headless.
+var challengeRetryOptions = []browser.Option{browser.WithHeadless(false)}
+
+// startRecorder enables network events on b and returns a recorder that
+// collects them for a HAR.
+func startRecorder(b *browser.Browser, verbose bool) (*recorder.Recorder, error) {
+	var recOpts []recorder.Option
+	if verbose {
+		recOpts = append(recOpts, recorder.WithVerbose(true))
+	}
+	rec, err := recorder.New(recOpts...)
+	if err != nil {
+		return nil, fmt.Errorf("%w: failed to create network recorder: %w", recorder.ErrNetworkRecord, err)
+	}
+
+	if verbose {
+		log.Printf("Enabling network monitoring for HAR output...")
+	}
+	if err := b.Context().Err(); err != nil {
+		return nil, fmt.Errorf("%w: browser context ended before enabling network monitoring: %w", browser.ErrNetwork, err)
+	}
+
+	ctx, cancel := context.WithTimeout(b.Context(), 30*time.Second)
+	defer cancel()
+	if err := chromedp.Run(ctx, network.Enable()); err != nil {
+		return nil, fmt.Errorf("%w: failed to enable network monitoring: %w", browser.ErrNetwork, err)
+	}
+	if verbose {
+		log.Printf("Successfully enabled network monitoring")
+	}
+
+	chromedp.ListenTarget(b.Context(), rec.HandleNetworkEvent(b.Context()))
+	return rec, nil
 }
 
 // detectChromePath attempts to find Chrome or any Chromium-based browser

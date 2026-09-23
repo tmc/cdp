@@ -321,7 +321,8 @@ churl --wait-for-challenge=false https://example.com
 ```
 
 If even a headed browser can't clear the challenge, churl says so on stderr and
-returns whatever the page currently shows.
+returns whatever the page currently shows. With `--remote-host`, churl cannot
+relaunch the browser, so it skips the retry.
 
 ## Remote Chrome Integration
 

@@ -10,7 +10,8 @@ Usage:
 
 	churl [flags] URL
 
-Short and long spellings of the same flag are listed together; either works.
+Churl fetches one page per run. It does not implement wget's mirroring flags
+(-r, -m, -p, -k and the rest), and rejects them as undefined.
 
 # Output
 
@@ -116,66 +117,6 @@ A rendered page is only worth reading once it has settled.
 	    (default true)
 	-stable-timeout seconds
 	    Maximum time to wait for the page to stabilize. (default 30)
-
-# Mirroring
-
-Mirroring is not implemented. Churl accepts wget's mirroring flags so that the
-implementation, when it lands, keeps their spelling, and rejects any command
-that sets one: a command asking for a copy of a site on disk should fail rather
-than print a single page and exit successfully.
-
-	-r, -recursive
-	    Download recursively.
-	-m, -mirror
-	    Mirror a site. Shorthand for -r -k.
-	-l, -level n
-	    Maximum recursion depth, 0 for unlimited.
-	-p, -page-requisites
-	    Also download the assets a page needs to display.
-	-np, -no-parent
-	    Do not ascend above the starting directory.
-	-span-hosts
-	    Follow links to other domains.
-	-k, -convert-links
-	    Rewrite links to point at the downloaded copies.
-	-P, -directory-prefix dir
-	    Save below this directory.
-	-nd, -no-directories
-	    Do not recreate the directory hierarchy.
-	-nH, -no-host-directories
-	    Do not create a top-level directory per host.
-	-x, -force-directories
-	    Always create directories, even for a single file.
-	-cut-dirs n
-	    Drop this many leading remote directory components.
-	-nc, -no-clobber
-	    Skip files that already exist.
-	-N, -timestamping
-	    Download only files newer than the local copy.
-	-c, -continue
-	    Resume partial downloads.
-	-w, -wait seconds
-	    Wait between downloads.
-	-limit-rate n
-	    Limit download speed to n bytes per second, 0 for unlimited.
-	-Q, -quota n
-	    Stop after downloading n bytes in total, 0 for unlimited.
-	-A, -accept extensions
-	    Accept only these file extensions, comma-separated.
-	-R, -reject extensions
-	    Reject these file extensions, comma-separated.
-	-accept-regex regexp
-	    Accept only URLs matching this pattern.
-	-reject-regex regexp
-	    Reject URLs matching this pattern.
-	-D, -domains domains
-	    Accept only these domains, comma-separated.
-	-exclude-domains domains
-	    Reject these domains, comma-separated.
-	-I, -include-directories dirs
-	    Include only these directories, comma-separated.
-	-exclude-directories dirs
-	    Exclude these directories, comma-separated.
 
 # Blocking
 

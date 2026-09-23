@@ -149,10 +149,9 @@ func TestChurl_ShowHelp(t *testing.T) {
 	}
 }
 
-// TestChurl_MirrorFlagsRejected checks that the wget-compatible mirroring
-// flags fail instead of being ignored. They used to be parsed and never read,
-// so churl printed one page and exited 0 for a command that asked it to write
-// a site to disk.
+// TestChurl_MirrorFlagsRejected checks that wget's mirroring flags, which
+// churl does not implement, fail instead of being ignored: a command that asks
+// for a site on disk must not print one page and exit 0.
 func TestChurl_MirrorFlagsRejected(t *testing.T) {
 	t.Parallel()
 	churlPath := buildChurl(t)
@@ -165,17 +164,17 @@ func TestChurl_MirrorFlagsRejected(t *testing.T) {
 		{
 			name: "mirror a documentation site",
 			args: []string{"-m", "-np", "-P", "./site", "https://example.com/docs/"},
-			want: "churl: mirroring is not implemented: -P, -m, -np",
+			want: "flag provided but not defined: -m",
 		},
 		{
 			name: "recursive with depth",
 			args: []string{"-r", "-l", "3", "https://example.com"},
-			want: "churl: mirroring is not implemented: -l, -r",
+			want: "flag provided but not defined: -r",
 		},
 		{
 			name: "long spellings",
 			args: []string{"-recursive", "-accept", "html", "https://example.com"},
-			want: "churl: mirroring is not implemented: -accept, -recursive",
+			want: "flag provided but not defined: -recursive",
 		},
 		{
 			name: "redirects turned off",
@@ -198,8 +197,8 @@ func TestChurl_MirrorFlagsRejected(t *testing.T) {
 			if err == nil {
 				t.Errorf("churl %s exited 0, want failure", strings.Join(tt.args, " "))
 			}
-			if got := strings.TrimSpace(stderr.String()); got != tt.want {
-				t.Errorf("stderr = %q, want %q", got, tt.want)
+			if got, _, _ := strings.Cut(stderr.String(), "\n"); got != tt.want {
+				t.Errorf("stderr first line = %q, want %q", got, tt.want)
 			}
 			if stdout.Len() > 0 {
 				t.Errorf("stdout = %q, want empty", stdout.String())
