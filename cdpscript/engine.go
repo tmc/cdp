@@ -1399,7 +1399,12 @@ func (e *Engine) cmdCookie() script.Cmd {
 }
 
 func (e *Engine) cookieGet(args []string) error {
-	cookies, err := network.GetCookies().Do(e.browser.Context())
+	var cookies []*network.Cookie
+	err := chromedp.Run(e.browser.Context(), chromedp.ActionFunc(func(ctx context.Context) error {
+		var err error
+		cookies, err = network.GetCookies().Do(ctx)
+		return err
+	}))
 	if err != nil {
 		return fmt.Errorf("cookie get: %w", err)
 	}
@@ -1433,7 +1438,7 @@ func (e *Engine) cookieSet(args []string) error {
 	if len(args) == 4 {
 		cmd = cmd.WithPath(args[3])
 	}
-	if err := cmd.Do(e.browser.Context()); err != nil {
+	if err := chromedp.Run(e.browser.Context(), cmd); err != nil {
 		return fmt.Errorf("cookie set: %w", err)
 	}
 	return nil
@@ -1442,11 +1447,11 @@ func (e *Engine) cookieSet(args []string) error {
 func (e *Engine) cookieClear(args []string) error {
 	switch len(args) {
 	case 0:
-		return network.ClearBrowserCookies().Do(e.browser.Context())
+		return chromedp.Run(e.browser.Context(), network.ClearBrowserCookies())
 	case 1:
 		var loc string
 		_ = chromedp.Run(e.browser.Context(), chromedp.Location(&loc))
-		return network.DeleteCookies(args[0]).WithURL(loc).Do(e.browser.Context())
+		return chromedp.Run(e.browser.Context(), network.DeleteCookies(args[0]).WithURL(loc))
 	default:
 		return fmt.Errorf("cookie clear accepts at most one cookie name")
 	}
