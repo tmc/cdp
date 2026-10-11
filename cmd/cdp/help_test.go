@@ -20,13 +20,21 @@ func captureStdout(t *testing.T, fn func()) string {
 	os.Stdout = w
 	defer func() { os.Stdout = old }()
 
+	// Read while fn writes: output larger than the pipe buffer would
+	// otherwise block fn forever.
+	var buf bytes.Buffer
+	done := make(chan error, 1)
+	go func() {
+		_, err := buf.ReadFrom(r)
+		done <- err
+	}()
+
 	fn()
 
 	if err := w.Close(); err != nil {
 		t.Fatal(err)
 	}
-	var buf bytes.Buffer
-	if _, err := buf.ReadFrom(r); err != nil {
+	if err := <-done; err != nil {
 		t.Fatal(err)
 	}
 	return buf.String()
